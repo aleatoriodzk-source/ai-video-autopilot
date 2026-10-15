@@ -1,0 +1,199 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
+
+// Local agent API. Every request must carry `Authorization: Bearer <agent token>`;
+// tokens are created in the panel and only their SHA-256 hash is stored.
+async function sha256(s: string) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+const Body = z.object({ action: z.string().max(40) }).passthrough();
+const uuid = z.string().uuid();
+const JOB_STATUSES = ["queued", "running", "waiting_api", "waiting_download", "rendering", "awaiting_review", "paused", "failed", "cancelled", "done"] as const;
+
+const json = (d: unknown, status = 200) => Response.json(d, { status });
+
+export const Route = createFileRoute("/api/public/agent")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+        if (token.length < 30) return json({ error: "token ausente" }, 401);
+        const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+        const { data: agent } = await db.from("agents").select("id,user_id,revoked").eq("token_hash", await sha256(token)).maybeSingle();
+        if (!agent || agent.revoked) return json({ error: "token inválido ou revogado" }, 401);
+        const userId = agent.user_id;
+
+        let body: z.infer<typeof Body> & Record<string, unknown>;
+        try {
+          body = Body.parse(await request.json()) as never;
+        } catch {
+          return json({ error: "corpo inválido" }, 400);
+        }
+
+        const ownJob = async (id: unknown) => {
+          const { data } = await db.from("jobs").select("*").eq("id", uuid.parse(id)).eq("user_id", userId).maybeSingle();
+          if (!data) throw new Error("job não encontrado");
+          return data;
+        };
+        const ownProduction = async (id: unknown) => {
+          const { data } = await db.from("productions").select("*").eq("id", uuid.parse(id)).eq("user_id", userId).maybeSingle();
+          if (!data) throw new Error("produção não encontrada");
+          return data;
+        };
+
+        try {
+          const tasks = await import("@/server/tasks.server");
+          switch (body.action) {
+            case "heartbeat": {
+              await db.from("agents").update({ last_seen_at: new Date().toISOString(), info: (body.info ?? null) as never }).eq("id", agent.id);
+              return json({ ok: true, settings: await tasks.loadSettings(db, userId) });
+            }
+            case "claim": {
+              await db.from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", agent.id);
+              const now = new Date().toISOString();
+              const { data: jobs } = await db.from("jobs").select("*").eq("user_id", userId).eq("status", "queued").order("created_at").limit(10);
+              const job = (jobs ?? []).find((j) => !(j.payload as Record<string, string>)?.["retry_at"] || (j.payload as Record<string, string>)["retry_at"] <= now);
+              if (!job) return json({ job: null });
+              const { data: locked } = await db.from("jobs").update({ status: "running", locked_by: agent.id, locked_at: now, wait_reason: null }).eq("id", job.id).eq("status", "queued").select("*").maybeSingle();
+              if (!locked) return json({ job: null });
+              return json({ job: locked, ...(await bundle(db, locked)) });
+            }
+            case "get_job": {
+              const job = await ownJob(body.job_id);
+              return json({ job, ...(await bundle(db, job)) });
+            }
+            case "update_job": {
+              const job = await ownJob(body.job_id);
+              const p = z
+                .object({
+                  status: z.enum(JOB_STATUSES).optional(),
+                  step: z.string().max(40).nullable().optional(),
+                  progress: z.number().min(0).max(100).optional(),
+                  wait_reason: z.string().max(300).nullable().optional(),
+                  completed_steps: z.array(z.string().max(40)).max(20).optional(),
+                  attempts: z.number().int().min(0).max(50).optional(),
+                  error: z.string().max(4000).nullable().optional(),
+                  payload: z.record(z.unknown()).optional(),
+                })
+                .parse(body.patch ?? {});
+              // Never override a user's pause/cancel with agent progress.
+              const { data: cur } = await db.from("jobs").select("status").eq("id", job.id).single();
+              if (cur && ["paused", "cancelled"].includes(cur.status) && p.status && !["paused", "cancelled"].includes(p.status)) delete p.status;
+              const { data } = await db.from("jobs").update(p as never).eq("id", job.id).select("*").single();
+              if (job.production_id && (p.status || p.step)) await db.from("productions").update({ status: data!.status, current_step: data!.step }).eq("id", job.production_id);
+              return json({ job: data });
+            }
+            case "log": {
+              const l = z.object({ job_id: uuid.nullable().optional(), production_id: uuid.nullable().optional(), level: z.enum(["debug", "info", "warn", "error"]), step: z.string().max(40).nullable().optional(), message: z.string().max(4000), data: z.unknown().optional() }).parse(body);
+              await db.from("activity_logs").insert({ user_id: userId, job_id: l.job_id ?? null, production_id: l.production_id ?? null, level: l.level, step: l.step ?? null, message: l.message, data: (l.data ?? null) as never });
+              return json({ ok: true });
+            }
+            case "record_usage": {
+              const u = z.object({ job_id: uuid.nullable().optional(), production_id: uuid.nullable().optional(), provider: z.string().max(80), operation: z.string().max(80), units: z.number(), unit_name: z.string().max(30), cost_usd: z.number().nullable() }).parse(body);
+              await db.from("usage_records").insert({ ...u, user_id: userId });
+              return json({ ok: true });
+            }
+            case "save_collected": {
+              const job = await ownJob(body.job_id);
+              if (!job.reference_id) throw new Error("job sem referência");
+              await db.from("reference_sources").update({ collected: body.collected as never, status: "collected", title: (body.title as string) ?? undefined }).eq("id", job.reference_id);
+              return json({ ok: true });
+            }
+            case "ai_analyze": {
+              const job = await ownJob(body.job_id);
+              if (!job.analysis_id) throw new Error("job sem análise");
+              const frames = z.array(z.string().max(400_000)).max(10).optional().parse(body.frames);
+              const r = await tasks.runAnalysis(db, userId, { analysisId: job.analysis_id, jobId: job.id, collected: body.collected, frames });
+              if (job.production_id && r.styleId) {
+                const prod = await ownProduction(job.production_id);
+                if (!prod.style_id) await db.from("productions").update({ style_id: r.styleId }).eq("id", prod.id);
+              }
+              return json(r);
+            }
+            case "ai_ideas": {
+              const job = await ownJob(body.job_id);
+              return json({ ideas: await tasks.runIdeas(db, userId, job.production_id!, job.id) });
+            }
+            case "ai_script": {
+              const job = await ownJob(body.job_id);
+              const topic = z.string().max(500).optional().parse(body.topic);
+              return json({ script: await tasks.runScript(db, userId, job.production_id!, job.id, topic) });
+            }
+            case "ai_image": {
+              const job = await ownJob(body.job_id);
+              const { prompt, aspect, used } = z.object({ prompt: z.string().min(3).max(2000), aspect: z.enum(["9:16", "16:9", "1:1"]), used: z.number().int().min(0) }).parse(body);
+              const s = await tasks.guardBudget(db, userId, job.id, null);
+              const { canGenerateAiImage } = await import("@/lib/costs");
+              const ok = canGenerateAiImage({ allowPaid: s.ai.allow_ai_images, usedInVideo: used, limits: s.limits });
+              if (!ok.allowed) return json({ error: ok.reason, blocked: true }, 402);
+              const { aiImage } = await import("@/server/ai.server");
+              const b64 = await aiImage(prompt, aspect, s.ai.image_model);
+              await db.from("usage_records").insert({ user_id: userId, job_id: job.id, production_id: job.production_id, provider: `Lovable AI (${s.ai.image_model})`, operation: "imagem IA", units: 1, unit_name: "imagem", cost_usd: s.prices.ai_image_each ?? null });
+              return json({ b64 });
+            }
+            case "update_scene": {
+              const id = uuid.parse(body.scene_id);
+              const f = z.object({ duration_s: z.number().optional(), audio_path: z.string().max(500).optional(), audio_duration_s: z.number().optional(), word_timings: z.unknown().optional(), asset_id: uuid.nullable().optional(), status: z.string().max(30).optional() }).parse(body.fields ?? {});
+              await db.from("scenes").update(f as never).eq("id", id).eq("user_id", userId);
+              return json({ ok: true });
+            }
+            case "create_asset": {
+              const a = z.object({ production_id: uuid.nullable().optional(), kind: z.enum(["image", "video", "audio", "music", "sfx"]), source: z.enum(["upload", "ai_image", "ai_video", "pexels", "pixabay", "local"]), source_url: z.string().max(1000).nullable().optional(), license: z.string().max(300).nullable().optional(), attribution: z.string().max(300).nullable().optional(), local_path: z.string().max(500).nullable().optional(), storage_path: z.string().max(500).nullable().optional(), description: z.string().max(1000).nullable().optional(), meta: z.record(z.unknown()).optional() }).parse(body.asset);
+              const { data } = await db.from("assets").insert({ ...a, user_id: userId, meta: (a.meta ?? {}) as never }).select("id").single();
+              return json({ id: data!.id });
+            }
+            case "save_production": {
+              const prod = await ownProduction(body.production_id);
+              const f = z.object({ validation: z.unknown().optional(), report: z.unknown().optional(), output_path: z.string().max(500).optional(), preview_path: z.string().max(500).optional(), status: z.string().max(30).optional(), title: z.string().max(200).optional(), topic: z.string().max(500).optional() }).parse(body.fields ?? {});
+              await db.from("productions").update(f as never).eq("id", prod.id);
+              return json({ ok: true });
+            }
+            case "upload_url": {
+              const name = z.string().regex(/^[\w\-./]+$/).max(200).parse(body.name);
+              const path = `${userId}/${name.replace(/\.\.+/g, ".")}`;
+              const { data, error } = await db.storage.from("media").createSignedUploadUrl(path, { upsert: true });
+              if (error) throw error;
+              return json({ path, signed_url: data.signedUrl, token: data.token });
+            }
+            case "download_url": {
+              const path = z.string().max(500).parse(body.path);
+              if (!path.startsWith(`${userId}/`)) return json({ error: "caminho não permitido" }, 403);
+              const { data, error } = await db.storage.from("media").createSignedUrl(path, 3600);
+              if (error) throw error;
+              return json({ url: data.signedUrl });
+            }
+            default:
+              return json({ error: "ação desconhecida" }, 400);
+          }
+        } catch (e) {
+          const msg = (e as Error).message ?? String(e);
+          const status = (e as { status?: number }).status ?? (msg.startsWith("ORÇAMENTO") ? 402 : e instanceof z.ZodError ? 400 : 500);
+          return json({ error: msg, retryable: status === 429 || status >= 500 }, status);
+        }
+      },
+    },
+  },
+});
+
+async function bundle(db: any, job: { production_id: string | null; reference_id: string | null; analysis_id: string | null }) {
+  const out: Record<string, unknown> = {};
+  if (job.production_id) {
+    const { data: p } = await db.from("productions").select("*, style_profiles(*)").eq("id", job.production_id).single();
+    const { data: scenes } = await db.from("scenes").select("*").eq("production_id", job.production_id).order("idx");
+    const { data: assets } = await db.from("assets").select("*").or(`production_id.eq.${job.production_id},and(production_id.is.null,source.eq.upload)`);
+    out.production = p;
+    out.scenes = scenes;
+    out.assets = assets;
+  }
+  if (job.reference_id) {
+    const { data: r } = await db.from("reference_sources").select("*").eq("id", job.reference_id).single();
+    out.reference = r;
+  }
+  if (job.analysis_id) {
+    const { data: a } = await db.from("analyses").select("id,kind,status").eq("id", job.analysis_id).single();
+    out.analysis = a;
+  }
+  return out;
+}
