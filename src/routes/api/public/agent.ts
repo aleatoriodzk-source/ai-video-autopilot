@@ -25,9 +25,9 @@ export const Route = createFileRoute("/api/public/agent")({
         if (!agent || agent.revoked) return json({ error: "token inválido ou revogado" }, 401);
         const userId = agent.user_id;
 
-        let body: z.infer<typeof Body> & Record<string, unknown>;
+        let body: any;
         try {
-          body = Body.parse(await request.json()) as never;
+          body = Body.parse(await request.json());
         } catch {
           return json({ error: "corpo inválido" }, 400);
         }
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/public/agent")({
               await db.from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", agent.id);
               const now = new Date().toISOString();
               const { data: jobs } = await db.from("jobs").select("*").eq("user_id", userId).eq("status", "queued").order("created_at").limit(10);
-              const job = (jobs ?? []).find((j) => !(j.payload as Record<string, string>)?.["retry_at"] || (j.payload as Record<string, string>)["retry_at"] <= now);
+              const job = (jobs ?? []).find((j) => !(j.payload as Record<string, string>)?.["retry_at"] || ((j.payload as Record<string, string>)["retry_at"] ?? "") <= now);
               if (!job) return json({ job: null });
               const { data: locked } = await db.from("jobs").update({ status: "running", locked_by: agent.id, locked_at: now, wait_reason: null }).eq("id", job.id).eq("status", "queued").select("*").maybeSingle();
               if (!locked) return json({ job: null });
@@ -92,7 +92,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "record_usage": {
               const u = z.object({ job_id: uuid.nullable().optional(), production_id: uuid.nullable().optional(), provider: z.string().max(80), operation: z.string().max(80), units: z.number(), unit_name: z.string().max(30), cost_usd: z.number().nullable() }).parse(body);
-              await db.from("usage_records").insert({ ...u, user_id: userId });
+              await db.from("usage_records").insert({ ...u, user_id: userId } as never);
               return json({ ok: true });
             }
             case "save_collected": {
@@ -105,7 +105,7 @@ export const Route = createFileRoute("/api/public/agent")({
               const job = await ownJob(body.job_id);
               if (!job.analysis_id) throw new Error("job sem análise");
               const frames = z.array(z.string().max(400_000)).max(10).optional().parse(body.frames);
-              const r = await tasks.runAnalysis(db, userId, { analysisId: job.analysis_id, jobId: job.id, collected: body.collected, frames });
+              const r = await tasks.runAnalysis(db, userId, { analysisId: job.analysis_id, jobId: job.id, collected: body.collected, frames: frames ?? [] });
               if (job.production_id && r.styleId) {
                 const prod = await ownProduction(job.production_id);
                 if (!prod.style_id) await db.from("productions").update({ style_id: r.styleId }).eq("id", prod.id);
@@ -141,7 +141,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "create_asset": {
               const a = z.object({ production_id: uuid.nullable().optional(), kind: z.enum(["image", "video", "audio", "music", "sfx"]), source: z.enum(["upload", "ai_image", "ai_video", "pexels", "pixabay", "local"]), source_url: z.string().max(1000).nullable().optional(), license: z.string().max(300).nullable().optional(), attribution: z.string().max(300).nullable().optional(), local_path: z.string().max(500).nullable().optional(), storage_path: z.string().max(500).nullable().optional(), description: z.string().max(1000).nullable().optional(), meta: z.record(z.unknown()).optional() }).parse(body.asset);
-              const { data } = await db.from("assets").insert({ ...a, user_id: userId, meta: (a.meta ?? {}) as never }).select("id").single();
+              const { data } = await db.from("assets").insert({ ...a, user_id: userId, meta: a.meta ?? {} } as never).select("id").single();
               return json({ id: data!.id });
             }
             case "save_production": {
@@ -178,7 +178,7 @@ export const Route = createFileRoute("/api/public/agent")({
 });
 
 async function bundle(db: any, job: { production_id: string | null; reference_id: string | null; analysis_id: string | null }) {
-  const out: Record<string, unknown> = {};
+  const out: any = {};
   if (job.production_id) {
     const { data: p } = await db.from("productions").select("*, style_profiles(*)").eq("id", job.production_id).single();
     const { data: scenes } = await db.from("scenes").select("*").eq("production_id", job.production_id).order("idx");

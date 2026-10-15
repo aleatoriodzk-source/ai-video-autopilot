@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Activity, BookImage, Clapperboard, Coins, Cpu, FileText, LayoutDashboard, ListVideo, LogOut, Menu, Palette, Radar, Settings, X } from "lucide-react";
+import { Clapperboard, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -18,15 +18,6 @@ export const Route = createFileRoute("/_authenticated")({
 
 const NAV = [
   { to: "/painel", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/referencias", label: "Referências e análise", icon: Radar },
-  { to: "/estilos", label: "Estilos salvos", icon: Palette },
-  { to: "/roteiros", label: "Ideias e roteiros", icon: FileText },
-  { to: "/producoes", label: "Produções", icon: ListVideo },
-  { to: "/biblioteca", label: "Biblioteca", icon: BookImage },
-  { to: "/custos", label: "Custos", icon: Coins },
-  { to: "/logs", label: "Logs", icon: Activity },
-  { to: "/agente", label: "Agente local", icon: Cpu },
-  { to: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
 
 function Shell() {
@@ -71,10 +62,10 @@ function Shell() {
         </div>
         {nav}
         <div className="mt-6 space-y-3 border-t border-sidebar-border pt-4">
-          <Link to="/agente" className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className={cn("h-2 w-2 rounded-full", online ? "bg-success" : "bg-destructive")} />
             Agente local {online ? "conectado" : "desconectado"}
-          </Link>
+          </div>
           <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
             <LogOut className="h-3.5 w-3.5" /> Sair
           </button>
