@@ -14,7 +14,597 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activity_logs: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          job_id: string | null
+          level: string
+          message: string
+          production_id: string | null
+          step: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          job_id?: string | null
+          level?: string
+          message: string
+          production_id?: string | null
+          step?: string | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          job_id?: string | null
+          level?: string
+          message?: string
+          production_id?: string | null
+          step?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_logs_production_id_fkey"
+            columns: ["production_id"]
+            isOneToOne: false
+            referencedRelation: "productions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agents: {
+        Row: {
+          created_at: string
+          id: string
+          info: Json | null
+          last_seen_at: string | null
+          name: string
+          revoked: boolean
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          info?: Json | null
+          last_seen_at?: string | null
+          name: string
+          revoked?: boolean
+          token_hash: string
+          token_prefix: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          info?: Json | null
+          last_seen_at?: string | null
+          name?: string
+          revoked?: boolean
+          token_hash?: string
+          token_prefix?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      analyses: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          reference_id: string | null
+          report: Json | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          reference_id?: string | null
+          report?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          reference_id?: string | null
+          report?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analyses_reference_id_fkey"
+            columns: ["reference_id"]
+            isOneToOne: false
+            referencedRelation: "reference_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          attribution: string | null
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          license: string | null
+          local_path: string | null
+          meta: Json
+          production_id: string | null
+          source: string
+          source_url: string | null
+          storage_path: string | null
+          user_id: string
+        }
+        Insert: {
+          attribution?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          kind: string
+          license?: string | null
+          local_path?: string | null
+          meta?: Json
+          production_id?: string | null
+          source: string
+          source_url?: string | null
+          storage_path?: string | null
+          user_id?: string
+        }
+        Update: {
+          attribution?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          kind?: string
+          license?: string | null
+          local_path?: string | null
+          meta?: Json
+          production_id?: string | null
+          source?: string
+          source_url?: string | null
+          storage_path?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_production_id_fkey"
+            columns: ["production_id"]
+            isOneToOne: false
+            referencedRelation: "productions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          analysis_id: string | null
+          attempts: number
+          completed_steps: string[]
+          created_at: string
+          error: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          payload: Json
+          production_id: string | null
+          progress: number
+          reference_id: string | null
+          status: string
+          step: string | null
+          type: string
+          updated_at: string
+          user_id: string
+          wait_reason: string | null
+        }
+        Insert: {
+          analysis_id?: string | null
+          attempts?: number
+          completed_steps?: string[]
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          production_id?: string | null
+          progress?: number
+          reference_id?: string | null
+          status?: string
+          step?: string | null
+          type: string
+          updated_at?: string
+          user_id?: string
+          wait_reason?: string | null
+        }
+        Update: {
+          analysis_id?: string | null
+          attempts?: number
+          completed_steps?: string[]
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          production_id?: string | null
+          progress?: number
+          reference_id?: string | null
+          status?: string
+          step?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+          wait_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_production_id_fkey"
+            columns: ["production_id"]
+            isOneToOne: false
+            referencedRelation: "productions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_reference_id_fkey"
+            columns: ["reference_id"]
+            isOneToOne: false
+            referencedRelation: "reference_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      productions: {
+        Row: {
+          aspect: string
+          created_at: string
+          current_step: string | null
+          id: string
+          ideas: Json | null
+          mode: string
+          output_path: string | null
+          preview_path: string | null
+          reference_id: string | null
+          report: Json | null
+          script: Json | null
+          settings: Json
+          status: string
+          style_id: string | null
+          title: string
+          topic: string | null
+          updated_at: string
+          user_id: string
+          validation: Json | null
+        }
+        Insert: {
+          aspect?: string
+          created_at?: string
+          current_step?: string | null
+          id?: string
+          ideas?: Json | null
+          mode?: string
+          output_path?: string | null
+          preview_path?: string | null
+          reference_id?: string | null
+          report?: Json | null
+          script?: Json | null
+          settings?: Json
+          status?: string
+          style_id?: string | null
+          title?: string
+          topic?: string | null
+          updated_at?: string
+          user_id?: string
+          validation?: Json | null
+        }
+        Update: {
+          aspect?: string
+          created_at?: string
+          current_step?: string | null
+          id?: string
+          ideas?: Json | null
+          mode?: string
+          output_path?: string | null
+          preview_path?: string | null
+          reference_id?: string | null
+          report?: Json | null
+          script?: Json | null
+          settings?: Json
+          status?: string
+          style_id?: string | null
+          title?: string
+          topic?: string | null
+          updated_at?: string
+          user_id?: string
+          validation?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "productions_reference_id_fkey"
+            columns: ["reference_id"]
+            isOneToOne: false
+            referencedRelation: "reference_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "productions_style_id_fkey"
+            columns: ["style_id"]
+            isOneToOne: false
+            referencedRelation: "style_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reference_sources: {
+        Row: {
+          collected: Json | null
+          created_at: string
+          id: string
+          kind: string
+          notes: string | null
+          platform: string
+          status: string
+          title: string | null
+          updated_at: string
+          urls: string[]
+          user_id: string
+        }
+        Insert: {
+          collected?: Json | null
+          created_at?: string
+          id?: string
+          kind: string
+          notes?: string | null
+          platform: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+          urls: string[]
+          user_id?: string
+        }
+        Update: {
+          collected?: Json | null
+          created_at?: string
+          id?: string
+          kind?: string
+          notes?: string | null
+          platform?: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+          urls?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      scenes: {
+        Row: {
+          asset_id: string | null
+          audio_duration_s: number | null
+          audio_path: string | null
+          caption: string | null
+          created_at: string
+          duration_s: number | null
+          id: string
+          idx: number
+          motion: string | null
+          narration: string
+          pacing: string | null
+          pause_after_ms: number
+          production_id: string
+          sfx: string | null
+          status: string
+          transition: string | null
+          updated_at: string
+          user_id: string
+          visual_description: string | null
+          visual_query: string | null
+          word_timings: Json | null
+        }
+        Insert: {
+          asset_id?: string | null
+          audio_duration_s?: number | null
+          audio_path?: string | null
+          caption?: string | null
+          created_at?: string
+          duration_s?: number | null
+          id?: string
+          idx: number
+          motion?: string | null
+          narration?: string
+          pacing?: string | null
+          pause_after_ms?: number
+          production_id: string
+          sfx?: string | null
+          status?: string
+          transition?: string | null
+          updated_at?: string
+          user_id?: string
+          visual_description?: string | null
+          visual_query?: string | null
+          word_timings?: Json | null
+        }
+        Update: {
+          asset_id?: string | null
+          audio_duration_s?: number | null
+          audio_path?: string | null
+          caption?: string | null
+          created_at?: string
+          duration_s?: number | null
+          id?: string
+          idx?: number
+          motion?: string | null
+          narration?: string
+          pacing?: string | null
+          pause_after_ms?: number
+          production_id?: string
+          sfx?: string | null
+          status?: string
+          transition?: string | null
+          updated_at?: string
+          user_id?: string
+          visual_description?: string | null
+          visual_query?: string | null
+          word_timings?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenes_production_id_fkey"
+            columns: ["production_id"]
+            isOneToOne: false
+            referencedRelation: "productions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      style_profiles: {
+        Row: {
+          analysis_id: string | null
+          created_at: string
+          edit_template: Json
+          id: string
+          name: string
+          profile: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_id?: string | null
+          created_at?: string
+          edit_template?: Json
+          id?: string
+          name: string
+          profile?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          analysis_id?: string | null
+          created_at?: string
+          edit_template?: Json
+          id?: string
+          name?: string
+          profile?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "style_profiles_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_records: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          id: string
+          job_id: string | null
+          operation: string
+          production_id: string | null
+          provider: string
+          unit_name: string
+          units: number
+          user_id: string
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          operation: string
+          production_id?: string | null
+          provider: string
+          unit_name?: string
+          units?: number
+          user_id?: string
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          operation?: string
+          production_id?: string | null
+          provider?: string
+          unit_name?: string
+          units?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_records_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_records_production_id_fkey"
+            columns: ["production_id"]
+            isOneToOne: false
+            referencedRelation: "productions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_settings: {
+        Row: {
+          data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
