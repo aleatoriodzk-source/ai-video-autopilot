@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { runIdeas, runScript } from "./tasks.server";
+import { runIdeas, runScript } from "@/server/tasks.server";
 
 export const generateIdeas = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

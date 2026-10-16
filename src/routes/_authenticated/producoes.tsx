@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { activeJob, setJobStatus, startProduction } from "@/lib/jobs";
-import { generateScript } from "@/server/ai.functions";
+import { generateScript } from "@/lib/ai.functions";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
