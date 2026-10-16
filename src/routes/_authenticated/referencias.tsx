@@ -39,11 +39,11 @@ function Referencias() {
 
   async function add() {
     const urls = text.split(/\s+/).map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s));
-    if (!urls.length) return toast.error("Cole pelo menos um link válido (https://...)");
+    if (!urls.length) { toast.error("Cole pelo menos um link válido (https://...)"); return; }
     setBusy(true);
     try {
       const { data: u } = await supabase.auth.getUser();
-      const d = detect(urls[0]);
+      const d = detect(urls[0] ?? "");
       const kind = urls.length > 1 ? "channel" : d.kind;
       const { error } = await supabase.from("reference_sources").insert({ user_id: u.user!.id, urls, platform: d.platform, kind, title: title || null });
       if (error) throw error;
