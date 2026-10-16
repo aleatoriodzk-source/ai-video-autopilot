@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Clapperboard, Film, LayoutDashboard, Link2, LogOut, Menu, X } from "lucide-react";
+import { Clapperboard, Film, LayoutDashboard, Link2, LogOut, Menu, Monitor, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ const NAV = [
   { to: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { to: "/referencias", label: "Referências", icon: Link2 },
   { to: "/producoes", label: "Produções", icon: Film },
+  { to: "/agente", label: "Agente local", icon: Monitor },
 ] as const;
 
 function Shell() {
