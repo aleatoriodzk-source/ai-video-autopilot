@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
+import { Route as AuthenticatedProducoesRouteImport } from './routes/_authenticated/producoes'
 import { Route as AuthenticatedReferenciasRouteImport } from './routes/_authenticated/referencias'
 import { Route as ApiPublicAgentRouteImport } from './routes/api/public/agent'
 
@@ -35,6 +36,11 @@ const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   path: '/painel',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProducoesRoute = AuthenticatedProducoesRouteImport.update({
+  id: '/producoes',
+  path: '/producoes',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedReferenciasRoute =
   AuthenticatedReferenciasRouteImport.update({
     id: '/referencias',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/painel': typeof AuthenticatedPainelRoute
+  '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/painel': typeof AuthenticatedPainelRoute
+  '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
@@ -67,20 +75,34 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
+  '/_authenticated/producoes': typeof AuthenticatedProducoesRoute
   '/_authenticated/referencias': typeof AuthenticatedReferenciasRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/painel' | '/referencias' | '/api/public/agent'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/painel'
+    | '/producoes'
+    | '/referencias'
+    | '/api/public/agent'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/painel' | '/referencias' | '/api/public/agent'
+  to:
+    | '/'
+    | '/auth'
+    | '/painel'
+    | '/producoes'
+    | '/referencias'
+    | '/api/public/agent'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/painel'
+    | '/_authenticated/producoes'
     | '/_authenticated/referencias'
     | '/api/public/agent'
   fileRoutesById: FileRoutesById
@@ -122,6 +144,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPainelRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/producoes': {
+      id: '/_authenticated/producoes'
+      path: '/producoes'
+      fullPath: '/producoes'
+      preLoaderRoute: typeof AuthenticatedProducoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/referencias': {
       id: '/_authenticated/referencias'
       path: '/referencias'
@@ -141,11 +170,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
+  AuthenticatedProducoesRoute: typeof AuthenticatedProducoesRoute
   AuthenticatedReferenciasRoute: typeof AuthenticatedReferenciasRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
+  AuthenticatedProducoesRoute: AuthenticatedProducoesRoute,
   AuthenticatedReferenciasRoute: AuthenticatedReferenciasRoute,
 }
 
