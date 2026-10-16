@@ -186,7 +186,7 @@ function AgentePage() {
         <h2 className="font-display font-semibold">Como conectar no Windows</h2>
         <ol className="list-decimal space-y-4 pl-5 text-sm">
           <li>Instale o <b>Python 3.10 ou superior</b> (python.org) marcando “Add Python to PATH”, e o <b>FFmpeg</b>:
-            <Code>winget install Python.Python.3.12{"\n"}winget install Gyan.FFmpeg</Code>
+            <Code>{"winget install Python.Python.3.12\nwinget install Gyan.FFmpeg"}</Code>
           </li>
           <li>Baixe a pasta <code>agent</code> do projeto para <code>C:\EstudioAutomatico</code> (o agente será entregue na próxima etapa).</li>
           <li>Crie o arquivo <code>config.json</code> dentro dessa pasta com este conteúdo:
