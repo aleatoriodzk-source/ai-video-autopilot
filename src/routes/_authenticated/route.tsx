@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Clapperboard, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { Clapperboard, LayoutDashboard, Link2, LogOut, Menu, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const NAV = [
   { to: "/painel", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/referencias", label: "Referências", icon: Link2 },
 ] as const;
 
 function Shell() {

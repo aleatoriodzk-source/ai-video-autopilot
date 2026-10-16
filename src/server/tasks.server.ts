@@ -76,7 +76,7 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
       analysis_id: an.id,
       name: `Estilo — ${ref?.title ?? ref?.urls?.[0] ?? "referência"}`,
       profile: data.style_profile as never,
-      edit_template: (isShort ? { scenes: (data as { scenes: unknown }).scenes } : {}) as never,
+      edit_template: (isShort ? { scenes: (data as unknown as { scenes: unknown }).scenes } : {}) as never,
     })
     .select("id")
     .single();

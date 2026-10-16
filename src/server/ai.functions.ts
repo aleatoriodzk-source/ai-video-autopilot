@@ -7,7 +7,7 @@ export const generateIdeas = createServerFn({ method: "POST" })
   .inputValidator((i: { productionId: string }) => i)
   .handler(async ({ data, context }) => {
     try {
-      return { ok: true as const, ideas: await runIdeas(context.supabase, context.userId, data.productionId, null) };
+      return { ok: true as const, ideas: JSON.parse(JSON.stringify(await runIdeas(context.supabase, context.userId, data.productionId, null))) as Record<string, string | boolean>[] };
     } catch (e) {
       return { ok: false as const, error: (e as Error).message };
     }
