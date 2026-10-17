@@ -111,10 +111,11 @@ function Producoes() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="font-medium">{s?.title ?? p.title}</div>
-                    <div className="text-xs text-muted-foreground">{p.aspect} · {p.mode === "auto" ? "automático" : "assistido"} · {s?.scenes ? `roteiro com ${s.scenes.length} cenas` : "sem roteiro"}</div>
+                    <div className="text-xs text-muted-foreground">{p.aspect} · {p.mode === "auto" ? "automático" : "assistido"} · {(() => { const t = Number((p.settings as Record<string, unknown> | null)?.["target_seconds"] ?? 0); return t ? `${Math.round(t / 6) / 10} min · ` : ""; })()}{s?.scenes ? `roteiro com ${s.scenes.length} cenas` : "sem roteiro"}</div>
                   </div>
                   <StatusBadge status={p.status} />
                 </div>
+                {p.preview_path ? <VideoPlayer path={p.preview_path} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
                   <button disabled={b} className={btn} onClick={() => script(p.id)}>{s ? "Refazer roteiro" : "Gerar roteiro"}</button>
                   <button disabled={b} className={btn} onClick={() => run(p.id, () => startProduction(p.id, { needsAnalysis: !!p.reference_id, referenceId: p.reference_id }), "Automação iniciada — aguardando o agente local")}>Iniciar automação</button>
@@ -127,6 +128,26 @@ function Producoes() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function VideoPlayer({ path }: { path: string }) {
+  const { data: url, error } = useQuery({
+    queryKey: ["video-url", path],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from("media").createSignedUrl(path, 3600);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    staleTime: 50 * 60_000,
+  });
+  if (error) return <div className="text-xs text-destructive">Não foi possível carregar o vídeo: {(error as Error).message}</div>;
+  if (!url) return <div className="text-xs text-muted-foreground">Carregando vídeo…</div>;
+  return (
+    <div className="space-y-2">
+      <video src={url} controls preload="metadata" className="max-h-[480px] w-full rounded-md bg-muted" />
+      <a href={url} download className={btn + " inline-block"}>Baixar MP4</a>
     </div>
   );
 }
