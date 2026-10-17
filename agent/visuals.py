@@ -33,6 +33,50 @@ def pexels_videos(key: str, query: str, orientation: str) -> list[dict]:
     return r.json().get("videos", [])
 
 
+def pixabay_videos(key: str, query: str) -> list[dict]:
+    r = requests.get("https://pixabay.com/api/videos/", params={"key": key, "q": query[:100], "per_page": 10, "safesearch": "true"}, timeout=30)
+    r.raise_for_status()
+    return r.json().get("hits", [])
+
+
+def pixabay_images(key: str, query: str, orientation: str) -> list[dict]:
+    o = "vertical" if orientation == "portrait" else "horizontal" if orientation == "landscape" else "all"
+    r = requests.get("https://pixabay.com/api/", params={"key": key, "q": query[:100], "orientation": o, "image_type": "photo", "per_page": 15, "safesearch": "true"}, timeout=30)
+    r.raise_for_status()
+    return r.json().get("hits", [])
+
+
+def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, window):
+    lic = "Pixabay Content License (uso gratuito, atribuição opcional)"
+    try:
+        for v in pixabay_videos(key, q):
+            pid = f"pixabayv:{v['id']}"
+            if pid in recent[-window * 3:]:
+                continue
+            vs = v.get("videos", {})
+            f = next((vs[k] for k in ("medium", "large", "small") if vs.get(k, {}).get("url")), None)
+            if not f:
+                continue
+            vout = work / f"vid_{sc['idx']:03d}.mp4"
+            _download(f["url"], vout)
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "pixabay", "source_url": v.get("pageURL"), "license": lic, "attribution": f"Vídeo de {v.get('user', '')} no Pixabay", "local_path": str(vout), "description": q})["id"]
+            return {"id": aid, "key": pid}
+    except Exception as e:
+        runner.log(job, f"Pixabay vídeos: {e}", "warn", "visuals")
+    try:
+        out = work / f"img_{sc['idx']:03d}.jpg"
+        for ph in pixabay_images(key, q, orientation):
+            pid = f"pixabay:{ph['id']}"
+            if pid in recent[-window * 3:]:
+                continue
+            _download(ph.get("largeImageURL") or ph["webformatURL"], out)
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "pixabay", "source_url": ph.get("pageURL"), "license": lic, "attribution": f"Foto de {ph.get('user', '')} no Pixabay", "local_path": str(out), "description": q})["id"]
+            return {"id": aid, "key": pid}
+    except Exception as e:
+        runner.log(job, f"Pixabay fotos: {e}", "warn", "visuals")
+    return None
+
+
 def _best_file(files: list[dict], w: int, h: int) -> dict | None:
     """Menor arquivo MP4 que ainda cubra a resolução do vídeo final (evita downloads enormes)."""
     mp4 = [f for f in files if f.get("file_type") == "video/mp4" and f.get("width") and f.get("height")]
@@ -45,6 +89,7 @@ def pick_visuals(runner, job, ctx) -> None:
     w, h = ctx["w"], ctx["h"]
     orientation = "portrait" if h > w else "landscape" if w > h else "square"
     key = runner.cfg.get("pexels_api_key")
+    pxb = runner.cfg.get("pixabay_api_key")
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
@@ -92,6 +137,9 @@ def pick_visuals(runner, job, ctx) -> None:
                         "local_path": str(out), "description": q})["id"]
                     chosen = {"id": aid, "key": pid}
                     break
+            if src == "pexels" and not chosen and pxb:
+                q = sc.get("visual_query") or sc["narration"][:60]
+                chosen = _pixabay(runner, job, pxb, q, orientation, w, h, work, sc, prod, recent, window)
             elif src == "ai_image" and s["ai"]["allow_ai_images"]:
                 aspect = prod["aspect"]
                 r = runner.api.call("ai_image", job_id=job["id"], prompt=sc.get("visual_description") or sc["narration"], aspect=aspect, used=ai_used)

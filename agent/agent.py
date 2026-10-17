@@ -270,6 +270,7 @@ def check(cfg: dict) -> None:
     voices = sorted(p.name for p in Path(cfg["voices_dir"]).glob("*.onnx"))
     print("Vozes:", voices or "nenhuma — rode install_windows.bat")
     print("Pexels:", "configurado" if cfg.get("pexels_api_key") else "não configurado (usará arquivos enviados ou fundo neutro)")
+    print("Pixabay:", "configurado" if cfg.get("pixabay_api_key") else "não configurado")
     r = Api(cfg["api_url"], cfg["token"]).call("heartbeat", info=info())
     print("Painel: conectado" if r.get("ok") else r)
 
