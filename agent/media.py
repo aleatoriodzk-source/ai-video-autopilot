@@ -141,6 +141,14 @@ def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, o
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
 
+def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20) -> None:
+    """Corta/repete um vídeo de banco para a duração da cena, preenchendo o quadro (crop central)."""
+    n = max(1, int(round(dur * fps)))
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},format=yuv420p,setsar=1"
+    run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
+
+
 def concat(files: list[Path], out: Path, workdir: Path, audio: bool) -> None:
     lst = workdir / (out.stem + "_list.txt")
     lst.write_text("".join(f"file '{f.resolve().as_posix()}'\n" for f in files), encoding="utf-8")

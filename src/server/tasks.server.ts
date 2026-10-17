@@ -119,15 +119,23 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const topic = chosenTopic ?? p.topic ?? "";
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
-  const target = Number((p.settings as Record<string, unknown>)?.["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240));
+  const ps = (p.settings ?? {}) as Record<string, unknown>;
+  const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
+  const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : null;
+  const words = Math.round(target * 2.4);
   const { data, usage } = await aiJson<ScriptOut>({
-    system: ETHICS + " Roteiros devem ser originais, naturais, sem repetições, sem frases genéricas e sem fatos inventados.",
+    system:
+      ETHICS +
+      " Você é um roteirista profissional de canais virais do YouTube brasileiro. Escreve como gente fala: frases curtas, ritmo, curiosidade, viradas e exemplos concretos. Proibido: clichês ('você sabia que', 'neste vídeo', 'fique até o final', 'incrível', 'nos dias de hoje'), frases vazias, repetição de ideias, enrolação, fatos inventados ou números sem base. Cada cena precisa entregar uma informação nova ou avançar a história.",
     user:
       `Escreva um roteiro completo para narração em PT-BR sobre: "${topic}".` +
-      `\nDuração alvo: ~${target}s (≈ ${Math.round(target * 2.5)} palavras). Formato ${p.aspect}.` +
-      `\nDivida em cenas de ${style?.pacing?.avg_scene_s ?? 3}-${(style?.pacing?.avg_scene_s ?? 3) + 2}s cada (uma ou duas frases por cena).` +
-      "\nPara cada cena: narração, legenda curta (pode ser a própria fala), descrição visual CONTEXTUAL do que deve aparecer (significado da frase, não só palavras-chave), visual_query em inglês com 3-6 termos concretos para busca em bancos de imagens, pausa após (ms), efeito sonoro sugerido ou '' e movimento/transição." +
-      "\nA primeira cena é o gancho forte. Termine com CTA se apropriado." +
+      `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte. Formato ${p.aspect}.` +
+      (sceneCount
+        ? `\nO roteiro deve ter EXATAMENTE ${sceneCount} cenas (≈ ${Math.round(words / sceneCount)} palavras de narração por cena).`
+        : `\nDivida em cenas de ${style?.pacing?.avg_scene_s ?? 4}-${(style?.pacing?.avg_scene_s ?? 4) + 3}s cada.`) +
+      "\nEstrutura: 1) gancho forte nos primeiros 5s (promessa ou pergunta intrigante específica); 2) contexto rápido; 3) desenvolvimento em blocos com mini-ganchos para manter retenção; 4) clímax/revelação; 5) fechamento com CTA natural." +
+      (target > 180 ? "\nComo é um vídeo longo, organize em capítulos claros e use transições faladas entre eles." : "") +
+      "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-4 termos concretos e filmáveis (ex.: 'astronaut floating space station', nunca termos abstratos) para busca em banco de vídeos/fotos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
       `\nResumo do canal: ${JSON.stringify(report ?? "não disponível").slice(0, 12000)}`,

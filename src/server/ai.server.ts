@@ -32,7 +32,7 @@ export async function aiJson<T>(opts: {
       model: TEXT_MODEL,
       stream: true,
       store: false,
-      reasoning: { effort: "low" },
+      reasoning: { effort: opts.schemaName === "script" ? "medium" : "low" },
       input: [
         { role: "system", content: opts.system },
         { role: "user", content },

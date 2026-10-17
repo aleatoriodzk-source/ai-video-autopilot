@@ -29,21 +29,28 @@ function Producoes() {
   const [topic, setTopic] = useState("");
   const [aspect, setAspect] = useState("9:16");
   const [mode, setMode] = useState("auto");
+  const [minutes, setMinutes] = useState("1");
+  const [scenes, setScenes] = useState("");
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: prods } = useQuery({
     queryKey: ["prods"],
-    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at").order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path").order("created_at", { ascending: false })).data ?? [],
     refetchInterval: 10_000,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["prods"] });
 
   async function create() {
     if (!topic.trim()) { toast.error("Informe um tema ou instrução"); return; }
+    const min = Number(minutes.replace(",", "."));
+    if (!(min >= 0.25 && min <= 30)) { toast.error("Duração entre 0,25 e 30 minutos"); return; }
+    const sc = scenes ? Number(scenes) : null;
+    if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null });
+    const settings = { target_seconds: Math.round(min * 60), ...(sc ? { scene_count: sc } : {}) };
+    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); toast.success("Produção criada"); refresh();
   }
@@ -85,6 +92,12 @@ function Producoes() {
             <option value="auto">Automático</option><option value="assisted">Assistido</option>
           </select>
         </div>
+        <label className="text-xs text-muted-foreground">Duração (minutos)
+          <input type="number" min={0.25} max={30} step={0.25} value={minutes} onChange={(e) => setMinutes(e.target.value)} className={input + " mt-1"} />
+        </label>
+        <label className="text-xs text-muted-foreground">Número de cenas (vazio = automático)
+          <input type="number" min={2} max={300} value={scenes} onChange={(e) => setScenes(e.target.value)} placeholder="automático" className={input + " mt-1"} />
+        </label>
         <button onClick={create} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground md:col-span-2">Criar produção</button>
       </div>
 
@@ -98,10 +111,11 @@ function Producoes() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="font-medium">{s?.title ?? p.title}</div>
-                    <div className="text-xs text-muted-foreground">{p.aspect} · {p.mode === "auto" ? "automático" : "assistido"} · {s?.scenes ? `roteiro com ${s.scenes.length} cenas` : "sem roteiro"}</div>
+                    <div className="text-xs text-muted-foreground">{p.aspect} · {p.mode === "auto" ? "automático" : "assistido"} · {(() => { const t = Number((p.settings as Record<string, unknown> | null)?.["target_seconds"] ?? 0); return t ? `${Math.round(t / 6) / 10} min · ` : ""; })()}{s?.scenes ? `roteiro com ${s.scenes.length} cenas` : "sem roteiro"}</div>
                   </div>
                   <StatusBadge status={p.status} />
                 </div>
+                {p.preview_path ? <VideoPlayer path={p.preview_path} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
                   <button disabled={b} className={btn} onClick={() => script(p.id)}>{s ? "Refazer roteiro" : "Gerar roteiro"}</button>
                   <button disabled={b} className={btn} onClick={() => run(p.id, () => startProduction(p.id, { needsAnalysis: !!p.reference_id, referenceId: p.reference_id }), "Automação iniciada — aguardando o agente local")}>Iniciar automação</button>
@@ -114,6 +128,26 @@ function Producoes() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function VideoPlayer({ path }: { path: string }) {
+  const { data: url, error } = useQuery({
+    queryKey: ["video-url", path],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from("media").createSignedUrl(path, 3600);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    staleTime: 50 * 60_000,
+  });
+  if (error) return <div className="text-xs text-destructive">Não foi possível carregar o vídeo: {(error as Error).message}</div>;
+  if (!url) return <div className="text-xs text-muted-foreground">Carregando vídeo…</div>;
+  return (
+    <div className="space-y-2">
+      <video src={url} controls preload="metadata" className="max-h-[480px] w-full rounded-md bg-muted" />
+      <a href={url} download className={btn + " inline-block"}>Baixar MP4</a>
     </div>
   );
 }

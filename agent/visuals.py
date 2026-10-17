@@ -24,6 +24,22 @@ def pexels_search(key: str, query: str, orientation: str) -> list[dict]:
     return r.json().get("photos", [])
 
 
+def pexels_videos(key: str, query: str, orientation: str) -> list[dict]:
+    r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
+                     params={"query": query, "orientation": orientation, "per_page": 10, "size": "medium"}, timeout=30)
+    if r.status_code == 429:
+        raise RuntimeError("limite de requisições atingido")
+    r.raise_for_status()
+    return r.json().get("videos", [])
+
+
+def _best_file(files: list[dict], w: int, h: int) -> dict | None:
+    """Menor arquivo MP4 que ainda cubra a resolução do vídeo final (evita downloads enormes)."""
+    mp4 = [f for f in files if f.get("file_type") == "video/mp4" and f.get("width") and f.get("height")]
+    ok = sorted([f for f in mp4 if f["width"] * f["height"] >= w * h * 0.5], key=lambda f: f["width"] * f["height"])
+    return ok[0] if ok else (max(mp4, key=lambda f: f["width"] * f["height"]) if mp4 else None)
+
+
 def pick_visuals(runner, job, ctx) -> None:
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
     w, h = ctx["w"], ctx["h"]
@@ -45,6 +61,26 @@ def pick_visuals(runner, job, ctx) -> None:
                     chosen = {"id": a["id"]}
             elif src == "pexels" and key:
                 q = sc.get("visual_query") or sc["narration"][:60]
+                try:
+                    vids = pexels_videos(key, q, orientation)
+                except Exception as e:
+                    vids = []
+                    runner.log(job, f"Pexels vídeos: {e}", "warn", "visuals")
+                for v in vids:
+                    pid = f"pexelsv:{v['id']}"
+                    f = _best_file(v.get("video_files", []), w, h)
+                    if pid in recent[-window * 3:] or not f:
+                        continue
+                    vout = work / f"vid_{sc['idx']:03d}.mp4"
+                    _download(f["link"], vout)
+                    aid = runner.api.call("create_asset", asset={
+                        "production_id": prod["id"], "kind": "video", "source": "pexels", "source_url": v["url"],
+                        "license": "Pexels License (uso gratuito, atribuição opcional)", "attribution": f"Vídeo de {v['user']['name']} no Pexels",
+                        "local_path": str(vout), "description": q})["id"]
+                    chosen = {"id": aid, "key": pid}
+                    break
+                if chosen:
+                    break
                 for ph in pexels_search(key, q, orientation):
                     pid = f"pexels:{ph['id']}"
                     if pid in recent[-window * 3:]:
