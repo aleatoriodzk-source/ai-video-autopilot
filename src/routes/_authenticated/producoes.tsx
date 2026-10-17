@@ -29,21 +29,28 @@ function Producoes() {
   const [topic, setTopic] = useState("");
   const [aspect, setAspect] = useState("9:16");
   const [mode, setMode] = useState("auto");
+  const [minutes, setMinutes] = useState("1");
+  const [scenes, setScenes] = useState("");
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: prods } = useQuery({
     queryKey: ["prods"],
-    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at").order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path").order("created_at", { ascending: false })).data ?? [],
     refetchInterval: 10_000,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["prods"] });
 
   async function create() {
     if (!topic.trim()) { toast.error("Informe um tema ou instrução"); return; }
+    const min = Number(minutes.replace(",", "."));
+    if (!(min >= 0.25 && min <= 30)) { toast.error("Duração entre 0,25 e 30 minutos"); return; }
+    const sc = scenes ? Number(scenes) : null;
+    if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null });
+    const settings = { target_seconds: Math.round(min * 60), ...(sc ? { scene_count: sc } : {}) };
+    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); toast.success("Produção criada"); refresh();
   }
@@ -85,6 +92,12 @@ function Producoes() {
             <option value="auto">Automático</option><option value="assisted">Assistido</option>
           </select>
         </div>
+        <label className="text-xs text-muted-foreground">Duração (minutos)
+          <input type="number" min={0.25} max={30} step={0.25} value={minutes} onChange={(e) => setMinutes(e.target.value)} className={input + " mt-1"} />
+        </label>
+        <label className="text-xs text-muted-foreground">Número de cenas (vazio = automático)
+          <input type="number" min={2} max={300} value={scenes} onChange={(e) => setScenes(e.target.value)} placeholder="automático" className={input + " mt-1"} />
+        </label>
         <button onClick={create} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground md:col-span-2">Criar produção</button>
       </div>
 
