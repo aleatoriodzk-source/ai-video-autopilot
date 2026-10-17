@@ -240,6 +240,9 @@ class Runner:
         rep["scenes"] = len(ctx["scenes"])
         self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"validation": rep, "status": "done" if rep["ok"] else "needs_attention"})
         self.log(job, "validação OK" if rep["ok"] else "problemas: " + "; ".join(rep["issues"]), "info" if rep["ok"] else "warn", "validate")
+        if not rep["ok"]:
+            # Nunca marcar como concluído sem um MP4 válido confirmado.
+            raise media.MediaError("vídeo final reprovado na validação: " + "; ".join(rep["issues"]))
 
 
 def check(cfg: dict) -> None:
