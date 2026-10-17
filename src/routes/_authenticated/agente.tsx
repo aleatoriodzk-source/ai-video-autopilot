@@ -186,9 +186,26 @@ function AgentePage() {
         <h2 className="font-display font-semibold">Arquivos do agente</h2>
         <p className="text-sm text-muted-foreground">Pacote com agent.py, config.json, install_windows.bat, run.bat, requirements.txt e módulos de voz, imagens e montagem.</p>
         <div className="flex flex-wrap gap-2">
-          <a href="/downloads/agente-estudio-windows.zip" download="agente-estudio-windows.zip" className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("/downloads/agente-estudio-windows.zip", { cache: "no-store" });
+                const type = res.headers.get("content-type") ?? "";
+                if (!res.ok || !type.includes("zip")) throw new Error(`resposta ${res.status}`);
+                const blob = await res.blob();
+                if (blob.size < 1000) throw new Error("arquivo vazio");
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = "agente-estudio-windows.zip"; document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 30_000);
+              } catch (e) {
+                toast.error(`Não foi possível baixar o pacote (${(e as Error).message}). Tente de novo ou abra o site publicado.`);
+              }
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+          >
             <Download className="h-4 w-4" /> Baixar arquivos do Agente (.zip)
-          </a>
+          </button>
           <button
             onClick={() => {
               const url = URL.createObjectURL(new Blob([config], { type: "application/json" }));
