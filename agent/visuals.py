@@ -89,6 +89,7 @@ def pick_visuals(runner, job, ctx) -> None:
     w, h = ctx["w"], ctx["h"]
     orientation = "portrait" if h > w else "landscape" if w > h else "square"
     key = runner.cfg.get("pexels_api_key")
+    pxb = runner.cfg.get("pixabay_api_key")
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
