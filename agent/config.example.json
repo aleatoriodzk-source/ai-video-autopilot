@@ -1,0 +1,7 @@
+{
+  "api_url": "https://SEU-SITE/api/public/agent",
+  "token": "COLE_SEU_TOKEN_AQUI",
+  "output_dir": "C:\\EstudioAutomatico\\videos",
+  "pexels_api_key": "",
+  "music_path": ""
+}
