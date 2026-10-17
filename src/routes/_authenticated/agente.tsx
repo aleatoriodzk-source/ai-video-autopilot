@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, Copy, KeyRound, Monitor, Trash2 } from "lucide-react";
+import { Check, Copy, Download, KeyRound, Monitor, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
@@ -182,19 +182,36 @@ function AgentePage() {
         )}
       </section>
 
+      <section className="panel space-y-3 p-5">
+        <h2 className="font-display font-semibold">Arquivos do agente</h2>
+        <p className="text-sm text-muted-foreground">Pacote com agent.py, config.json, install_windows.bat, run.bat, requirements.txt e módulos de voz, imagens e montagem.</p>
+        <div className="flex flex-wrap gap-2">
+          <a href="/downloads/agente-estudio-windows.zip" download="agente-estudio-windows.zip" className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+            <Download className="h-4 w-4" /> Baixar arquivos do Agente (.zip)
+          </a>
+          <button
+            onClick={() => {
+              const url = URL.createObjectURL(new Blob([config], { type: "application/json" }));
+              const a = document.createElement("a");
+              a.href = url; a.download = "config.json"; document.body.appendChild(a); a.click(); a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 30_000);
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm hover:bg-accent"
+          >
+            <Download className="h-4 w-4" /> Baixar config.json {token ? "(com seu token)" : "(sem token)"}
+          </button>
+        </div>
+      </section>
+
       <section className="panel space-y-4 p-5">
         <h2 className="font-display font-semibold">Como conectar no Windows</h2>
         <ol className="list-decimal space-y-4 pl-5 text-sm">
-          <li>Instale o <b>Python 3.10 ou superior</b> (python.org) marcando “Add Python to PATH”, e o <b>FFmpeg</b>:
-            <Code>{"winget install Python.Python.3.12\nwinget install Gyan.FFmpeg"}</Code>
-          </li>
-          <li>Baixe a pasta <code>agent</code> do projeto para <code>C:\EstudioAutomatico</code> (o agente será entregue na próxima etapa).</li>
-          <li>Crie o arquivo <code>config.json</code> dentro dessa pasta com este conteúdo:
+          <li>Clique em <b>Baixar arquivos do Agente (.zip)</b>, abra Downloads, clique com o botão direito no arquivo → <b>Extrair tudo</b> → escolha <code>C:\</code>. Vai criar <code>C:\EstudioAutomatico</code>.</li>
+          <li>Clique em <b>Gerar token</b> acima e depois em <b>Baixar config.json (com seu token)</b>. Substitua o <code>config.json</code> da pasta por esse (ou cole este conteúdo nele):
             <Code>{config}</Code>
           </li>
-          <li>Abra o PowerShell na pasta e rode:
-            <Code>{"python -m venv .venv\n.venv\\Scripts\\activate\npip install -r requirements.txt\npython agent.py"}</Code>
-          </li>
+          <li>Dê dois cliques em <code>install_windows.bat</code> (instala Python 3.12 se faltar, bibliotecas e a voz em português). Espere terminar.</li>
+          <li>Dê dois cliques em <code>run.bat</code> e deixe a janela aberta.</li>
           <li>Em até 30 segundos o status acima muda para <b>Agente conectado</b>.</li>
         </ol>
       </section>
