@@ -194,10 +194,15 @@ class Runner:
         fps, crf = ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"]
         for sc in ctx["scenes"]:
             img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
+            vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
+            dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
+            out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
+            if vid.exists():
+                media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
+                continue
             if not img.exists():
                 raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
-            dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
-            media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", ctx["work"] / f"clip_{sc['idx']:03d}.mp4", crf)
+            media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0
@@ -229,6 +234,16 @@ class Runner:
         ctx["final"] = final
         self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"output_path": str(final), "status": "rendered"})
         self.log(job, f"vídeo salvo em {final}", step="render")
+        print(f"  vídeo salvo em: {final}")
+        try:
+            up = self.api.call("upload_url", name=f"videos/{ctx['prod']['id']}.mp4")
+            with open(final, "rb") as fh:
+                r = requests.put(up["signed_url"], data=fh, headers={"Content-Type": "video/mp4", "x-upsert": "true"}, timeout=1800)
+            r.raise_for_status()
+            self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"preview_path": up["path"]})
+            self.log(job, "vídeo enviado ao site", step="render")
+        except Exception as e:  # o arquivo local continua válido
+            self.log(job, f"falha ao enviar vídeo ao site: {e}", "warn", "render")
 
     def step_validate(self, job, ctx):
         final = ctx.get("final") or Path(ctx["prod"].get("output_path") or "")
