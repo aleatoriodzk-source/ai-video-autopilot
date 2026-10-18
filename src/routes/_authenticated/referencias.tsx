@@ -22,9 +22,9 @@ export const Route = createFileRoute("/_authenticated/referencias")({
 
 function detect(url: string) {
   const u = url.toLowerCase();
-  const platform = u.includes("tiktok.com") ? "tiktok" : u.includes("youtu") ? "youtube" : "outro";
+  const platform = u.includes("tiktok.com") ? "tiktok" : u.includes("youtu") ? "youtube" : "other";
   const isChannel = /youtube\.com\/(@|channel\/|c\/|user\/)/.test(u) || (/tiktok\.com\/@[^/]+\/?$/.test(u));
-  return { platform, kind: isChannel ? "channel" : "short" } as const;
+  return { platform, kind: isChannel ? "channel" : "video" } as const;
 }
 
 function Referencias() {
