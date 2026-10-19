@@ -112,9 +112,10 @@ class Runner:
         from analyzer import collect_reference
         ref = bundle["reference"]
         kind = (bundle.get("analysis") or {}).get("kind", "channel")
-        self.update(job, status="waiting_download", step="analyze", progress=10, wait_reason="baixando referência com yt-dlp")
+        self.update(job, status="waiting_download", step="analyze", progress=10, wait_reason="baixando referência")
         work = Path(self.cfg["work_dir"]) / f"ref_{ref['id']}"
-        collected, frames = collect_reference(ref["urls"], kind, work, lambda m: self.log(job, m, step="analyze"))
+        collected, frames = collect_reference(ref["urls"], kind, work, lambda m: self.log(job, m, step="analyze"),
+                                             resolve=lambda path: self.api.call("download_url", path=path)["url"])
         self.api.call("save_collected", job_id=job["id"], collected=collected, title=collected.get("title"))
         self.update(job, status="waiting_api", progress=70, wait_reason="IA analisando estilo")
         self.api.call("ai_analyze", job_id=job["id"], collected=collected, frames=frames)

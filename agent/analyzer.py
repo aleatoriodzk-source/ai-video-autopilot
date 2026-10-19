@@ -10,8 +10,12 @@ from pathlib import Path
 import media
 
 
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=android,web"]
+
+
 def _ytdlp(args: list[str]) -> str:
-    p = subprocess.run(["yt-dlp", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(["yt-dlp", *BASE, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:
         raise RuntimeError("yt-dlp: " + p.stderr[-800:])
     return p.stdout
@@ -32,11 +36,40 @@ def frames(video: Path, times: list[float], out_dir: Path) -> list[str]:
     return res
 
 
-def collect_reference(urls: list[str], kind: str, work: Path, log) -> tuple[dict, list[str]]:
+def _analyze_file(vid: Path, title: str, out: dict, imgs: list[str], work: Path, log) -> list[str]:
+    dur = media.duration(vid)
+    cuts = scene_cuts(vid)
+    out["videos"].append({"title": title, "duration_s": dur, "view_count": None, "description": "",
+                          "scene_cuts_s": cuts, "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": False,
+                          "source": "upload"})
+    log(f"'{title}': {len(cuts)} cortes detectados em {dur:.0f}s")
+    if not imgs:
+        pts = ([0.5] + cuts)[:10] if cuts else [dur * i / 8 for i in range(8)]
+        imgs = frames(vid, pts, work)
+    return imgs
+
+
+def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None) -> tuple[dict, list[str]]:
+    """urls podem ser links (YouTube/TikTok) ou 'storage:<caminho>' de vídeos enviados pelo site."""
     work.mkdir(parents=True, exist_ok=True)
     out: dict = {"urls": urls, "videos": []}
     imgs: list[str] = []
     for url in urls[:3]:
+        if url.startswith("storage:"):
+            if not resolve:
+                raise RuntimeError("vídeo enviado sem acesso ao site")
+            import requests
+            vid = work / f"up{len(out['videos'])}.mp4"
+            log("baixando vídeo enviado pelo site")
+            with requests.get(resolve(url[len("storage:"):]), stream=True, timeout=600) as r:
+                r.raise_for_status()
+                with open(vid, "wb") as fh:
+                    for c in r.iter_content(1 << 20):
+                        fh.write(c)
+            name = Path(url).stem
+            out["title"] = out.get("title") or name
+            imgs = _analyze_file(vid, name, out, imgs, work, log)
+            continue
         if kind == "channel":
             meta = json.loads(_ytdlp(["-J", "--flat-playlist", "--playlist-end", "30", url]))
             out["title"] = meta.get("title") or meta.get("uploader")
