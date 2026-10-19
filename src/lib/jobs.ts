@@ -55,3 +55,17 @@ export async function requestAnalysis(referenceId: string, kind: "channel" | "sh
 export function agentOnline(lastSeen: string | null | undefined) {
   return !!lastSeen && Date.now() - new Date(lastSeen).getTime() < 90_000;
 }
+
+/** Re-renders a production after scenes were edited: keeps analysis/topic/script, redoes voice, media and render. */
+export async function rerenderProduction(productionId: string) {
+  const user_id = await uid();
+  const keep = ["analyze", "topic", "script"];
+  const existing = await activeJob(productionId);
+  if (existing && !["done", "cancelled", "failed"].includes(existing.status)) {
+    await supabase.from("jobs").update({ status: "queued", completed_steps: keep, error: null, attempts: 0 }).eq("id", existing.id);
+  } else {
+    const { error } = await supabase.from("jobs").insert({ user_id, type: "production", production_id: productionId, completed_steps: keep });
+    if (error) throw error;
+  }
+  await supabase.from("productions").update({ status: "queued" }).eq("id", productionId);
+}
