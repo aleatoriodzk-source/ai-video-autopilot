@@ -20,7 +20,7 @@ import requests
 import media
 
 ROOT = Path(__file__).resolve().parent
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 REVIEWABLE = {"topic", "script", "narration", "visuals", "scenes", "captions", "render"}
 STEPS = ["analyze", "topic", "script", "narration", "visuals", "scenes", "captions", "audio", "render", "validate"]
 
@@ -181,7 +181,7 @@ class Runner:
             media.piper_tts(sc["narration"], voice, raw, v["length_scale"], v["noise_scale"], v["sentence_silence"])
             speech = media.duration(raw)
             total = media.scene_audio(raw, wav, sc.get("pause_after_ms") or 0)
-            timings = media.word_timings(sc["narration"], speech)
+            timings = media.word_timings(media.clean_tts(sc["narration"]), speech)
             self.api.call("update_scene", scene_id=sc["id"], fields={"audio_path": str(wav), "audio_duration_s": round(speech, 3), "duration_s": round(total, 3), "word_timings": timings, "status": "narrated"})
             sc.update(audio_path=str(wav), audio_duration_s=speech, duration_s=total, word_timings=timings)
             self.update(job, progress=30 + int(10 * (n + 1) / len(ctx["scenes"])))
@@ -210,7 +210,7 @@ class Runner:
             wav = ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             total = media.duration(wav)
             speech = float(sc.get("audio_duration_s") or total)
-            cues += media.word_timings(sc["narration"], speech, start=t)
+            cues += media.word_timings(media.clean_tts(sc["narration"]), speech, start=t)
             t += total
         media.write_ass(cues, ctx["w"], ctx["h"], ctx["work"] / "subs.ass")
 

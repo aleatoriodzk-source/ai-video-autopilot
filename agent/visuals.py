@@ -96,6 +96,9 @@ def pick_visuals(runner, job, ctx) -> None:
     ai_used = 0
     for sc in ctx["scenes"]:
         out = work / f"img_{sc['idx']:03d}.jpg"
+        # Limpa mídias de renderizações anteriores (cenas podem ter sido editadas no site).
+        for old in (out, work / f"vid_{sc['idx']:03d}.mp4"):
+            old.unlink(missing_ok=True)
         chosen = None
         for src in s["visuals"]["prefer"]:
             if src == "upload" and uploads:
