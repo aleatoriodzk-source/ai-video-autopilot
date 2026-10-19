@@ -30,3 +30,9 @@ def test_full_render_produces_valid_mp4(tmp_path: Path):
     media.final_mix(tmp_path / "clip.mp4", wav, "subs.ass", tmp_path / "final.mp4", tmp_path, None)
     rep = media.validate(tmp_path / "final.mp4", 2.0, w, h)
     assert rep["ok"], rep
+
+
+def test_clean_tts_removes_emoji_and_symbols():
+    import media
+    out = media.clean_tts("🕵️‍♀️ O segredo § do mar ¶ (pausa) **é** 25%")
+    assert out == "O segredo do mar é 25 por cento"

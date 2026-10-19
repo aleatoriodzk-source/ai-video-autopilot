@@ -51,7 +51,7 @@ export function nextStep(completed: string[]): StepId | null {
 export const JOB_STATUS_LABEL: Record<string, string> = {
   queued: "Na fila (aguardando agente)",
   running: "Executando",
-  waiting_api: "Aguardando API",
+  waiting_api: "IA trabalhando…",
   waiting_download: "Baixando arquivos",
   rendering: "Renderizando",
   awaiting_review: "Aguardando sua revisão",
