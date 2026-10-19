@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
@@ -47,9 +48,39 @@ def duration(path: Path) -> float:
 
 # ---------------- Narração (Piper local) ----------------
 
+_SYMBOL_WORDS = {"%": " por cento", "&": " e ", "+": " mais ", "=": " igual a ", "R$": " reais "}
+
+
+def clean_tts(text: str) -> str:
+    """Deixa só texto falável: remove emojis, símbolos (§ ¶ * # _ etc.), rubricas entre ()/[] e espaços extras."""
+    t = unicodedata.normalize("NFC", text or "")
+    t = re.sub(r"\[[^\]]*\]|\([^)]*\)|\{[^}]*\}", " ", t)  # rubricas: (pausa), [música]
+    for k, v in _SYMBOL_WORDS.items():
+        t = t.replace(k, v)
+    keep = []
+    for ch in t:
+        cat = unicodedata.category(ch)
+        if cat[0] in ("L", "N") or ch in " .,!?;:'-\n":
+            keep.append(ch)
+        elif cat.startswith("Z") or ch in "\t\r":
+            keep.append(" ")
+        elif ch in "—–…":
+            keep.append(", ")
+        # emojis (So), modificadores, ZWJ (Cf), § ¶ * # _ / etc. são descartados
+    t = "".join(keep).replace("\n", ". ")
+    t = re.sub(r"\s*-\s+|\s+-\s*", ", ", t)
+    t = re.sub(r"([.,!?;:])\1+", r"\1", t)
+    t = re.sub(r"\s+([.,!?;:])", r"\1", t)
+    t = re.sub(r"(^|[.!?]\s*)[,;:]\s*", r"\1", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" ,;:")
+
+
 def piper_tts(text: str, voice_path: Path, out_wav: Path, length_scale=1.0, noise_scale=0.667, sentence_silence=0.3) -> None:
     if not voice_path.exists():
         raise MediaError(f"Voz Piper não encontrada: {voice_path}. Rode install_windows.bat para baixá-la.")
+    text = clean_tts(text)
+    if not text:
+        raise MediaError("narração ficou vazia depois da limpeza de símbolos")
     cmd = [sys.executable, "-m", "piper", "-m", str(voice_path), "-f", str(out_wav),
            "--length-scale", str(length_scale), "--noise-scale", str(noise_scale), "--sentence-silence", str(sentence_silence)]
     p = subprocess.run(cmd, input=text, capture_output=True, text=True, encoding="utf-8")
