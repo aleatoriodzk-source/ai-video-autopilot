@@ -136,6 +136,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       "\nEstrutura: 1) gancho forte nos primeiros 5s (promessa ou pergunta intrigante específica); 2) contexto rápido; 3) desenvolvimento em blocos com mini-ganchos para manter retenção; 4) clímax/revelação; 5) fechamento com CTA natural." +
       (target > 180 ? "\nComo é um vídeo longo, organize em capítulos claros e use transições faladas entre eles." : "") +
       "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-4 termos concretos e filmáveis (ex.: 'astronaut floating space station', nunca termos abstratos) para busca em banco de vídeos/fotos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
+      "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
       `\nResumo do canal: ${JSON.stringify(report ?? "não disponível").slice(0, 12000)}`,
