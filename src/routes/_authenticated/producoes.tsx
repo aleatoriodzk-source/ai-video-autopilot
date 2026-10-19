@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { activeJob, setJobStatus, startProduction } from "@/lib/jobs";
 import { generateScript } from "@/lib/ai.functions";
+import { SceneEditor } from "@/components/app/SceneEditor";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
@@ -33,6 +34,7 @@ function Producoes() {
   const [scenes, setScenes] = useState("");
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: prods } = useQuery({
@@ -64,6 +66,8 @@ function Producoes() {
     await run(id, async () => {
       const r = await generateScript({ data: { productionId: id } });
       if (!r.ok) throw new Error(r.error);
+      await qc.invalidateQueries({ queryKey: ["scenes", id] });
+      setOpen(id);
     }, "Roteiro gerado");
   }
 
@@ -122,7 +126,9 @@ function Producoes() {
                   <button disabled={b} className={btn} onClick={() => control(p.id, "paused")}>Pausar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "queued")}>Retomar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "cancelled")}>Cancelar</button>
+                  {s ? <button className={btn + (open === p.id ? " bg-accent" : "")} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Fechar cenas" : "Ver e editar cenas"}</button> : null}
                 </div>
+                {open === p.id ? <SceneEditor productionId={p.id} /> : null}
               </div>
             );
           })}
