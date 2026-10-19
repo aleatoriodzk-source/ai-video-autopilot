@@ -20,6 +20,7 @@ if not exist .venv %PY% -m venv .venv || goto :erro
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt || goto :erro
+pip install --upgrade yt-dlp
 if not exist voices mkdir voices
 if not exist videos mkdir videos
 set BASE=https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR
