@@ -135,6 +135,11 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
         : `\nDivida em cenas de ${style?.pacing?.avg_scene_s ?? 4}-${(style?.pacing?.avg_scene_s ?? 4) + 3}s cada.`) +
       "\nEstrutura: 1) gancho forte nos primeiros 5s (promessa ou pergunta intrigante específica); 2) contexto rápido; 3) desenvolvimento em blocos com mini-ganchos para manter retenção; 4) clímax/revelação; 5) fechamento com CTA natural." +
       (target > 180 ? "\nComo é um vídeo longo, organize em capítulos claros e use transições faladas entre eles." : "") +
+      (ps["style"] === "youtube"
+        ? "\nESTILO YOUTUBE LONGO (documentário): narrativa envolvente com começo, meio e fim, cenas de 5 a 9 segundos, explicações com exemplos, curiosidade construída aos poucos, loops abertos que só fecham mais adiante, transições suaves (fade), movimentos de câmera lentos."
+        : ps["style"] === "tiktok"
+          ? "\nESTILO TIKTOK/SHORTS (dopamina): gancho brutal na primeira frase (até 8 palavras), frases curtíssimas, cenas de 1,5 a 3 segundos, uma virada surpreendente a cada 2 ou 3 cenas, zero introdução, legendas de impacto, sugira efeitos sonoros (whoosh, impacto, riser) nos cortes, final que puxa para assistir de novo."
+          : "") +
       "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-4 termos concretos e filmáveis (ex.: 'astronaut floating space station', nunca termos abstratos) para busca em banco de vídeos/fotos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
       "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
