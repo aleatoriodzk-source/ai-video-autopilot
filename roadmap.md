@@ -6,7 +6,7 @@
 
 ## Próximos (em ordem)
 1. [x] Fila: mensagens claras por etapa, reiniciar só a etapa que falhou, evitar loops
-2. [ ] Duração garantida pelo áudio final (não entregar 39s quando pediu 60s)
+2. [x] Duração garantida pelo áudio final (não entregar 39s quando pediu 60s)
 3. [ ] Tela de roteiro completo (gancho, desenvolvimento, clímax, CTA, fontes) + regenerar uma cena
 4. [ ] Mídia: busca com briefing visual + IA conferindo se a imagem bate com a cena
 5. [ ] Novas fontes: Wikimedia, Internet Archive, NASA, Openverse, acervo próprio
