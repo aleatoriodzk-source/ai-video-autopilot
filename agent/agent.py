@@ -196,6 +196,26 @@ class Runner:
             self.api.call("update_scene", scene_id=sc["id"], fields={"audio_path": str(wav), "audio_duration_s": round(speech, 3), "duration_s": round(total, 3), "word_timings": timings, "status": "narrated"})
             sc.update(audio_path=str(wav), audio_duration_s=speech, duration_s=total, word_timings=timings)
             self.update(job, progress=30 + int(10 * (n + 1) / len(ctx["scenes"])))
+        self._fit_duration(job, ctx)
+
+    def _fit_duration(self, job, ctx):
+        """Se a fala ficou mais curta que o pedido, distribui pausas extras (até 1,2 s por cena) para chegar perto da duração alvo."""
+        target = float((ctx["prod"].get("settings") or {}).get("target_seconds") or 0)
+        total = sum(sc["duration_s"] for sc in ctx["scenes"])
+        if not target or total >= target * 0.95:
+            self.log(job, f"duração da narração: {total:.0f}s (alvo {target:.0f}s)", step="narration")
+            return
+        extra = min((target - total) / len(ctx["scenes"]), 1.2)
+        for sc in ctx["scenes"]:
+            raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
+            pause = (sc.get("pause_after_ms") or 0) + int(extra * 1000)
+            sc["duration_s"] = media.scene_audio(raw, wav, pause)
+            self.api.call("update_scene", scene_id=sc["id"], fields={"duration_s": round(sc["duration_s"], 3)})
+        new_total = sum(sc["duration_s"] for sc in ctx["scenes"])
+        if new_total < target * 0.85:
+            self.log(job, f"o roteiro é curto demais: {new_total:.0f}s de {target:.0f}s pedidos. Clique em 'Refazer roteiro' para gerar um maior.", "warn", "narration")
+        else:
+            self.log(job, f"duração ajustada para {new_total:.0f}s (alvo {target:.0f}s)", step="narration")
 
     def step_visuals(self, job, ctx):
         from visuals import pick_visuals
