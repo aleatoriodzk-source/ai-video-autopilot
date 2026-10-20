@@ -38,6 +38,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState("");
+  const [pick, setPick] = useState(false);
 
   useEffect(() => {
     if (!data || dirty) return;
@@ -222,7 +223,44 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   );
 }
 
-/** Mostra a foto/vídeo atual da cena (se estiver guardada no site). */
+/** Lista o acervo do usuário para escolher a mídia de uma cena. */
+function LibraryPicker({ productionId, onPick }: { productionId: string; onPick: (assetId: string) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["acervo"],
+    queryFn: async () => (await supabase.from("assets").select("id, kind, storage_path, description, production_id").is("production_id", null).eq("source", "upload").in("kind", ["image", "video"]).order("created_at", { ascending: false })).data ?? [],
+  });
+  if (isLoading) return <div className="mt-2 text-xs text-muted-foreground">Abrindo acervo…</div>;
+  if (!data?.length) return (
+    <div className="mt-2 rounded border border-dashed border-border p-2 text-xs text-muted-foreground">
+      Seu acervo está vazio. Envie fotos e vídeos na aba <b>Acervo</b> e eles aparecem aqui.
+    </div>
+  );
+  return (
+    <div className="mt-2 grid max-h-64 grid-cols-3 gap-2 overflow-y-auto rounded border border-border p-2 sm:grid-cols-4">
+      {data.map((a) => <LibraryThumb key={a.id} asset={a} onPick={() => onPick(a.id)} />)}
+    </div>
+  );
+}
+
+function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; storage_path: string; description: string | null }; onPick: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useQuery({
+    queryKey: ["acervo-url", asset.id],
+    queryFn: async () => {
+      const { data } = await supabase.storage.from("media").createSignedUrl(asset.storage_path, 3600);
+      setUrl(data?.signedUrl ?? null);
+      return data?.signedUrl ?? null;
+    },
+  });
+  return (
+    <button onClick={onPick} title={asset.description ?? ""} className="group relative overflow-hidden rounded border border-border hover:border-primary">
+      {url ? (
+        asset.kind === "video" ? <video src={url} muted playsInline className="aspect-video w-full object-cover" /> : <img src={url} alt="" className="aspect-video w-full object-cover" />
+      ) : <div className="aspect-video w-full bg-muted" />}
+      <span className="absolute inset-x-0 bottom-0 line-clamp-1 bg-background/80 px-1 text-[9px] text-muted-foreground">{asset.description || "sem descrição"}</span>
+    </button>
+  );
+}
 function SceneMedia({ assetId }: { assetId: string | null }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
