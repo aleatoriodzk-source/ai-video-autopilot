@@ -22,6 +22,29 @@ export const styleProfileSchema = obj({
   tone: str,
 });
 
+
+/** "DNA do formato": everything needed to recreate the format with brand-new content. */
+export const formatDnaSchema = obj({
+  niche: str,
+  subniche: str,
+  audience: str,
+  promise: str,
+  hook: obj({ type: str, first_line_pattern: str, seconds: num, why_it_works: str, templates: arr(str) }),
+  structure: arr(obj({ part: str, percent: num, purpose: str, how: str })),
+  narration: obj({ person: str, tone: str, words_per_second: num, sentence_length: str, rhetorical_devices: arr(str), vocabulary: str }),
+  retention: arr(str),
+  open_loops: arr(str),
+  editing: obj({ cuts_per_min: num, zoom_usage: str, transitions: str, broll_ratio: str, overlays: str }),
+  captions: obj({ style: str, words_per_line: num, emphasis: str }),
+  audio: obj({ music: str, sfx: arr(str), voice: str }),
+  visual_sources: arr(obj({ kind: str, best_source: str, example_query: str })),
+  cta: str,
+  title_pattern: str,
+  do_list: arr(str),
+  dont_list: arr(str),
+  new_video_ideas: arr(str),
+});
+
 export const channelAnalysisSchema = obj({
   niche: finding,
   subniches: arr(str),
@@ -40,6 +63,7 @@ export const channelAnalysisSchema = obj({
   titles_thumbnails_cta: finding,
   best_vs_worst: finding,
   limitations: arr(str),
+  format_dna: formatDnaSchema,
   style_profile: styleProfileSchema,
 });
 
@@ -53,6 +77,7 @@ export const shortAnalysisSchema = obj({
   hook_and_story: finding,
   signature_elements: arr(str),
   limitations: arr(str),
+  format_dna: formatDnaSchema,
   style_profile: styleProfileSchema,
 });
 

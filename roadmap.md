@@ -10,7 +10,7 @@
 3. [x] Tela de roteiro completo (gancho, desenvolvimento, clímax, CTA, fontes) + regenerar uma cena
 4. [x] Mídia: filtro pelo assunto + IA confere a imagem (até 4 por cena)
 5. [~] Novas fontes: Wikimedia, Openverse, NASA, Internet Archive feitas; falta acervo próprio
-6. [ ] Análise profunda: transcrição, hook, estrutura, ritmo, legendas, áudio → DNA de Nicho e Estilo
+6. [x] Análise profunda: transcrição, hook, estrutura, ritmo, legendas, áudio → DNA de Nicho e Estilo
 7. [ ] Análise de canal comparando vários vídeos
 8. [ ] Editor estilo CapCut (timeline, troca de mídia por cena, legendas palavra por palavra)
 9. [ ] Música por clima, efeitos sonoros, escolha de voz e prévia
