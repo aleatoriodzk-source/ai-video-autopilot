@@ -13,6 +13,7 @@
 6. [x] Análise profunda: transcrição, hook, estrutura, ritmo, legendas, áudio → DNA de Nicho e Estilo
 7. [x] Análise de canal comparando vários vídeos
 8. [x] Editor estilo CapCut (timeline, troca de mídia por cena, legendas palavra por palavra)
-9. [~] Voz e música por clima feitas; faltam efeitos sonoros e prévia da voz
+9. [x] Automático: transições reais no vídeo, efeitos sonoros gerados pelo programa, música livre online por clima (clima escolhido sozinho)
+9b. [ ] Prévia da voz antes de gerar
 10. [x] Versões do vídeo e renderização mais rápida
-11. [ ] Agente do PC: gerar ZIP novo e trocar os arquivos no PC (deixado para o final, a pedido do Júlio)
+11. [~] ZIP novo gerado com tudo; falta o Júlio trocar os arquivos no PC. Agente do PC: gerar ZIP novo e trocar os arquivos no PC (deixado para o final, a pedido do Júlio)

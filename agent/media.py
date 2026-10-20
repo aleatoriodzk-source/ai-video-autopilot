@@ -201,17 +201,23 @@ def concat(files: list[Path], out: Path, workdir: Path, audio: bool) -> None:
 
 
 def final_mix(video: Path, voice: Path, subs_name: str, out: Path, workdir: Path, music: Path | None,
-              music_db: float = -20, lufs: float = -16, crf: int = 20) -> None:
-    """Queima legendas, normaliza a voz e, se houver música, aplica ducking (sidechain) sob a narração."""
+              music_db: float = -20, lufs: float = -16, crf: int = 20, sfx: Path | None = None) -> None:
+    """Queima legendas, normaliza a voz, aplica ducking na música e soma a faixa de efeitos sonoros."""
     inputs = ["-i", str(video), "-i", str(voice)]
     vf = f"[0:v]subtitles={subs_name}[v]"
+    af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11"
+    mix, n = [], 2
     if music and music.exists():
         inputs += ["-stream_loop", "-1", "-i", str(music)]
-        af = (f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11,asplit=2[vo][sc];"
-              f"[2:a]volume={music_db}dB[m];[m][sc]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[md];"
-              f"[vo][md]amix=inputs=2:duration=first:normalize=0[a]")
+        af += f",asplit=2[vo][sc];[{n}:a]volume={music_db}dB[m];[m][sc]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[md]"
+        mix, n = ["[vo]", "[md]"], n + 1
     else:
-        af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]"
+        af += "[vo]"
+        mix = ["[vo]"]
+    if sfx and sfx.exists():
+        inputs += ["-i", str(sfx)]
+        mix.append(f"[{n}:a]")
+    af += f";{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0[a]" if len(mix) > 1 else ";[vo]anull[a]"
     run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out.name], cwd=workdir)
