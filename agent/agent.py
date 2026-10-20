@@ -274,16 +274,32 @@ class Runner:
         self.update(job, status="rendering", wait_reason="FFmpeg renderizando")
         t0 = time.time()
         clips = [ctx["work"] / f"clip_{sc['idx']:03d}.mp4" for sc in ctx["scenes"]]
-        media.concat(clips, ctx["work"] / "video.mp4", ctx["work"], audio=False)
+        import fx
+        durs = [media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav") for sc in ctx["scenes"]]
+        trans = [sc.get("transition") or "cut" for sc in ctx["scenes"]]
+        fx.transitions(clips, durs, trans, ctx["work"] / "video.mp4", ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"])
+        cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
+        sfx = None
+        try:
+            sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs))
+        except media.MediaError as err:
+            self.log(job, f"efeitos sonoros ignorados: {err}", "warn", step="render")
         out_dir = Path(ctx["settings"]["export"].get("output_dir") or self.cfg["output_dir"])
         out_dir.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in ctx["prod"]["title"])[:60].strip() or "video"
         tmp = ctx["work"] / "final.mp4"
-        music = pick_music(self.cfg, (ctx["prod"].get("settings") or {}).get("music_mood") or "auto")
+        mood = (ctx["prod"].get("settings") or {}).get("music_mood") or "auto"
+        if mood == "auto":
+            mood = fx.guess_mood(ctx["prod"].get("topic") or ctx["prod"].get("title") or "", ctx["scenes"])
+            self.log(job, f"clima escolhido automaticamente: {mood}", step="render")
+        music = None if mood == "none" else (pick_music(self.cfg, mood) if any((Path(self.cfg.get("music_dir") or ROOT / "music") / mood).glob("*.*")) else None)
+        if mood != "none" and not music:
+            m = fx.online_music(mood, cache / "music", lambda t: self.log(job, t, step="render"))
+            music = str(m) if m else pick_music(self.cfg, mood)
         if music:
             self.log(job, f"música: {Path(music).name}", step="render")
         e = ctx["settings"]["export"]
-        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass", tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"])
+        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass", tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"], sfx)
         final = out_dir / f"{safe} - {ctx['prod']['aspect'].replace(':', 'x')} - {time.strftime('%Y%m%d-%H%M')}.mp4"
         final.write_bytes(tmp.read_bytes())
         ctx["final"] = final
