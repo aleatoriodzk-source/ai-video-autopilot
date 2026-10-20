@@ -17,17 +17,14 @@ export async function loadKeys(userId: string): Promise<AiKeys> {
   return Object.fromEntries((data ?? []).map((r) => [r.provider, r.api_key])) as AiKeys;
 }
 
-let ctxUser = "";
-let ctxProvider = "auto";
-let lastProvider = "lovable";
-async function aiJson<T>(opts: Parameters<typeof rawAiJson>[0]) {
-  const r = await rawAiJson<T>({ ...opts, keys: await loadKeys(ctxUser), provider: ctxProvider });
-  lastProvider = r.provider;
-  return r;
-}
-function useAi(userId: string, s: AppSettings, override?: unknown) {
-  ctxUser = userId;
-  ctxProvider = typeof override === "string" && override ? override : s.ai.text_provider;
+const lastProvider: Record<string, string> = {};
+function makeAi(userId: string, s: AppSettings, override?: unknown) {
+  const provider = typeof override === "string" && override ? override : s.ai.text_provider;
+  return async <T,>(opts: Parameters<typeof rawAiJson>[0]) => {
+    const r = await rawAiJson<T>({ ...opts, keys: await loadKeys(userId), provider });
+    lastProvider[userId] = r.provider;
+    return r;
+  };
 }
 
 export async function loadSettings(db: DB, userId: string): Promise<AppSettings> {
@@ -58,7 +55,7 @@ export async function recordTextUsage(db: DB, userId: string, s: AppSettings, us
     user_id: userId,
     job_id: jobId,
     production_id: productionId,
-    provider: LABEL[lastProvider] ?? lastProvider,
+    provider: LABEL[lastProvider[userId] ?? "lovable"] ?? "IA",
     operation,
     units: usage.total_tokens,
     unit_name: "tokens",
@@ -75,9 +72,9 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
   const { data: an } = await db.from("analyses").select("*, reference_sources(*)").eq("id", args.analysisId).single();
   if (!an) throw new Error("Análise não encontrada");
   const s = await guardBudget(db, userId, args.jobId, null);
-  useAi(userId, s);
+  const ai = makeAi(userId, s);
   const isShort = an.kind === "short";
-  const { data, usage } = await aiJson<Record<string, unknown> & { style_profile: StyleProfile }>({
+  const { data, usage } = await ai<Record<string, unknown> & { style_profile: StyleProfile }>({
     system: ETHICS,
     user:
       (isShort
@@ -120,8 +117,8 @@ async function productionContext(db: DB, productionId: string) {
 export async function runIdeas(db: DB, userId: string, productionId: string, jobId: string | null) {
   const { p, report } = await productionContext(db, productionId);
   const s = await guardBudget(db, userId, jobId, null);
-  useAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
-  const { data, usage } = await aiJson<{ ideas: unknown[] }>({
+  const ai = makeAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
+  const { data, usage } = await ai<{ ideas: unknown[] }>({
     system: ETHICS,
     user:
       `Sugira 6 temas originais de vídeo ${p.aspect === "9:16" ? "curto vertical" : "para YouTube"} alinhados ao nicho.` +
@@ -140,7 +137,7 @@ export async function runIdeas(db: DB, userId: string, productionId: string, job
 export async function runScript(db: DB, userId: string, productionId: string, jobId: string | null, chosenTopic?: string) {
   const { p, report } = await productionContext(db, productionId);
   const s = await guardBudget(db, userId, jobId, null);
-  useAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
+  const ai = makeAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
   const topic = chosenTopic ?? p.topic ?? "";
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
@@ -148,7 +145,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : null;
   const words = Math.round(target * 2.4);
-  const { data, usage } = await aiJson<ScriptOut>({
+  const { data, usage } = await ai<ScriptOut>({
     system:
       ETHICS +
       " Você é um roteirista profissional de canais virais do YouTube brasileiro. Escreve como gente fala: frases curtas, ritmo, curiosidade, viradas e exemplos concretos. Proibido: clichês ('você sabia que', 'neste vídeo', 'fique até o final', 'incrível', 'nos dias de hoje'), frases vazias, repetição de ideias, enrolação, fatos inventados ou números sem base. Cada cena precisa entregar uma informação nova ou avançar a história.",
