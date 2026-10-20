@@ -55,6 +55,25 @@ function Referencias() {
     } finally { setBusy(false); }
   }
 
+  async function upload(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { toast.error("Envie um arquivo de vídeo (MP4, MOV, WEBM)"); return; }
+    if (file.size > 2 * 1024 ** 3) { toast.error("Arquivo maior que 2 GB"); return; }
+    setBusy(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `${u.user!.id}/refs/${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
+      if (up.error) throw up.error;
+      const { error } = await supabase.from("reference_sources").insert({ user_id: u.user!.id, urls: [`storage:${path}`], platform: "other", kind: "video", title: title || file.name });
+      if (error) throw error;
+      setTitle("");
+      toast.success("Vídeo enviado. Clique em Analisar para o agente estudar o estilo.");
+      qc.invalidateQueries({ queryKey: ["refs"] });
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+
   async function analyze(id: string, kind: string) {
     try {
       await requestAnalysis(id, kind === "channel" ? "channel" : "short");
@@ -70,6 +89,15 @@ function Referencias() {
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nome (opcional), ex.: Canal de curiosidades" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="https://www.youtube.com/@canal  ou  https://www.tiktok.com/@perfil/video/..." className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" />
         <button disabled={busy} onClick={add} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Salvar referência</button>
+        <label
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); upload(e.dataTransfer.files[0]); }}
+          className="flex cursor-pointer flex-col items-center gap-1 rounded-md border-2 border-dashed border-border p-5 text-center text-sm hover:bg-accent"
+        >
+          <span className="font-medium">{busy ? "Enviando…" : "Ou arraste um vídeo aqui (MP4) / clique para escolher"}</span>
+          <span className="text-xs text-muted-foreground">Sem bloqueio do YouTube/TikTok: o agente analisa cortes, ritmo e falas do arquivo.</span>
+          <input type="file" accept="video/*" className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
       </div>
       {!refs?.length ? <Empty>Nenhuma referência cadastrada.</Empty> : (
         <div className="space-y-2">
