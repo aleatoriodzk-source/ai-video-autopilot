@@ -245,17 +245,16 @@ class Runner:
         self.log(job, f"{len(todo)} clipes montados, {reused} reaproveitados", step="scenes")
 
     def _clip(self, ctx, sc, fps, crf):
-        if True:
-            img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
-            vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
-            dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
-            out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
-            if vid.exists():
-                media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
-                return
-            if not img.exists():
-                raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
-            media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
+        img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
+        vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
+        dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
+        out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
+        if vid.exists():
+            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
+            return
+        if not img.exists():
+            raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
+        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0
