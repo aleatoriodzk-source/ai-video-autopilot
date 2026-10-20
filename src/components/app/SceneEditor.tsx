@@ -227,7 +227,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
 function LibraryPicker({ onPick }: { onPick: (assetId: string) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["acervo"],
-    queryFn: async () => (await supabase.from("assets").select("id, kind, storage_path, description, production_id").is("production_id", null).eq("source", "upload").in("kind", ["image", "video"]).order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("assets").select("id, kind, storage_path, description, production_id").is("production_id", null).eq("source", "upload").in("kind", ["image", "video"]).not("storage_path", "is", null).order("created_at", { ascending: false })).data ?? [],
   });
   if (isLoading) return <div className="mt-2 text-xs text-muted-foreground">Abrindo acervo…</div>;
   if (!data?.length) return (

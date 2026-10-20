@@ -124,7 +124,7 @@ function Acervo() {
       {isLoading ? (
         <div className="text-sm text-muted-foreground">Carregando acervo…</div>
       ) : !items?.length ? (
-        <Empty text="Acervo vazio. Envie fotos e vídeos que você quer reaproveitar nos seus vídeos." />
+        <Empty>Acervo vazio. Envie fotos e vídeos que você quer reaproveitar nos seus vídeos.</Empty>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {items.map((it) => (
