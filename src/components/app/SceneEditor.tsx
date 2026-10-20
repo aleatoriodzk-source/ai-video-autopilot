@@ -247,6 +247,7 @@ function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; st
   useQuery({
     queryKey: ["acervo-url", asset.id],
     queryFn: async () => {
+      if (!asset.storage_path) return null;
       const { data } = await supabase.storage.from("media").createSignedUrl(asset.storage_path, 3600);
       setUrl(data?.signedUrl ?? null);
       return data?.signedUrl ?? null;
