@@ -75,7 +75,8 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
             out["title"] = meta.get("title") or meta.get("uploader")
             out["entries"] = [{k: e.get(k) for k in ("title", "duration", "view_count", "url")} for e in meta.get("entries") or []]
             log(f"{len(out['entries'])} vídeos listados")
-            targets = [e["url"] for e in out["entries"][:2] if e.get("url")]
+            targets = pick_targets(out["entries"])
+            log(f"comparando {len(targets)} vídeos (mais e menos vistos)")
         else:
             targets = [url]
         for t in targets:
@@ -91,7 +92,28 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
                 "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": bool(meta.get("subtitles") or meta.get("automatic_captions")),
             })
             log(f"'{meta.get('title')}': {len(cuts)} cortes detectados em {dur:.0f}s")
-            if not imgs:
-                pts = ([0.5] + cuts)[:10] if cuts else [dur * i / 8 for i in range(8)]
-                imgs = frames(vid, pts, work)
+            per = 10 if len(targets) == 1 else 3
+            if len(imgs) < 10:
+                pts = (([0.5] + cuts) if cuts else [dur * i / 8 for i in range(8)])[:per]
+                sub = work / f"f{len(out['videos'])}"
+                sub.mkdir(exist_ok=True)
+                imgs += frames(vid, pts, sub)[: 10 - len(imgs)]
+    if len(out["videos"]) > 1:
+        vs = out["videos"]
+        out["channel_stats"] = {
+            "videos_analisados": len(vs),
+            "duracao_media_s": round(sum(v["duration_s"] for v in vs) / len(vs), 1),
+            "cena_media_s": round(sum(v["avg_scene_s"] for v in vs) / len(vs), 2),
+            "views": [v.get("view_count") for v in vs],
+        }
     return out, imgs
+
+
+def pick_targets(entries: list[dict], n: int = 5) -> list[str]:
+    """Os 3 mais vistos + 2 menos vistos (ou os mais recentes se não houver views)."""
+    ok = [e for e in entries if e.get("url")]
+    if not any(e.get("view_count") for e in ok):
+        return [e["url"] for e in ok[:n]]
+    ranked = sorted(ok, key=lambda e: e.get("view_count") or 0, reverse=True)
+    chosen = ranked[:3] + [e for e in ranked[-2:] if e not in ranked[:3]]
+    return [e["url"] for e in chosen[:n]]

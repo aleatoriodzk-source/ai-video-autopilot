@@ -15,8 +15,18 @@ export function DnaView({ report }: { report: any }) {
   if (!d) {
     return <p className="text-sm text-muted-foreground">Esta análise foi feita antes do DNA do formato existir. Clique em "Analisar" de novo para gerar a versão completa.</p>;
   }
+  const cmp: any[] = report?.video_comparison ?? [];
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      {cmp.length > 0 && (
+        <div className="md:col-span-2 space-y-3 rounded-md border border-border p-3">
+          <Sec t={`Comparação de ${cmp.length} vídeos do canal`}>
+            <ul className="space-y-1">{cmp.map((v, i) => <li key={i}><b>{v.title}</b> · {v.views} views · {Math.round(v.duration_s)}s · cena {v.avg_scene_s}s · <i>{v.performance}</i><div className="text-muted-foreground">{v.hook} — {v.why}</div></li>)}</ul>
+          </Sec>
+          <Sec t="O que se repete em todos"><List items={report?.common_patterns} /></Sec>
+          <Sec t="Fórmula dos mais vistos">{report?.winning_formula}</Sec>
+        </div>
+      )}
       <Sec t="Nicho">{d.niche} · {d.subniche}<div className="text-muted-foreground">Público: {d.audience}</div><div className="text-muted-foreground">Promessa: {d.promise}</div></Sec>
       <Sec t={`Gancho (${d.hook?.seconds ?? "?"}s)`}>
         <b>{d.hook?.type}</b> — {d.hook?.first_line_pattern}
