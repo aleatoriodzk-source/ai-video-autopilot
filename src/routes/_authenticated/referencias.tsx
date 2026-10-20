@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { requestAnalysis } from "@/lib/jobs";
+import { DnaView } from "@/components/app/DnaView";
 
 export const Route = createFileRoute("/_authenticated/referencias")({
   head: () => ({
@@ -36,6 +37,13 @@ function Referencias() {
     queryKey: ["refs"],
     queryFn: async () => (await supabase.from("reference_sources").select("*").order("created_at", { ascending: false })).data ?? [],
   });
+
+  const [open, setOpen] = useState<string | null>(null);
+  const { data: reports } = useQuery({
+    queryKey: ["analyses-done"],
+    queryFn: async () => (await supabase.from("analyses").select("reference_id, report, created_at").eq("status", "done").order("created_at", { ascending: false })).data ?? [],
+  });
+  const reportOf = (id: string) => reports?.find((a) => a.reference_id === id)?.report;
 
   async function add() {
     const urls = text.split(/\s+/).map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s));
@@ -102,15 +110,19 @@ function Referencias() {
       {!refs?.length ? <Empty>Nenhuma referência cadastrada.</Empty> : (
         <div className="space-y-2">
           {refs.map((r) => (
-            <div key={r.id} className="panel flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+            <div key={r.id} className="panel p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium">{r.title ?? r.urls[0]}</div>
                 <div className="text-xs text-muted-foreground">{r.platform} · {r.kind === "channel" ? "canal/perfil" : "vídeo"} · {r.urls.length} link(s)</div>
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={r.status} />
+                {reportOf(r.id) ? <button onClick={() => setOpen(open === r.id ? null : r.id)} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground">{open === r.id ? "Fechar DNA" : "Ver DNA do formato"}</button> : null}
                 <button onClick={() => analyze(r.id, r.kind)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">Analisar</button>
               </div>
+            </div>
+            {open === r.id ? <div className="mt-4 border-t border-border pt-4"><DnaView report={reportOf(r.id)} /></div> : null}
             </div>
           ))}
         </div>
