@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedAcervoRouteImport } from './routes/_authenticated/acervo'
 import { Route as AuthenticatedAgenteRouteImport } from './routes/_authenticated/agente'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
@@ -32,6 +33,11 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAcervoRoute = AuthenticatedAcervoRouteImport.update({
+  id: '/acervo',
+  path: '/acervo',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAgenteRoute = AuthenticatedAgenteRouteImport.update({
   id: '/agente',
@@ -69,6 +75,7 @@ const ApiPublicAgentRoute = ApiPublicAgentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/painel': typeof AuthenticatedPainelRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/painel': typeof AuthenticatedPainelRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/acervo': typeof AuthenticatedAcervoRoute
   '/_authenticated/agente': typeof AuthenticatedAgenteRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
@@ -103,6 +112,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/acervo'
     | '/agente'
     | '/configuracoes'
     | '/painel'
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/acervo'
     | '/agente'
     | '/configuracoes'
     | '/painel'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/acervo'
     | '/_authenticated/agente'
     | '/_authenticated/configuracoes'
     | '/_authenticated/painel'
@@ -161,6 +173,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/acervo': {
+      id: '/_authenticated/acervo'
+      path: '/acervo'
+      fullPath: '/acervo'
+      preLoaderRoute: typeof AuthenticatedAcervoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/agente': {
       id: '/_authenticated/agente'
@@ -208,6 +227,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAcervoRoute: typeof AuthenticatedAcervoRoute
   AuthenticatedAgenteRoute: typeof AuthenticatedAgenteRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
@@ -216,6 +236,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAcervoRoute: AuthenticatedAcervoRoute,
   AuthenticatedAgenteRoute: AuthenticatedAgenteRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,

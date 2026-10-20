@@ -247,7 +247,7 @@ def pick_visuals(runner, job, ctx) -> None:
             old.unlink(missing_ok=True)
         chosen = None
         # Mídia escolhida pelo usuário no editor: usa ela e não busca outra.
-        mine = next((a for a in ctx["assets"] if a["id"] == sc.get("asset_id") and (a.get("meta") or {}).get("locked") and a.get("storage_path")), None)
+        mine = next((a for a in ctx["assets"] if a["id"] == sc.get("asset_id") and a.get("storage_path")), None)
         if mine:
             url = runner.api.call("download_url", path=mine["storage_path"])["url"]
             _download(url, work / f"vid_{sc['idx']:03d}.mp4" if mine["kind"] == "video" else out)
@@ -256,7 +256,10 @@ def pick_visuals(runner, job, ctx) -> None:
             continue
         for src in s["visuals"]["prefer"]:
             if src == "upload" and uploads:
-                a = next((u for u in uploads if u["id"] not in recent[-window:]), None)
+                # Acervo: prefere uma mídia sua que combine com o assunto da cena; se nenhuma combinar, usa outra ainda não usada.
+                q_lib = sc.get("visual_query") or sc.get("visual_description") or sc["narration"][:60]
+                cands = [u for u in uploads if u["id"] not in recent[-window:]]
+                a = next((u for u in cands if relevant(q_lib, " ".join([u.get("description") or "", str((u.get("meta") or {}).get("tags") or "")]))), None) or (cands[0] if cands else None)
                 if a:
                     url = runner.api.call("download_url", path=a["storage_path"])["url"]
                     _download(url, out)
