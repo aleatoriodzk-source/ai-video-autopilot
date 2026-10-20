@@ -195,10 +195,12 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         </label>
         <div className="text-xs text-muted-foreground">Mídia da cena
           <SceneMedia assetId={cur.asset_id} />
-          <div className="mt-1 flex gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
             <label className={btn + " cursor-pointer"}>Trocar por arquivo meu<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
+            <button className={btn} onClick={() => setPick((p) => !p)}>Usar do acervo</button>
             {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Buscar automática</button>}
           </div>
+          {pick && <LibraryPicker productionId={productionId} onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
         </div>
       </div>
       <CaptionPreview text={cur.caption || cur.narration} />

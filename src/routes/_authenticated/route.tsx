@@ -20,6 +20,7 @@ const NAV = [
   { to: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { to: "/referencias", label: "Referências", icon: Link2 },
   { to: "/producoes", label: "Produções", icon: Film },
+  { to: "/acervo", label: "Acervo", icon: Boxes },
   { to: "/agente", label: "Agente local", icon: Monitor },
   { to: "/configuracoes", label: "Chaves de IA", icon: KeyRound },
 ] as const;
