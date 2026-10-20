@@ -142,6 +142,11 @@ export const Route = createFileRoute("/api/public/agent")({
               await db.from("usage_records").insert({ user_id: userId, job_id: job.id, production_id: job.production_id, provider: `Lovable AI (${s.ai.image_model})`, operation: "imagem IA", units: 1, unit_name: "imagem", cost_usd: s.prices.ai_image_each ?? null });
               return json({ b64 });
             }
+            case "check_image": {
+              const job = await ownJob(body.job_id);
+              const { image, description, topic } = z.object({ image: z.string().startsWith("data:image/").max(400_000), description: z.string().max(1000), topic: z.string().max(500) }).parse(body);
+              return json(await tasks.runCheckImage(db, userId, job.id, job.production_id, image, description, topic));
+            }
             case "update_scene": {
               const id = uuid.parse(body.scene_id);
               const f = z.object({ duration_s: z.number().optional(), audio_path: z.string().max(500).optional(), audio_duration_s: z.number().optional(), word_timings: z.unknown().optional(), asset_id: uuid.nullable().optional(), status: z.string().max(30).optional() }).parse(body.fields ?? {});

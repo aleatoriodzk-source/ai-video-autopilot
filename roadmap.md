@@ -8,8 +8,8 @@
 1. [x] Fila: mensagens claras por etapa, reiniciar só a etapa que falhou, evitar loops
 2. [x] Duração garantida pelo áudio final (não entregar 39s quando pediu 60s)
 3. [x] Tela de roteiro completo (gancho, desenvolvimento, clímax, CTA, fontes) + regenerar uma cena
-4. [~] Mídia: filtro pelo assunto principal feito; falta IA olhar a imagem e confirmar
-5. [~] Novas fontes: Wikimedia, Openverse, NASA feitas (no agente); falta Internet Archive e acervo próprio
+4. [x] Mídia: filtro pelo assunto + IA confere a imagem (até 4 por cena)
+5. [~] Novas fontes: Wikimedia, Openverse, NASA, Internet Archive feitas; falta acervo próprio
 6. [ ] Análise profunda: transcrição, hook, estrutura, ritmo, legendas, áudio → DNA de Nicho e Estilo
 7. [ ] Análise de canal comparando vários vídeos
 8. [ ] Editor estilo CapCut (timeline, troca de mídia por cena, legendas palavra por palavra)

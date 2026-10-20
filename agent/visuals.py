@@ -15,6 +15,29 @@ def _download(url: str, out: Path) -> None:
     out.write_bytes(r.content)
 
 
+def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
+    """Pede para a IA olhar a mídia baixada e confirmar se mostra o assunto da cena. Se a conferência falhar, aceita (não trava o vídeo)."""
+    if not runner.cfg.get("check_images", True):
+        return True
+    sc["_checks"] = sc.get("_checks", 0) + 1
+    if sc["_checks"] > 4:  # limite de conferências por cena (economiza IA)
+        return True
+    thumb = path.with_name(path.stem + "_chk.jpg")
+    try:
+        args = ["ffmpeg", "-y"] + (["-ss", "1"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
+        media.run(args)
+        img = "data:image/jpeg;base64," + base64.b64encode(thumb.read_bytes()).decode()
+        r = runner.api.call("check_image", job_id=job["id"], image=img, description=sc.get("visual_description") or sc.get("visual_query") or sc["narration"][:200], topic=prod.get("topic") or prod.get("title") or "")
+    except Exception as e:
+        runner.log(job, f"conferência de imagem indisponível ({str(e)[:120]}); usando a mídia mesmo assim", "warn", "visuals")
+        return True
+    finally:
+        thumb.unlink(missing_ok=True)
+    if not r.get("match"):
+        runner.log(job, f"cena {sc['idx'] + 1}: mídia recusada pela IA — {r.get('reason', '')[:150]}", "info", "visuals")
+    return bool(r.get("match"))
+
+
 def pexels_search(key: str, query: str, orientation: str) -> list[dict]:
     r = requests.get("https://api.pexels.com/v1/search", headers={"Authorization": key},
                      params={"query": query, "orientation": orientation, "per_page": 15}, timeout=30)
@@ -59,6 +82,9 @@ def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, win
                 continue
             vout = work / f"vid_{sc['idx']:03d}.mp4"
             _download(f["url"], vout)
+            if not vision_ok(runner, job, vout, sc, prod):
+                recent.append(pid)
+                continue
             aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "pixabay", "source_url": v.get("pageURL"), "license": lic, "attribution": f"Vídeo de {v.get('user', '')} no Pixabay", "local_path": str(vout), "description": q})["id"]
             return {"id": aid, "key": pid}
     except Exception as e:
@@ -70,6 +96,9 @@ def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, win
             if pid in recent[-window * 3:] or not relevant(q, ph.get("tags", "")):
                 continue
             _download(ph.get("largeImageURL") or ph["webformatURL"], out)
+            if not vision_ok(runner, job, out, sc, prod):
+                recent.append(pid)
+                continue
             aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "pixabay", "source_url": ph.get("pageURL"), "license": lic, "attribution": f"Foto de {ph.get('user', '')} no Pixabay", "local_path": str(out), "description": q})["id"]
             return {"id": aid, "key": pid}
     except Exception as e:
@@ -132,13 +161,30 @@ def nasa_search(query: str) -> list[dict]:
     return out
 
 
+def archive_search(query: str) -> list[dict]:
+    """Internet Archive: fotos e acervos históricos (muitos em domínio público — conferir a página)."""
+    r = requests.get("https://archive.org/advancedsearch.php", headers=UA, timeout=30, params={
+        "q": f"({query}) AND mediatype:image", "fl[]": ["identifier", "title", "subject", "licenseurl"], "rows": 15, "output": "json"})
+    r.raise_for_status()
+    out = []
+    for d in r.json().get("response", {}).get("docs", []):
+        lic = d.get("licenseurl") or ""
+        if "publicdomain" not in lic and "creativecommons" not in lic:
+            continue  # sem licença clara (ex.: capas de filme) não entra
+        i = d["identifier"]
+        subj = d.get("subject") or []
+        out.append({"id": f"ia:{i}", "url": f"https://archive.org/services/img/{i}", "page": f"https://archive.org/details/{i}", "license": lic,
+                    "attribution": "Internet Archive", "text": " ".join([str(d.get("title") or "")] + (subj if isinstance(subj, list) else [str(subj)]))})
+    return out
+
+
 def re_tags(html: str) -> str:
     import re
     return re.sub(r"<[^>]+>", "", html or "").strip()[:120]
 
 
 SPACE = ("space", "planet", "galaxy", "nasa", "rocket", "moon", "mars", "star", "astronaut", "nebula", "earth orbit", "satellite")
-OPEN_SOURCES = {"wikimedia": wikimedia_search, "openverse": openverse_search, "nasa": nasa_search}
+OPEN_SOURCES = {"archive": archive_search, "wikimedia": wikimedia_search, "openverse": openverse_search, "nasa": nasa_search}
 
 
 def _open_pick(runner, job, q, work, sc, prod, recent, window, order):
@@ -153,6 +199,9 @@ def _open_pick(runner, job, q, work, sc, prod, recent, window, order):
                 try:
                     _download(c["url"], out)
                 except Exception:
+                    continue
+                if not vision_ok(runner, job, out, sc, prod):
+                    recent.append(c["id"])
                     continue
                 aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": name, "source_url": c["page"], "license": c["license"], "attribution": c["attribution"], "local_path": str(out), "description": q})["id"]
                 return {"id": aid, "key": c["id"]}
@@ -170,7 +219,7 @@ def open_order(q: str, topic: str) -> list[str]:
     if any(w in t for w in SPACE):
         return ["nasa", "wikimedia", "openverse"]
     if any(w in t for w in HISTORY):
-        return ["wikimedia", "openverse"]
+        return ["wikimedia", "archive", "openverse"]
     return ["openverse", "wikimedia"]
 
 
@@ -218,6 +267,9 @@ def pick_visuals(runner, job, ctx) -> None:
                         continue
                     vout = work / f"vid_{sc['idx']:03d}.mp4"
                     _download(f["link"], vout)
+                    if not vision_ok(runner, job, vout, sc, prod):
+                        recent.append(pid)
+                        continue
                     aid = runner.api.call("create_asset", asset={
                         "production_id": prod["id"], "kind": "video", "source": "pexels", "source_url": v["url"],
                         "license": "Pexels License (uso gratuito, atribuição opcional)", "attribution": f"Vídeo de {v['user']['name']} no Pexels",
@@ -231,6 +283,9 @@ def pick_visuals(runner, job, ctx) -> None:
                     if pid in recent[-window * 3:]:
                         continue
                     _download(ph["src"]["large2x"], out)
+                    if not vision_ok(runner, job, out, sc, prod):
+                        recent.append(pid)
+                        continue
                     aid = runner.api.call("create_asset", asset={
                         "production_id": prod["id"], "kind": "image", "source": "pexels", "source_url": ph["url"],
                         "license": "Pexels License (uso gratuito, atribuição opcional)", "attribution": f"Foto de {ph['photographer']} no Pexels",
