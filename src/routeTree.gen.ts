@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAgenteRouteImport } from './routes/_authenticated/agente'
+import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedProducoesRouteImport } from './routes/_authenticated/producoes'
 import { Route as AuthenticatedReferenciasRouteImport } from './routes/_authenticated/referencias'
@@ -37,6 +38,12 @@ const AuthenticatedAgenteRoute = AuthenticatedAgenteRouteImport.update({
   path: '/agente',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedConfiguracoesRoute =
+  AuthenticatedConfiguracoesRouteImport.update({
+    id: '/configuracoes',
+    path: '/configuracoes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   id: '/painel',
   path: '/painel',
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/agente': typeof AuthenticatedAgenteRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
@@ -72,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/agente': typeof AuthenticatedAgenteRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
@@ -83,6 +92,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/agente': typeof AuthenticatedAgenteRoute
+  '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/producoes': typeof AuthenticatedProducoesRoute
   '/_authenticated/referencias': typeof AuthenticatedReferenciasRoute
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/agente'
+    | '/configuracoes'
     | '/painel'
     | '/producoes'
     | '/referencias'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/agente'
+    | '/configuracoes'
     | '/painel'
     | '/producoes'
     | '/referencias'
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/agente'
+    | '/_authenticated/configuracoes'
     | '/_authenticated/painel'
     | '/_authenticated/producoes'
     | '/_authenticated/referencias'
@@ -156,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgenteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/configuracoes': {
+      id: '/_authenticated/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/painel': {
       id: '/_authenticated/painel'
       path: '/painel'
@@ -189,6 +209,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenteRoute: typeof AuthenticatedAgenteRoute
+  AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedProducoesRoute: typeof AuthenticatedProducoesRoute
   AuthenticatedReferenciasRoute: typeof AuthenticatedReferenciasRoute
@@ -196,6 +217,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenteRoute: AuthenticatedAgenteRoute,
+  AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedProducoesRoute: AuthenticatedProducoesRoute,
   AuthenticatedReferenciasRoute: AuthenticatedReferenciasRoute,
