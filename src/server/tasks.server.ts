@@ -233,3 +233,24 @@ export async function runRewriteScene(db: DB, userId: string, sceneId: string, i
   await db.from("scenes").update({ narration: data.narration, caption: data.caption, visual_description: data.visual_description, visual_query: data.visual_query, sfx: data.sfx || null, motion: data.motion, transition: data.transition, status: "edited", audio_path: null, duration_s: null }).eq("id", sceneId);
   return data;
 }
+
+/** Vision check: does this image really show what the scene needs? Cheap call, low detail thumbnail. */
+export async function runCheckImage(db: DB, userId: string, jobId: string, productionId: string | null, image: string, description: string, topic: string) {
+  const s = await guardBudget(db, userId, jobId, null);
+  let override: unknown;
+  if (productionId) {
+    const { data: p } = await db.from("productions").select("settings").eq("id", productionId).maybeSingle();
+    override = (p?.settings as Record<string, unknown> | null)?.["ai_provider"];
+  }
+  const ai = makeAi(userId, s, override);
+  const schema = { type: "object", properties: { match: { type: "boolean" }, reason: { type: "string" } }, required: ["match", "reason"], additionalProperties: false };
+  const { data, usage } = await ai<{ match: boolean; reason: string }>({
+    system: "Você confere se uma imagem serve para uma cena de vídeo. Seja rigoroso com o assunto principal e tolerante com detalhes.",
+    user: `Tema do vídeo: "${topic}". A cena precisa mostrar: "${description}". A imagem anexada mostra o assunto principal certo (ex.: o animal, pessoa, lugar ou época pedidos), sem ser outro bicho, pessoa aleatória, texto/logotipo ou algo sem relação? Responda match e um motivo curto em português.`,
+    schemaName: "image_check",
+    schema,
+    images: [image],
+  });
+  await recordTextUsage(db, userId, s, usage, "conferir imagem", jobId, productionId);
+  return data;
+}
