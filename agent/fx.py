@@ -78,7 +78,7 @@ def online_music(mood: str, cache: Path, log=print) -> Path | None:
     if len(have) >= 3:
         return random.choice(have)
     try:
-        r = requests.get("https://api.openverse.org/v1/audio/", params={"q": MOOD_QUERY.get(mood, mood), "license": "cc0,by,pdm", "category": "music", "page_size": 20}, timeout=20)
+        r = requests.get("https://api.openverse.org/v1/audio/", params={"q": MOOD_QUERY.get(mood, mood), "license": "cc0,by,pdm", "category": "music", "page_size": 20}, timeout=12)
         r.raise_for_status()
         items = [i for i in r.json().get("results", []) if i.get("url") and 20 <= (i.get("duration") or 0) / 1000 <= 600]
         random.shuffle(items)
@@ -97,7 +97,39 @@ def online_music(mood: str, cache: Path, log=print) -> Path | None:
                 continue
     except requests.RequestException as e:
         log(f"busca de música online falhou: {e}")
+    m = archive_music(mood, folder, log)
+    if m:
+        return m
     return random.choice(have) if have else None
+
+
+ARCHIVE_TAG = {"suspense": "suspense", "epico": "epic", "calmo": "ambient", "alegre": "happy", "triste": "sad"}
+
+
+def archive_music(mood: str, folder: Path, log=print) -> Path | None:
+    """Plano B: Internet Archive, somente Creative Commons que permite uso comercial (sem -nc)."""
+    try:
+        q = f"subject:({ARCHIVE_TAG.get(mood, mood)}) AND mediatype:audio AND licenseurl:*creativecommons* AND NOT licenseurl:*nc*"
+        r = requests.get("https://archive.org/advancedsearch.php", params={"q": q, "fl[]": ["identifier", "licenseurl", "title"], "rows": 25, "output": "json"}, timeout=25)
+        r.raise_for_status()
+        docs = r.json()["response"]["docs"]
+        random.shuffle(docs)
+        for doc in docs[:5]:
+            meta = requests.get(f"https://archive.org/metadata/{doc['identifier']}", timeout=25).json()
+            files = [f for f in meta.get("files", []) if f.get("name", "").lower().endswith(".mp3") and 300_000 < int(f.get("size") or 0) < 15_000_000]
+            if not files:
+                continue
+            f = random.choice(files)
+            d = requests.get(f"https://archive.org/download/{doc['identifier']}/{requests.utils.quote(f['name'])}", timeout=90)
+            d.raise_for_status()
+            dest = folder / f"ia_{doc['identifier'][:40]}.mp3"
+            dest.write_bytes(d.content)
+            (folder / f"{dest.stem}.txt").write_text(f"{doc.get('title')} — {doc.get('licenseurl')} — https://archive.org/details/{doc['identifier']}", encoding="utf-8")
+            log(f"música livre baixada: {doc.get('title')} ({doc.get('licenseurl')})")
+            return dest
+    except (requests.RequestException, KeyError, ValueError) as e:
+        log(f"Internet Archive falhou: {e}")
+    return None
 
 
 def transitions(clips: list[Path], durs: list[float], trans: list[str], out: Path, fps: int, crf: int) -> None:
