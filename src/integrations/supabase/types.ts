@@ -310,6 +310,7 @@ export type Database = {
           updated_at: string
           user_id: string
           validation: Json | null
+          versions: Json
         }
         Insert: {
           aspect?: string
@@ -331,6 +332,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           validation?: Json | null
+          versions?: Json
         }
         Update: {
           aspect?: string
@@ -352,6 +354,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           validation?: Json | null
+          versions?: Json
         }
         Relationships: [
           {

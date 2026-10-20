@@ -224,18 +224,37 @@ class Runner:
         pick_visuals(self, job, ctx)
 
     def step_scenes(self, job, ctx):
+        """Monta os clipes em paralelo e reaproveita os que não mudaram desde a última renderização."""
+        from concurrent.futures import ThreadPoolExecutor
+        import hashlib
         fps, crf = ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"]
+        todo, reused = [], 0
         for sc in ctx["scenes"]:
-            img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
-            vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
-            dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
-            out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
-            if vid.exists():
-                media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
+            img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
+            src = vid if vid.exists() else img
+            dur = float(sc.get("duration_s") or 0)
+            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
+            out, mark = ctx["work"] / f"clip_{sc['idx']:03d}.mp4", ctx["work"] / f"clip_{sc['idx']:03d}.sig"
+            if out.exists() and mark.exists() and mark.read_text() == sig:
+                reused += 1
                 continue
-            if not img.exists():
-                raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
-            media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
+            todo.append((sc, mark, sig))
+        workers = int(self.cfg.get("render_threads") or 3)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(lambda t: (self._clip(ctx, t[0], fps, crf), t[1].write_text(t[2])), todo))
+        self.log(job, f"{len(todo)} clipes montados, {reused} reaproveitados", step="scenes")
+
+    def _clip(self, ctx, sc, fps, crf):
+        img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
+        vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
+        dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
+        out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
+        if vid.exists():
+            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
+            return
+        if not img.exists():
+            raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
+        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0
@@ -253,6 +272,7 @@ class Runner:
 
     def step_render(self, job, ctx):
         self.update(job, status="rendering", wait_reason="FFmpeg renderizando")
+        t0 = time.time()
         clips = [ctx["work"] / f"clip_{sc['idx']:03d}.mp4" for sc in ctx["scenes"]]
         media.concat(clips, ctx["work"] / "video.mp4", ctx["work"], audio=False)
         out_dir = Path(ctx["settings"]["export"].get("output_dir") or self.cfg["output_dir"])
@@ -271,11 +291,15 @@ class Runner:
         self.log(job, f"vídeo salvo em {final}", step="render")
         print(f"  vídeo salvo em: {final}")
         try:
-            up = self.api.call("upload_url", name=f"videos/{ctx['prod']['id']}.mp4")
+            n = len(ctx["prod"].get("versions") or []) + 1
+            up = self.api.call("upload_url", name=f"videos/{ctx['prod']['id']}-v{n}.mp4")
             with open(final, "rb") as fh:
                 r = requests.put(up["signed_url"], data=fh, headers={"Content-Type": "video/mp4", "x-upsert": "true"}, timeout=1800)
             r.raise_for_status()
-            self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"preview_path": up["path"]})
+            ver = {"n": n, "preview_path": up["path"], "output_path": str(final), "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "duration_s": round(media.duration(final), 2), "render_s": round(time.time() - t0, 1)}
+            versions = (list(ctx["prod"].get("versions") or []) + [ver])[-20:]
+            self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"preview_path": up["path"], "versions": versions})
+            ctx["prod"]["versions"] = versions
             self.log(job, "vídeo enviado ao site", step="render")
         except Exception as e:  # o arquivo local continua válido
             self.log(job, f"falha ao enviar vídeo ao site: {e}", "warn", "render")
