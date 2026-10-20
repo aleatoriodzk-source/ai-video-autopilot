@@ -51,7 +51,7 @@ def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, win
     try:
         for v in pixabay_videos(key, q):
             pid = f"pixabayv:{v['id']}"
-            if pid in recent[-window * 3:]:
+            if pid in recent[-window * 3:] or not relevant(q, v.get("tags", "")):
                 continue
             vs = v.get("videos", {})
             f = next((vs[k] for k in ("medium", "large", "small") if vs.get(k, {}).get("url")), None)
@@ -67,7 +67,7 @@ def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, win
         out = work / f"img_{sc['idx']:03d}.jpg"
         for ph in pixabay_images(key, q, orientation):
             pid = f"pixabay:{ph['id']}"
-            if pid in recent[-window * 3:]:
+            if pid in recent[-window * 3:] or not relevant(q, ph.get("tags", "")):
                 continue
             _download(ph.get("largeImageURL") or ph["webformatURL"], out)
             aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "pixabay", "source_url": ph.get("pageURL"), "license": lic, "attribution": f"Foto de {ph.get('user', '')} no Pixabay", "local_path": str(out), "description": q})["id"]
@@ -75,6 +75,103 @@ def _pixabay(runner, job, key, q, orientation, w, h, work, sc, prod, recent, win
     except Exception as e:
         runner.log(job, f"Pixabay fotos: {e}", "warn", "visuals")
     return None
+
+
+STOP = {"a", "an", "the", "of", "in", "on", "with", "and", "close", "up", "closeup", "shot", "view", "slow", "motion"}
+
+
+def relevant(query: str, text: str) -> bool:
+    """O assunto principal (primeira palavra útil da busca) precisa aparecer nas etiquetas da mídia — evita pessoas/outros bichos."""
+    words = [w for w in query.lower().split() if w not in STOP and len(w) > 2]
+    if not words:
+        return True
+    t = (text or "").lower()
+    return words[0].rstrip("s") in t
+
+
+UA = {"User-Agent": "EstudioAutomatico/0.4 (agente local; contato pelo painel)"}
+
+
+def wikimedia_search(query: str) -> list[dict]:
+    """Wikimedia Commons: fotos históricas, mapas, documentos (domínio público / CC). Sem chave."""
+    r = requests.get("https://commons.wikimedia.org/w/api.php", headers=UA, timeout=30, params={
+        "action": "query", "format": "json", "generator": "search", "gsrsearch": f"{query} filetype:bitmap",
+        "gsrnamespace": 6, "gsrlimit": 15, "prop": "imageinfo", "iiprop": "url|extmetadata|size", "iiurlwidth": 1920})
+    r.raise_for_status()
+    out = []
+    for pg in (r.json().get("query", {}).get("pages", {}) or {}).values():
+        ii = (pg.get("imageinfo") or [{}])[0]
+        meta = ii.get("extmetadata", {})
+        if not ii.get("thumburl") or (ii.get("width") or 0) < 640:
+            continue
+        lic = (meta.get("LicenseShortName", {}) or {}).get("value", "ver página")
+        artist = re_tags((meta.get("Artist", {}) or {}).get("value", ""))
+        out.append({"id": f"wiki:{pg['pageid']}", "url": ii["thumburl"], "page": ii.get("descriptionurl"), "license": f"Wikimedia Commons — {lic}", "attribution": f"{artist or 'autor na página'} / Wikimedia Commons", "text": pg.get("title", "")})
+    return out
+
+
+def openverse_search(query: str) -> list[dict]:
+    """Openverse: milhões de imagens Creative Commons. Sem chave (limite baixo por minuto)."""
+    r = requests.get("https://api.openverse.org/v1/images/", headers=UA, timeout=30, params={"q": query, "page_size": 15, "mature": "false"})
+    r.raise_for_status()
+    return [{"id": f"ov:{h['id']}", "url": h["url"], "page": h.get("foreign_landing_url"), "license": f"{(h.get('license') or '').upper()} {h.get('license_version') or ''} (Openverse)",
+             "attribution": f"{h.get('creator') or 'autor'} — {h.get('provider') or ''}", "text": " ".join([h.get("title") or ""] + [t.get("name", "") for t in h.get("tags") or []])}
+            for h in r.json().get("results", []) if (h.get("width") or 0) >= 640]
+
+
+def nasa_search(query: str) -> list[dict]:
+    """NASA Image Library: espaço, astronomia, foguetes. Domínio público."""
+    r = requests.get("https://images-api.nasa.gov/search", headers=UA, timeout=30, params={"q": query, "media_type": "image"})
+    r.raise_for_status()
+    out = []
+    for it in r.json().get("collection", {}).get("items", [])[:15]:
+        d = (it.get("data") or [{}])[0]
+        link = next((l["href"] for l in it.get("links") or [] if l.get("rel") == "preview"), None)
+        if link:
+            out.append({"id": f"nasa:{d.get('nasa_id')}", "url": link.replace("~thumb", "~large"), "page": f"https://images.nasa.gov/details/{d.get('nasa_id')}", "license": "NASA (domínio público)", "attribution": f"NASA — {d.get('center') or ''}", "text": " ".join([d.get("title") or ""] + (d.get("keywords") or []))})
+    return out
+
+
+def re_tags(html: str) -> str:
+    import re
+    return re.sub(r"<[^>]+>", "", html or "").strip()[:120]
+
+
+SPACE = ("space", "planet", "galaxy", "nasa", "rocket", "moon", "mars", "star", "astronaut", "nebula", "earth orbit", "satellite")
+OPEN_SOURCES = {"wikimedia": wikimedia_search, "openverse": openverse_search, "nasa": nasa_search}
+
+
+def _open_pick(runner, job, q, work, sc, prod, recent, window, order):
+    out = work / f"img_{sc['idx']:03d}.jpg"
+    for name in order:
+        if name == "nasa" and not any(w in q.lower() for w in SPACE):
+            continue
+        try:
+            for c in OPEN_SOURCES[name](q):
+                if c["id"] in recent[-window * 3:] or not relevant(q, c["text"]):
+                    continue
+                try:
+                    _download(c["url"], out)
+                except Exception:
+                    continue
+                aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": name, "source_url": c["page"], "license": c["license"], "attribution": c["attribution"], "local_path": str(out), "description": q})["id"]
+                return {"id": aid, "key": c["id"]}
+        except Exception as e:
+            runner.log(job, f"{name}: {e}", "warn", "visuals")
+    return None
+
+
+HISTORY = ("war", "ww2", "wwii", "world war", "soldier", "nazi", "hitler", "battle", "ancient", "medieval", "empire", "historic", "history", "18", "19", "king", "queen", "revolution", "map")
+
+
+def open_order(q: str, topic: str) -> list[str]:
+    """Para temas históricos, acervos (Wikimedia) vêm antes; para o resto, Openverse."""
+    t = f"{q} {topic}".lower()
+    if any(w in t for w in SPACE):
+        return ["nasa", "wikimedia", "openverse"]
+    if any(w in t for w in HISTORY):
+        return ["wikimedia", "openverse"]
+    return ["openverse", "wikimedia"]
 
 
 def _best_file(files: list[dict], w: int, h: int) -> dict | None:
@@ -143,6 +240,9 @@ def pick_visuals(runner, job, ctx) -> None:
             if src == "pexels" and not chosen and pxb:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _pixabay(runner, job, pxb, q, orientation, w, h, work, sc, prod, recent, window)
+            if src == "pexels" and not chosen:
+                q = sc.get("visual_query") or sc["narration"][:60]
+                chosen = _open_pick(runner, job, q, work, sc, prod, recent, window, open_order(q, prod.get("topic") or ""))
             elif src == "ai_image" and s["ai"]["allow_ai_images"]:
                 aspect = prod["aspect"]
                 r = runner.api.call("ai_image", job_id=job["id"], prompt=sc.get("visual_description") or sc["narration"], aspect=aspect, used=ai_used)
