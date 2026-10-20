@@ -81,7 +81,8 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
       (isShort
         ? "Analise a estrutura visual e temporal deste vídeo curto. Use as cenas detectadas automaticamente (tempos de corte do FFmpeg), a transcrição com tempos e os quadros-chave anexados (na ordem dos tempos indicados)."
         : "Analise este canal/perfil a partir dos metadados públicos, transcrições e estatísticas de cortes coletadas pelo agente local. Compare melhores e piores vídeos SOMENTE se houver visualizações nos dados.") +
-      "\n\nDADOS COLETADOS (JSON):\n" +
+      "\n\nAlém disso, preencha format_dna como um especialista em formatos virais: descubra nicho e subnicho, público, a promessa do vídeo, o tipo exato de gancho e o molde da primeira frase (com 3 modelos reaproveitáveis com [TEMA]), a estrutura em partes com % do tempo, como a narração é escrita (pessoa, tom, palavras por segundo, tamanho das frases, recursos como perguntas, contrastes, números), técnicas de retenção e loops abertos, edição (cortes por minuto, zoom, transições, proporção de imagens de apoio), legendas, áudio, que tipo de imagem usar e em qual fonte (Wikimedia, NASA, Pexels, Pixabay, Internet Archive), CTA, padrão de título, o que fazer e o que evitar, e 5 ideias de vídeos novos no mesmo formato. Descreva o FORMATO, nunca copie falas ou conteúdo protegido. Se algo não pode ser medido, diga que é estimativa." +
+        "\n\nDADOS COLETADOS (JSON):\n" +
       JSON.stringify(args.collected).slice(0, 120_000),
     schemaName: isShort ? "short_analysis" : "channel_analysis",
     schema: isShort ? shortAnalysisSchema : channelAnalysisSchema,
@@ -102,6 +103,10 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
     .select("id")
     .single();
   return { report: data, styleId: style?.id };
+}
+
+function dnaOf(report: unknown): unknown {
+  return report && typeof report === "object" ? (report as Record<string, unknown>)["format_dna"] ?? null : null;
 }
 
 async function productionContext(db: DB, productionId: string) {
@@ -166,6 +171,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-4 termos concretos e filmáveis (ex.: 'astronaut floating space station', nunca termos abstratos) para busca em banco de vídeos/fotos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
       "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
+      (dnaOf(report) ? `\nDNA DO FORMATO DE REFERÊNCIA (siga o gancho, a estrutura com as porcentagens, o jeito de narrar, a retenção e o CTA — com conteúdo 100% novo, sem copiar falas): ${JSON.stringify(dnaOf(report)).slice(0, 8000)}` : "") +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
       `\nResumo do canal: ${JSON.stringify(report ?? "não disponível").slice(0, 12000)}`,
     schemaName: "script",
