@@ -88,6 +88,19 @@ def piper_tts(text: str, voice_path: Path, out_wav: Path, length_scale=1.0, nois
         raise MediaError(f"Piper falhou: {p.stderr[-800:]}")
 
 
+def edge_tts(text: str, voice: str, out_wav: Path, rate: str = "+0%") -> None:
+    """Voz neural gratuita da Microsoft (precisa de internet). Gera MP3 e converte para WAV."""
+    text = clean_tts(text)
+    if not text:
+        raise MediaError("narração ficou vazia depois da limpeza de símbolos")
+    mp3 = out_wav.with_suffix(".mp3")
+    cmd = [sys.executable, "-m", "edge_tts", "--voice", voice, f"--rate={rate}", "--text", text, "--write-media", str(mp3)]
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if p.returncode != 0 or not mp3.exists() or mp3.stat().st_size < 500:
+        raise MediaError(f"edge-tts falhou: {p.stderr[-400:]}")
+    run(["ffmpeg", "-y", "-i", str(mp3), "-ar", "48000", "-ac", "1", str(out_wav)])
+
+
 def scene_audio(raw_wav: Path, out_wav: Path, pause_ms: int) -> float:
     """Converte para 48 kHz e adiciona a pausa ao fim da cena. Retorna a duração final."""
     pad = max(0, pause_ms) / 1000

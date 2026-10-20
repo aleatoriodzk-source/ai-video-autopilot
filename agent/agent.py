@@ -172,14 +172,24 @@ class Runner:
 
     def step_narration(self, job, ctx):
         v = ctx["settings"]["voice"]
-        if v["provider"] != "piper":
-            raise media.MediaError("Somente Piper (local) está implementado nesta versão. Troque a voz para Piper em Configurações.")
+        use_edge = (self.cfg.get("tts") or "edge") == "edge"
+        if not use_edge and v["provider"] != "piper":
+            raise media.MediaError("Somente Piper (local) ou Edge (Microsoft) estão implementados. Troque a voz para Piper em Configurações.")
         voice = Path(self.cfg["voices_dir"]) / f"{v['piper_voice']}.onnx"
+        edge_voice = self.cfg.get("edge_voice") or "pt-BR-AntonioNeural"
         for n, sc in enumerate(ctx["scenes"]):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
             raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
-            media.piper_tts(sc["narration"], voice, raw, v["length_scale"], v["noise_scale"], v["sentence_silence"])
+            done = False
+            if use_edge:
+                try:
+                    media.edge_tts(sc["narration"], edge_voice, raw, self.cfg.get("edge_rate") or "+0%")
+                    done = True
+                except media.MediaError as e:
+                    self.log(job, f"Voz Edge falhou ({e}); usando Piper", "warn", step="narration")
+            if not done:
+                media.piper_tts(sc["narration"], voice, raw, v["length_scale"], v["noise_scale"], v["sentence_silence"])
             speech = media.duration(raw)
             total = media.scene_audio(raw, wav, sc.get("pause_after_ms") or 0)
             timings = media.word_timings(media.clean_tts(sc["narration"]), speech)
