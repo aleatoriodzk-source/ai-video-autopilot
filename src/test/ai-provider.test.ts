@@ -12,3 +12,13 @@ describe("escolha de IA", () => {
     expect(providerOrder("lovable", { gemini: "g" })).toEqual(["lovable", "gemini"]);
   });
 });
+
+import { friendlyError } from "@/lib/friendly-error";
+describe("mensagens de erro", () => {
+  it("503 vira IA sobrecarregada", () => {
+    expect(friendlyError("Gemini respondeu 503: overloaded")?.title).toBe("A IA está sobrecarregada");
+  });
+  it("402 manda salvar chave própria", () => {
+    expect(friendlyError("402 Not enough credits")?.title).toBe("Créditos da plataforma acabaram");
+  });
+});

@@ -53,6 +53,15 @@ export const Route = createFileRoute("/api/public/agent")({
             case "claim": {
               await db.from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", agent.id);
               const now = new Date().toISOString();
+              // Jobs left "running" by a closed/crashed agent go back to the queue (or fail after max attempts) instead of hanging forever.
+              const stale = new Date(Date.now() - 20 * 60_000).toISOString();
+              const { data: stuck } = await db.from("jobs").select("id,attempts,max_attempts,production_id,step").eq("user_id", userId).in("status", ["running", "waiting_api", "waiting_download", "rendering"]).lt("updated_at", stale);
+              for (const s of stuck ?? []) {
+                const attempts = s.attempts + 1;
+                const failed = attempts >= s.max_attempts;
+                await db.from("jobs").update({ status: failed ? "failed" : "queued", attempts, locked_by: null, wait_reason: null, error: failed ? `A etapa "${s.step ?? "?"}" ficou parada mais de 20 minutos (o agente foi fechado ou travou).` : null }).eq("id", s.id);
+                if (s.production_id) await db.from("productions").update({ status: failed ? "failed" : "queued" }).eq("id", s.production_id);
+              }
               const { data: jobs } = await db.from("jobs").select("*").eq("user_id", userId).eq("status", "queued").order("created_at").limit(10);
               const job = (jobs ?? []).find((j) => !(j.payload as Record<string, string>)?.["retry_at"] || ((j.payload as Record<string, string>)["retry_at"] ?? "") <= now);
               if (!job) return json({ job: null });
