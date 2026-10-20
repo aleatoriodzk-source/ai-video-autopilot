@@ -99,7 +99,7 @@ async function geminiJson<T>(opts: { system: string; user: string; schema: Recor
     const m = /^data:([^;]+);base64,(.*)$/.exec(url);
     if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
   }
-  const model = process.env["GEMINI_MODEL"] || "gemini-2.5-flash";
+  const model = process.env["GEMINI_MODEL"] || "gemini-3.5-flash-lite";
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": process.env["GEMINI_API_KEY"] ?? "" },
