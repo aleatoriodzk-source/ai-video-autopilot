@@ -17,8 +17,8 @@ type Draft = {
 const field = "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm";
 const btn = "rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50";
 
-/** Estimated seconds of speech for a scene (≈2.4 words/s) when it was not narrated yet. */
-const est = (d: Draft) => d.duration_s ?? Math.max(1.5, d.narration.split(/\s+/).filter(Boolean).length / 2.4 + d.pause_after_ms / 1000);
+/** Estimated seconds of speech for a scene (≈2.5 words/s) when it was not narrated yet. */
+const est = (d: Draft) => d.duration_s ?? Math.max(1.5, d.narration.split(/\s+/).filter(Boolean).length / 2.5 + d.pause_after_ms / 1000);
 
 export function SceneEditor({ productionId }: { productionId: string }) {
   const qc = useQueryClient();
