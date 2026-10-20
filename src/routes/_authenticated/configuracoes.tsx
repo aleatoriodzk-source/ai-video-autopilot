@@ -53,7 +53,7 @@ function Config() {
     const { data: u } = await supabase.auth.getUser();
     const data = { ...(settings as object), ai: { ...s.ai, text_provider: id } };
     const { error } = await supabase.from("user_settings").upsert({ user_id: u.user!.id, data: data as never });
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("IA padrão atualizada");
     qc.invalidateQueries({ queryKey: ["user-settings"] });
   }

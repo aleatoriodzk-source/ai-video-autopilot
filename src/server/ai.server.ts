@@ -17,7 +17,7 @@ function key() {
 export type Usage = { input_tokens: number; output_tokens: number; total_tokens: number };
 
 export type ProviderId = "gemini" | "openai" | "anthropic" | "lovable";
-export type AiKeys = Partial<Record<"gemini" | "openai" | "anthropic", string>>;
+export type AiKeys = Partial<Record<"gemini" | "openai" | "anthropic", string | undefined>>;
 type AiOpts = { system: string; user: string; schemaName: string; schema: Record<string, unknown>; images?: string[] };
 
 const RETRY = new Set([408, 429, 500, 502, 503, 504, 529]);
