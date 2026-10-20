@@ -33,6 +33,7 @@ function Producoes() {
   const [minutes, setMinutes] = useState("1");
   const [scenes, setScenes] = useState("");
   const [style, setStyle] = useState("tiktok");
+  const [aiProvider, setAiProvider] = useState("");
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -52,7 +53,7 @@ function Producoes() {
     const sc = scenes ? Number(scenes) : null;
     if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const settings = { target_seconds: Math.round(min * 60), style, ...(sc ? { scene_count: sc } : {}) };
+    const settings = { target_seconds: Math.round(min * 60), style, ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}) };
     const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); toast.success("Produção criada"); refresh();
@@ -105,6 +106,11 @@ function Producoes() {
         </label>
         <label className="text-xs text-muted-foreground">Número de cenas (vazio = automático)
           <input type="number" min={2} max={300} value={scenes} onChange={(e) => setScenes(e.target.value)} placeholder="automático" className={input + " mt-1"} />
+        </label>
+        <label className="text-xs text-muted-foreground md:col-span-2">IA para o roteiro
+          <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} className={input + " mt-1"}>
+            <option value="">Padrão (definida em Chaves de IA)</option><option value="gemini">Gemini</option><option value="openai">ChatGPT</option><option value="anthropic">Claude</option><option value="lovable">Créditos da plataforma</option>
+          </select>
         </label>
         <button onClick={create} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground md:col-span-2">Criar produção</button>
       </div>

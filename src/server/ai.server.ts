@@ -16,15 +16,92 @@ function key() {
 
 export type Usage = { input_tokens: number; output_tokens: number; total_tokens: number };
 
-export async function aiJson<T>(opts: {
-  system: string;
-  user: string;
-  schemaName: string;
-  schema: Record<string, unknown>;
-  images?: string[]; // data: URLs or https URLs
-}): Promise<{ data: T; usage: Usage }> {
-  // Own Gemini key (free tier) takes priority so platform credits are not consumed.
-  if (process.env["GEMINI_API_KEY"]) return geminiJson<T>(opts);
+export type ProviderId = "gemini" | "openai" | "anthropic" | "lovable";
+export type AiKeys = Partial<Record<"gemini" | "openai" | "anthropic", string | undefined>>;
+type AiOpts = { system: string; user: string; schemaName: string; schema: Record<string, unknown>; images?: string[] };
+
+const RETRY = new Set([408, 429, 500, 502, 503, 504, 529]);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Order of providers to try: the chosen one first, then every other one that has a key, then platform credits. */
+export function providerOrder(choice: string, keys: AiKeys): ProviderId[] {
+  const own = (["gemini", "openai", "anthropic"] as const).filter((p) => keys[p]);
+  const first = choice !== "auto" && (choice === "lovable" || own.includes(choice as never)) ? [choice as ProviderId] : [];
+  return [...new Set<ProviderId>([...first, ...own, "lovable"])];
+}
+
+/** Calls the AI with retries (temporary errors) and automatic fallback to the next provider. */
+export async function aiJson<T>(opts: AiOpts & { keys?: AiKeys; provider?: string }): Promise<{ data: T; usage: Usage; provider: string }> {
+  const keys: AiKeys = { gemini: process.env["GEMINI_API_KEY"], ...(opts.keys ?? {}) };
+  const errors: string[] = [];
+  for (const p of providerOrder(opts.provider ?? "auto", keys)) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const r =
+          p === "gemini" ? await geminiJson<T>(opts, keys.gemini!)
+          : p === "openai" ? await openaiJson<T>(opts, keys.openai!)
+          : p === "anthropic" ? await claudeJson<T>(opts, keys.anthropic!)
+          : await lovableJson<T>(opts);
+        return { ...r, provider: p };
+      } catch (e) {
+        const st = e instanceof AiError ? e.status : 0;
+        const temp = RETRY.has(st) || st === 0;
+        if (!temp || attempt === 3) { errors.push(`${p}: ${(e as Error).message.slice(0, 160)}`); break; }
+        await sleep(2000 * 2 ** attempt);
+      }
+    }
+  }
+  throw new AiError(502, "Nenhuma IA respondeu. " + errors.join(" | "));
+}
+
+async function openaiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
+  const content: Record<string, unknown>[] = [{ type: "text", text: opts.user }];
+  for (const url of opts.images ?? []) content.push({ type: "image_url", image_url: { url } });
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: process.env["OPENAI_MODEL"] || "gpt-5-mini",
+      messages: [{ role: "system", content: opts.system }, { role: "user", content }],
+      response_format: { type: "json_schema", json_schema: { name: opts.schemaName, schema: opts.schema, strict: true } },
+    }),
+  });
+  if (!res.ok) throw new AiError(res.status, `ChatGPT respondeu ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const j = (await res.json()) as any;
+  const text = j.choices?.[0]?.message?.content ?? "";
+  if (!text) throw new AiError(422, "O ChatGPT não retornou conteúdo");
+  const u = j.usage ?? {};
+  return { data: JSON.parse(text) as T, usage: { input_tokens: u.prompt_tokens ?? 0, output_tokens: u.completion_tokens ?? 0, total_tokens: u.total_tokens ?? 0 } };
+}
+
+async function claudeJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
+  const content: Record<string, unknown>[] = [];
+  for (const url of opts.images ?? []) {
+    const m = /^data:([^;]+);base64,(.*)$/.exec(url);
+    if (m) content.push({ type: "image", source: { type: "base64", media_type: m[1], data: m[2] } });
+  }
+  content.push({ type: "text", text: opts.user });
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: process.env["ANTHROPIC_MODEL"] || "claude-sonnet-4-5",
+      max_tokens: 16000,
+      system: opts.system,
+      messages: [{ role: "user", content }],
+      tools: [{ name: opts.schemaName, description: "Responda preenchendo este formato.", input_schema: opts.schema }],
+      tool_choice: { type: "tool", name: opts.schemaName },
+    }),
+  });
+  if (!res.ok) throw new AiError(res.status, `Claude respondeu ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const j = (await res.json()) as any;
+  const block = (j.content ?? []).find((b: any) => b.type === "tool_use");
+  if (!block) throw new AiError(422, "O Claude não retornou conteúdo");
+  const u = j.usage ?? {};
+  return { data: block.input as T, usage: { input_tokens: u.input_tokens ?? 0, output_tokens: u.output_tokens ?? 0, total_tokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0) } };
+}
+
+async function lovableJson<T>(opts: AiOpts): Promise<{ data: T; usage: Usage }> {
   const content: Record<string, unknown>[] = [{ type: "input_text", text: opts.user }];
   for (const url of opts.images ?? []) content.push({ type: "input_image", image_url: url });
   const res = await fetch(`${GATEWAY}/v1/responses`, {
@@ -93,7 +170,7 @@ export async function aiImage(prompt: string, aspect: string, model: string): Pr
   return b64;
 }
 
-async function geminiJson<T>(opts: { system: string; user: string; schema: Record<string, unknown>; images?: string[] }): Promise<{ data: T; usage: Usage }> {
+async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
   const parts: Record<string, unknown>[] = [{ text: opts.user }];
   for (const url of opts.images ?? []) {
     const m = /^data:([^;]+);base64,(.*)$/.exec(url);
@@ -102,7 +179,7 @@ async function geminiJson<T>(opts: { system: string; user: string; schema: Recor
   const model = process.env["GEMINI_MODEL"] || "gemini-3.5-flash-lite";
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env["GEMINI_API_KEY"] ?? "" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: opts.system }] },
       contents: [{ role: "user", parts }],
@@ -115,4 +192,13 @@ async function geminiJson<T>(opts: { system: string; user: string; schema: Recor
   if (!text.trim()) throw new AiError(422, "O Gemini não retornou conteúdo");
   const u = j.usageMetadata ?? {};
   return { data: JSON.parse(text) as T, usage: { input_tokens: u.promptTokenCount ?? 0, output_tokens: u.candidatesTokenCount ?? 0, total_tokens: u.totalTokenCount ?? 0 } };
+}
+
+/** Small real request to check that a key works. */
+export async function testProvider(p: "gemini" | "openai" | "anthropic", key: string): Promise<void> {
+  const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
+  const o: AiOpts = { system: "Responda em JSON.", user: "Responda ok=true.", schemaName: "teste", schema };
+  if (p === "gemini") await geminiJson(o, key);
+  else if (p === "openai") await openaiJson(o, key);
+  else await claudeJson(o, key);
 }

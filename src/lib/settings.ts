@@ -2,7 +2,7 @@ import type { Limits, Prices } from "./costs";
 
 export type AppSettings = {
   voice: { provider: "piper" | "elevenlabs"; piper_voice: string; length_scale: number; sentence_silence: number; noise_scale: number; elevenlabs_voice_id: string };
-  ai: { allow_ai_images: boolean; confirm_paid: boolean; image_model: string };
+  ai: { text_provider: "auto" | "gemini" | "openai" | "anthropic" | "lovable"; allow_ai_images: boolean; confirm_paid: boolean; image_model: string };
   visuals: { prefer: ("upload" | "pexels" | "ai_image")[]; avoid_repeat_window: number };
   export: { resolution: "720p" | "1080p"; fps: number; crf: number; music_volume_db: number; voice_target_lufs: number; output_dir: string };
   prices: Prices;
@@ -11,7 +11,7 @@ export type AppSettings = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   voice: { provider: "piper", piper_voice: "pt_BR-faber-medium", length_scale: 1.0, sentence_silence: 0.3, noise_scale: 0.667, elevenlabs_voice_id: "" },
-  ai: { allow_ai_images: false, confirm_paid: true, image_model: "lovable/image-fast" },
+  ai: { text_provider: "auto", allow_ai_images: false, confirm_paid: true, image_model: "lovable/image-fast" },
   visuals: { prefer: ["upload", "pexels", "ai_image"], avoid_repeat_window: 4 },
   export: { resolution: "1080p", fps: 30, crf: 20, music_volume_db: -20, voice_target_lufs: -16, output_dir: "" },
   prices: { ai_text_per_mtok: null, ai_image_each: null, tts_per_kchar: null },
