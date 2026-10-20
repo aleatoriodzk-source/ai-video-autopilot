@@ -242,7 +242,7 @@ function LibraryPicker({ onPick }: { onPick: (assetId: string) => void }) {
   );
 }
 
-function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; storage_path: string; description: string | null }; onPick: () => void }) {
+function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; storage_path: string | null; description: string | null }; onPick: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useQuery({
     queryKey: ["acervo-url", asset.id],
