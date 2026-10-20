@@ -246,6 +246,14 @@ def pick_visuals(runner, job, ctx) -> None:
         for old in (out, work / f"vid_{sc['idx']:03d}.mp4"):
             old.unlink(missing_ok=True)
         chosen = None
+        # Mídia escolhida pelo usuário no editor: usa ela e não busca outra.
+        mine = next((a for a in ctx["assets"] if a["id"] == sc.get("asset_id") and (a.get("meta") or {}).get("locked") and a.get("storage_path")), None)
+        if mine:
+            url = runner.api.call("download_url", path=mine["storage_path"])["url"]
+            _download(url, work / f"vid_{sc['idx']:03d}.mp4" if mine["kind"] == "video" else out)
+            recent.append(mine["id"])
+            runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
+            continue
         for src in s["visuals"]["prefer"]:
             if src == "upload" and uploads:
                 a = next((u for u in uploads if u["id"] not in recent[-window:]), None)

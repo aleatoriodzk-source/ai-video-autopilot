@@ -13,7 +13,12 @@ type Draft = {
   visual_description: string;
   pause_after_ms: number;
   duration_s: number | null;
+  motion: string;
+  transition: string;
+  asset_id: string | null;
 };
+const MOTIONS: [string, string][] = [["zoom_in", "Zoom aproximando"], ["zoom_out", "Zoom afastando"], ["pan_left", "Deslizar à esquerda"], ["pan_right", "Deslizar à direita"], ["static", "Parada"]];
+const TRANS: [string, string][] = [["cut", "Corte seco"], ["fade", "Esmaecer"], ["slideleft", "Deslizar ←"], ["slideright", "Deslizar →"], ["zoomin", "Zoom"], ["circleopen", "Círculo"]];
 
 const field = "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm";
 const btn = "rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50";
@@ -36,7 +41,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
 
   useEffect(() => {
     if (!data || dirty) return;
-    setDraft(data.map((s) => ({ id: s.id, narration: s.narration, caption: s.caption ?? "", visual_query: s.visual_query ?? "", visual_description: s.visual_description ?? "", pause_after_ms: s.pause_after_ms, duration_s: s.duration_s })));
+    setDraft(data.map((s) => ({ id: s.id, narration: s.narration, caption: s.caption ?? "", visual_query: s.visual_query ?? "", visual_description: s.visual_description ?? "", pause_after_ms: s.pause_after_ms, duration_s: s.duration_s, motion: s.motion ?? "zoom_in", transition: s.transition ?? "cut", asset_id: s.asset_id })));
     setRemoved([]);
   }, [data, dirty]);
 
@@ -55,7 +60,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   };
   const addAfter = () => {
     setDirty(true);
-    setDraft((d) => [...d.slice(0, sel + 1), { narration: "", caption: "", visual_query: "", visual_description: "", pause_after_ms: 300, duration_s: null }, ...d.slice(sel + 1)]);
+    setDraft((d) => [...d.slice(0, sel + 1), { narration: "", caption: "", visual_query: "", visual_description: "", pause_after_ms: 300, duration_s: null, motion: "zoom_in", transition: "cut", asset_id: null }, ...d.slice(sel + 1)]);
     setSel(sel + 1);
   };
   const remove = () => {
@@ -83,7 +88,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         if (error) throw error;
       }
       for (const [i, d] of draft.entries()) {
-        const row = { idx: i, narration: d.narration.trim(), caption: d.caption || null, visual_query: d.visual_query || null, visual_description: d.visual_description || null, pause_after_ms: Math.max(0, Math.round(d.pause_after_ms)) };
+        const row = { idx: i, narration: d.narration.trim(), caption: d.caption || null, visual_query: d.visual_query || null, visual_description: d.visual_description || null, pause_after_ms: Math.max(0, Math.round(d.pause_after_ms)), motion: d.motion, transition: d.transition, asset_id: d.asset_id };
         const { error } = d.id
           ? await supabase.from("scenes").update({ ...row, status: "edited", audio_path: null, duration_s: null }).eq("id", d.id)
           : await supabase.from("scenes").insert({ ...row, user_id: u.user!.id, production_id: productionId });
@@ -97,6 +102,23 @@ export function SceneEditor({ productionId }: { productionId: string }) {
       toast.error((e as Error).message);
       return false;
     } finally { setBusy(false); }
+  }
+
+  async function swapMedia(file: File) {
+    if (!/^(image|video)\//.test(file.type)) { toast.error("Envie uma foto ou um vídeo"); return; }
+    setBusy(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `${u.user!.id}/scenes/${productionId}/${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
+      if (up.error) throw up.error;
+      const kind = file.type.startsWith("video") ? "video" : "image";
+      const { data: a, error } = await supabase.from("assets").insert({ user_id: u.user!.id, production_id: productionId, kind, source: "upload", storage_path: path, license: "Enviada pelo usuário", description: file.name, meta: { locked: true } }).select("id").single();
+      if (error) throw error;
+      edit({ asset_id: a.id });
+      toast.success(`Mídia trocada na cena ${sel + 1}. Salve e renderize para aplicar.`);
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
 
   async function rewrite() {
@@ -164,6 +186,23 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         </label>
       </div>
 
+      <div className="grid gap-2 md:grid-cols-3">
+        <label className="text-xs text-muted-foreground">Movimento da imagem
+          <select value={cur.motion} onChange={(e) => edit({ motion: e.target.value })} className={field + " mt-1"}>{MOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        </label>
+        <label className="text-xs text-muted-foreground">Transição para a próxima
+          <select value={cur.transition} onChange={(e) => edit({ transition: e.target.value })} className={field + " mt-1"}>{TRANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        </label>
+        <div className="text-xs text-muted-foreground">Mídia da cena
+          <SceneMedia assetId={cur.asset_id} />
+          <div className="mt-1 flex gap-2">
+            <label className={btn + " cursor-pointer"}>Trocar por arquivo meu<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
+            {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Buscar automática</button>}
+          </div>
+        </div>
+      </div>
+      <CaptionPreview text={cur.caption || cur.narration} />
+
       <div className="flex flex-wrap gap-2">
         <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Pedido para a IA (opcional), ex.: mais suspense" className={field + " min-w-0 flex-1"} />
         <button className={btn} disabled={busy} onClick={rewrite}>{busy ? "Aguarde…" : "Refazer esta cena com IA"}</button>
@@ -176,6 +215,50 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         <span className="flex-1" />
         <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar cenas</button>
         <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar novamente</button>
+      </div>
+    </div>
+  );
+}
+
+/** Mostra a foto/vídeo atual da cena (se estiver guardada no site). */
+function SceneMedia({ assetId }: { assetId: string | null }) {
+  const { data } = useQuery({
+    queryKey: ["asset-preview", assetId],
+    enabled: !!assetId,
+    queryFn: async () => {
+      const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
+      if (!a) return null;
+      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, url };
+    },
+  });
+  if (!assetId) return <div className="mt-1 rounded border border-dashed border-border p-2">Automática (o agente busca pela descrição)</div>;
+  if (!data) return <div className="mt-1">…</div>;
+  return (
+    <div className="mt-1 space-y-1">
+      {data.url ? (data.kind === "video" ? <video src={data.url} muted controls className="h-24 rounded" /> : <img src={data.url} alt="" className="h-24 rounded object-cover" />) : null}
+      <div>{(data.meta as { locked?: boolean } | null)?.locked ? "Escolhida por você" : `Fonte: ${data.source}`}{data.attribution ? ` · ${data.attribution}` : ""}</div>
+    </div>
+  );
+}
+
+/** Prévia de como a legenda aparece palavra por palavra (estilo CapCut). */
+function CaptionPreview({ text }: { text: string }) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    setI(0);
+    if (!words.length) return;
+    const t = setInterval(() => setI((x) => (x + 1) % words.length), 400);
+    return () => clearInterval(t);
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!words.length) return null;
+  const start = Math.floor(i / 3) * 3;
+  return (
+    <div className="rounded-md bg-foreground/90 p-3 text-center">
+      <div className="text-[10px] uppercase tracking-wide text-background/60">Prévia da legenda palavra por palavra</div>
+      <div className="text-lg font-black uppercase text-background">
+        {words.slice(start, start + 3).map((w, k) => <span key={k} className={start + k === i ? "text-primary" : ""}>{w} </span>)}
       </div>
     </div>
   );
