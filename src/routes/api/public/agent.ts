@@ -160,7 +160,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "save_production": {
               const prod = await ownProduction(body.production_id);
-              const f = z.object({ validation: z.unknown().optional(), report: z.unknown().optional(), output_path: z.string().max(500).optional(), preview_path: z.string().max(500).optional(), status: z.string().max(30).optional(), title: z.string().max(200).optional(), topic: z.string().max(500).optional() }).parse(body.fields ?? {});
+              const f = z.object({ validation: z.unknown().optional(), report: z.unknown().optional(), output_path: z.string().max(500).optional(), preview_path: z.string().max(500).optional(), status: z.string().max(30).optional(), title: z.string().max(200).optional(), topic: z.string().max(500).optional(), versions: z.array(z.record(z.string(), z.unknown())).max(50).optional() }).parse(body.fields ?? {});
               await db.from("productions").update(f as never).eq("id", prod.id);
               return json({ ok: true });
             }

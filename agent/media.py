@@ -213,7 +213,7 @@ def final_mix(video: Path, voice: Path, subs_name: str, out: Path, workdir: Path
     else:
         af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]"
     run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
-         "-c:v", "libx264", "-preset", "medium", "-crf", str(crf), "-pix_fmt", "yuv420p",
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out.name], cwd=workdir)
 
 

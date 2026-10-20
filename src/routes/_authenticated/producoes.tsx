@@ -47,7 +47,7 @@ function Producoes() {
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: prods } = useQuery({
     queryKey: ["prods"],
-    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path").order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path,versions").order("created_at", { ascending: false })).data ?? [],
     refetchInterval: 10_000,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["prods"] });
@@ -153,7 +153,7 @@ function Producoes() {
                   <StatusBadge status={p.status} />
                 </div>
                 {p.status !== "draft" && <JobStatus productionId={p.id} />}
-                {p.preview_path ? <VideoPlayer path={p.preview_path} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
+                {p.preview_path ? <Versions current={p.preview_path} versions={(p.versions as Version[] | null) ?? []} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
                   <button disabled={b} className={btn} onClick={() => script(p.id)}>{s ? "Refazer roteiro" : "Gerar roteiro"}</button>
                   <button disabled={b} className={btn} onClick={() => run(p.id, () => startProduction(p.id, { needsAnalysis: !!p.reference_id, referenceId: p.reference_id }), "Automação iniciada — aguardando o agente local")}>Iniciar automação</button>
@@ -170,6 +170,28 @@ function Producoes() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+type Version = { n: number; preview_path?: string; output_path: string; created_at: string; duration_s?: number; render_s?: number };
+
+/** Vídeo atual + versões anteriores (cada renderização vira uma versão). */
+function Versions({ current, versions }: { current: string; versions: Version[] }) {
+  const [pick, setPick] = useState(current);
+  const list = [...versions].reverse();
+  return (
+    <div className="space-y-2">
+      {list.length > 1 && (
+        <div className="flex flex-wrap gap-1 text-xs">
+          {list.map((v) => v.preview_path && (
+            <button key={v.n} onClick={() => setPick(v.preview_path!)} className={btn + (pick === v.preview_path ? " bg-accent" : "")}>
+              Versão {v.n} · {new Date(v.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}{v.duration_s ? ` · ${Math.round(v.duration_s)}s` : ""}{v.render_s ? ` · montado em ${Math.round(v.render_s)}s` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+      <VideoPlayer path={pick} />
     </div>
   );
 }
