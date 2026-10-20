@@ -161,13 +161,27 @@ def nasa_search(query: str) -> list[dict]:
     return out
 
 
+def archive_search(query: str) -> list[dict]:
+    """Internet Archive: fotos e acervos históricos (muitos em domínio público — conferir a página)."""
+    r = requests.get("https://archive.org/advancedsearch.php", headers=UA, timeout=30, params={
+        "q": f"({query}) AND mediatype:image", "fl[]": ["identifier", "title", "subject", "licenseurl"], "rows": 15, "output": "json"})
+    r.raise_for_status()
+    out = []
+    for d in r.json().get("response", {}).get("docs", []):
+        i = d["identifier"]
+        subj = d.get("subject") or []
+        out.append({"id": f"ia:{i}", "url": f"https://archive.org/services/img/{i}", "page": f"https://archive.org/details/{i}", "license": d.get("licenseurl") or "Internet Archive — conferir licença na página",
+                    "attribution": "Internet Archive", "text": " ".join([str(d.get("title") or "")] + (subj if isinstance(subj, list) else [str(subj)]))})
+    return out
+
+
 def re_tags(html: str) -> str:
     import re
     return re.sub(r"<[^>]+>", "", html or "").strip()[:120]
 
 
 SPACE = ("space", "planet", "galaxy", "nasa", "rocket", "moon", "mars", "star", "astronaut", "nebula", "earth orbit", "satellite")
-OPEN_SOURCES = {"wikimedia": wikimedia_search, "openverse": openverse_search, "nasa": nasa_search}
+OPEN_SOURCES = {"archive": archive_search, "wikimedia": wikimedia_search, "openverse": openverse_search, "nasa": nasa_search}
 
 
 def _open_pick(runner, job, q, work, sc, prod, recent, window, order):
@@ -202,7 +216,7 @@ def open_order(q: str, topic: str) -> list[str]:
     if any(w in t for w in SPACE):
         return ["nasa", "wikimedia", "openverse"]
     if any(w in t for w in HISTORY):
-        return ["wikimedia", "openverse"]
+        return ["wikimedia", "archive", "openverse"]
     return ["openverse", "wikimedia"]
 
 
