@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
 import { channelAnalysisSchema, ideasSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
+import { WORDS_PER_SECOND, countWords, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
 
 type DB = SupabaseClient<Database>;
@@ -144,8 +145,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const ps = (p.settings ?? {}) as Record<string, unknown>;
   const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : null;
-  const words = Math.round(target * 2.4);
-  const { data, usage } = await ai<ScriptOut>({
+  const words = Math.round(target * WORDS_PER_SECOND);
+  let { data, usage } = await ai<ScriptOut>({
     system:
       ETHICS +
       " Você é um roteirista profissional de canais virais do YouTube brasileiro. Escreve como gente fala: frases curtas, ritmo, curiosidade, viradas e exemplos concretos. Proibido: clichês ('você sabia que', 'neste vídeo', 'fique até o final', 'incrível', 'nos dias de hoje'), frases vazias, repetição de ideias, enrolação, fatos inventados ou números sem base. Cada cena precisa entregar uma informação nova ou avançar a história.",
@@ -171,6 +172,23 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
     schema: scriptSchema,
   });
   await recordTextUsage(db, userId, s, usage, "roteiro", jobId, productionId);
+  // The AI often writes less than asked (e.g. 39s instead of 60s): ask it to extend until it reaches the word target.
+  for (let round = 0; round < 2 && scriptIsShort(data.scenes, target); round++) {
+    const have = countWords(data.scenes);
+    const r = await ai<ScriptOut>({
+      system: ETHICS + " Você é um roteirista profissional. Mantém o tom, o gancho e a estrutura, e só acrescenta conteúdo novo, concreto e verdadeiro.",
+      user:
+        `Este roteiro ficou CURTO: tem ${have} palavras de narração, mas precisa ter cerca de ${words} palavras (~${target}s de fala). ` +
+        `Reescreva-o completo com essa extensão: aprofunde as cenas existentes${sceneCount ? ` mantendo EXATAMENTE ${sceneCount} cenas` : " e adicione cenas novas com informações novas"}. ` +
+        "Mantenha todas as regras de narração (sem emojis, símbolos, rubricas; números por extenso), visual_query em inglês concreto e o mesmo formato.\n\nROTEIRO ATUAL (JSON):\n" +
+        JSON.stringify(data).slice(0, 60000),
+      schemaName: "script",
+      schema: scriptSchema,
+    });
+    await recordTextUsage(db, userId, s, r.usage, "roteiro (ampliação)", jobId, productionId);
+    if (countWords(r.data.scenes) > have) data = r.data;
+    usage = r.usage;
+  }
   await db.from("scenes").delete().eq("production_id", productionId);
   const rows = data.scenes.map((sc, idx) => ({
     user_id: userId,

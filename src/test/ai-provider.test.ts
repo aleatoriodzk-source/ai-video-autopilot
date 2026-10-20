@@ -22,3 +22,14 @@ describe("mensagens de erro", () => {
     expect(friendlyError("402 Not enough credits")?.title).toBe("Créditos da plataforma acabaram");
   });
 });
+
+import { scriptIsShort } from "@/lib/duration";
+describe("duração do roteiro", () => {
+  const scene = (n: number) => ({ narration: Array(n).fill("palavra").join(" ") });
+  it("roteiro de 1 minuto com 100 palavras é curto e precisa ampliar", () => {
+    expect(scriptIsShort([scene(100)], 60)).toBe(true);
+  });
+  it("roteiro de 1 minuto com 150 palavras está bom", () => {
+    expect(scriptIsShort([scene(150)], 60)).toBe(false);
+  });
+});
