@@ -92,3 +92,27 @@ export async function aiImage(prompt: string, aspect: string, model: string): Pr
   if (!b64) throw new AiError(422, "Nenhuma imagem retornada");
   return b64;
 }
+
+async function geminiJson<T>(opts: { system: string; user: string; schema: Record<string, unknown>; images?: string[] }): Promise<{ data: T; usage: Usage }> {
+  const parts: Record<string, unknown>[] = [{ text: opts.user }];
+  for (const url of opts.images ?? []) {
+    const m = /^data:([^;]+);base64,(.*)$/.exec(url);
+    if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+  }
+  const model = process.env["GEMINI_MODEL"] || "gemini-2.5-flash";
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env["GEMINI_API_KEY"] ?? "" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: [{ role: "user", parts }],
+      generationConfig: { responseMimeType: "application/json", responseJsonSchema: opts.schema },
+    }),
+  });
+  if (!res.ok) throw new AiError(res.status, `Gemini respondeu ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const j = (await res.json()) as any;
+  const text = (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
+  if (!text.trim()) throw new AiError(422, "O Gemini não retornou conteúdo");
+  const u = j.usageMetadata ?? {};
+  return { data: JSON.parse(text) as T, usage: { input_tokens: u.promptTokenCount ?? 0, output_tokens: u.candidatesTokenCount ?? 0, total_tokens: u.totalTokenCount ?? 0 } };
+}
