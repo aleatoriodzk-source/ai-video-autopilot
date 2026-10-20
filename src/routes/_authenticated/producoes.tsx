@@ -37,6 +37,9 @@ function Producoes() {
   const [style, setStyle] = useState("tiktok");
   const [aiProvider, setAiProvider] = useState("");
   const [refId, setRefId] = useState("");
+  const [voice, setVoice] = useState("pt-BR-AntonioNeural");
+  const [rate, setRate] = useState("+5%");
+  const [mood, setMood] = useState("auto");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
@@ -56,7 +59,7 @@ function Producoes() {
     const sc = scenes ? Number(scenes) : null;
     if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const settings = { target_seconds: Math.round(min * 60), style, ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}) };
+    const settings = { target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}) };
     const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); toast.success("Produção criada"); refresh();
@@ -115,6 +118,23 @@ function Producoes() {
             <option value="">Padrão (definida em Chaves de IA)</option><option value="gemini">Gemini</option><option value="openai">ChatGPT</option><option value="anthropic">Claude</option><option value="lovable">Créditos da plataforma</option>
           </select>
         </label>
+        <label className="text-xs text-muted-foreground">Voz da narração
+          <select value={voice} onChange={(e) => setVoice(e.target.value)} className={input + " mt-1"}>
+            <option value="pt-BR-AntonioNeural">Antonio (masculina, firme)</option><option value="pt-BR-FranciscaNeural">Francisca (feminina, clara)</option><option value="pt-BR-ThalitaMultilingualNeural">Thalita (feminina, jovem)</option>
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <label className="flex-1 text-xs text-muted-foreground">Velocidade
+            <select value={rate} onChange={(e) => setRate(e.target.value)} className={input + " mt-1"}>
+              <option value="-10%">Mais lenta</option><option value="+0%">Normal</option><option value="+5%">Um pouco rápida</option><option value="+15%">Rápida (TikTok)</option>
+            </select>
+          </label>
+          <label className="flex-1 text-xs text-muted-foreground">Música de fundo
+            <select value={mood} onChange={(e) => setMood(e.target.value)} className={input + " mt-1"}>
+              <option value="auto">Qualquer da minha pasta</option><option value="suspense">Suspense</option><option value="epico">Épica</option><option value="calmo">Calma</option><option value="alegre">Alegre</option><option value="triste">Triste</option><option value="none">Sem música</option>
+            </select>
+          </label>
+        </div>
         <button onClick={create} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground md:col-span-2">Criar produção</button>
       </div>
 

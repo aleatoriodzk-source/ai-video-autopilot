@@ -176,7 +176,9 @@ class Runner:
         if not use_edge and v["provider"] != "piper":
             raise media.MediaError("Somente Piper (local) ou Edge (Microsoft) estão implementados. Troque a voz para Piper em Configurações.")
         voice = Path(self.cfg["voices_dir"]) / f"{v['piper_voice']}.onnx"
-        edge_voice = self.cfg.get("edge_voice") or "pt-BR-AntonioNeural"
+        ps = ctx["prod"].get("settings") or {}
+        edge_voice = ps.get("voice") or self.cfg.get("edge_voice") or "pt-BR-AntonioNeural"
+        edge_rate = ps.get("voice_rate") or self.cfg.get("edge_rate") or "+0%"
         for n, sc in enumerate(ctx["scenes"]):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
@@ -184,7 +186,7 @@ class Runner:
             done = False
             if use_edge:
                 try:
-                    media.edge_tts(sc["narration"], edge_voice, raw, self.cfg.get("edge_rate") or "+0%")
+                    media.edge_tts(sc["narration"], edge_voice, raw, edge_rate)
                     done = True
                 except media.MediaError as e:
                     self.log(job, f"Voz Edge falhou ({e}); usando Piper", "warn", step="narration")
@@ -257,7 +259,9 @@ class Runner:
         out_dir.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in ctx["prod"]["title"])[:60].strip() or "video"
         tmp = ctx["work"] / "final.mp4"
-        music = self.cfg.get("music_path")
+        music = pick_music(self.cfg, (ctx["prod"].get("settings") or {}).get("music_mood") or "auto")
+        if music:
+            self.log(job, f"música: {Path(music).name}", step="render")
         e = ctx["settings"]["export"]
         media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass", tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"])
         final = out_dir / f"{safe} - {ctx['prod']['aspect'].replace(':', 'x')} - {time.strftime('%Y%m%d-%H%M')}.mp4"
@@ -289,6 +293,19 @@ class Runner:
         if not rep["ok"]:
             # Nunca marcar como concluído sem um MP4 válido confirmado.
             raise media.MediaError("vídeo final reprovado na validação: " + "; ".join(rep["issues"]))
+
+
+def pick_music(cfg: dict, mood: str) -> str | None:
+    """Escolhe uma música da pasta music/<clima>/ (ou de qualquer subpasta em 'auto')."""
+    if mood == "none":
+        return None
+    base = Path(cfg.get("music_dir") or ROOT / "music")
+    exts = (".mp3", ".wav", ".m4a", ".ogg")
+    folder = base / mood if mood != "auto" else base
+    files = [p for p in folder.rglob("*") if p.suffix.lower() in exts] if folder.exists() else []
+    if not files and mood != "auto" and base.exists():
+        files = [p for p in base.rglob("*") if p.suffix.lower() in exts]
+    return str(random.choice(files)) if files else cfg.get("music_path") or None
 
 
 def check(cfg: dict) -> None:
