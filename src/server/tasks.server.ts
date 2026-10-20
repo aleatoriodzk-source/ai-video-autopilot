@@ -208,3 +208,28 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   await db.from("productions").update({ script: data as never, title: data.title, topic }).eq("id", productionId);
   return data;
 }
+
+/** Rewrites a single scene with AI, keeping the rest of the script as context. */
+export async function runRewriteScene(db: DB, userId: string, sceneId: string, instruction: string) {
+  const { data: sc } = await db.from("scenes").select("*").eq("id", sceneId).single();
+  if (!sc) throw new Error("Cena não encontrada");
+  const { p } = await productionContext(db, sc.production_id);
+  const s = await guardBudget(db, userId, null, null);
+  const ai = makeAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
+  const { data: all } = await db.from("scenes").select("idx,narration").eq("production_id", sc.production_id).order("idx");
+  const sceneSchema = (scriptSchema as unknown as { properties: { scenes: { items: Record<string, unknown> } } }).properties.scenes.items;
+  const { data, usage } = await ai<ScriptOut["scenes"][number]>({
+    system: ETHICS + " Você é um roteirista profissional de vídeos virais. Reescreve uma única cena mantendo o fio da história.",
+    user:
+      `Tema do vídeo: "${p.topic ?? p.title}". Formato ${p.aspect}.` +
+      `\nRoteiro completo (para contexto):\n${(all ?? []).map((x) => `${x.idx + 1}. ${x.narration}`).join("\n").slice(0, 20000)}` +
+      `\n\nReescreva SOMENTE a cena ${sc.idx + 1}. Fala atual: "${sc.narration}".` +
+      `\nPedido do usuário: ${instruction.trim() || "deixe mais envolvente, concreta e com ritmo, mantendo o tamanho parecido"}.` +
+      "\nNarração só com texto falado (sem emojis, símbolos ou rubricas; números por extenso). visual_query em inglês com 2-4 termos concretos que mostrem exatamente o assunto da cena.",
+    schemaName: "scene",
+    schema: sceneSchema,
+  });
+  await recordTextUsage(db, userId, s, usage, "reescrever cena", null, sc.production_id);
+  await db.from("scenes").update({ narration: data.narration, caption: data.caption, visual_description: data.visual_description, visual_query: data.visual_query, sfx: data.sfx || null, motion: data.motion, transition: data.transition, status: "edited", audio_path: null, duration_s: null }).eq("id", sceneId);
+  return data;
+}
