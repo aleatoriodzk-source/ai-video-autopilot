@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { rerenderProduction } from "@/lib/jobs";
+import { rewriteScene } from "@/lib/ai.functions";
 
 type Draft = {
   id?: string;
@@ -31,6 +32,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const [sel, setSel] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState("");
 
   useEffect(() => {
     if (!data || dirty) return;
@@ -97,6 +99,19 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     } finally { setBusy(false); }
   }
 
+  async function rewrite() {
+    if (!cur.id) { toast.error("Salve as cenas antes"); return; }
+    if (dirty && !(await save())) return;
+    setBusy(true);
+    try {
+      const r = await rewriteScene({ data: { sceneId: cur.id, instruction: ask } });
+      if (!r.ok) throw new Error(r.error);
+      setAsk("");
+      await qc.invalidateQueries({ queryKey: ["scenes", productionId] });
+      toast.success(`Cena ${sel + 1} reescrita`);
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+
   async function rerender() {
     if (dirty && !(await save())) return;
     setBusy(true);
@@ -149,6 +164,10 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         </label>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Pedido para a IA (opcional), ex.: mais suspense" className={field + " min-w-0 flex-1"} />
+        <button className={btn} disabled={busy} onClick={rewrite}>{busy ? "Aguarde…" : "Refazer esta cena com IA"}</button>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button className={btn} disabled={sel === 0} onClick={() => move(-1)}>← Mover</button>
         <button className={btn} disabled={sel === draft.length - 1} onClick={() => move(1)}>Mover →</button>

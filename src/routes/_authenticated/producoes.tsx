@@ -8,6 +8,7 @@ import { activeJob, setJobStatus, startProduction } from "@/lib/jobs";
 import { generateScript } from "@/lib/ai.functions";
 import { SceneEditor } from "@/components/app/SceneEditor";
 import { JobStatus } from "@/components/app/JobStatus";
+import { ScriptView } from "@/components/app/ScriptView";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
@@ -38,6 +39,7 @@ function Producoes() {
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [view, setView] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: prods } = useQuery({
@@ -138,8 +140,10 @@ function Producoes() {
                   <button disabled={b} className={btn} onClick={() => control(p.id, "paused")}>Pausar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "queued")}>Retomar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "cancelled")}>Cancelar</button>
+                  {s ? <button className={btn + (view === p.id ? " bg-accent" : "")} onClick={() => setView(view === p.id ? null : p.id)}>{view === p.id ? "Fechar roteiro" : "Ler roteiro"}</button> : null}
                   {s ? <button className={btn + (open === p.id ? " bg-accent" : "")} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Fechar cenas" : "Ver e editar cenas"}</button> : null}
                 </div>
+                {view === p.id && s ? <ScriptView productionId={p.id} script={s} targetSeconds={Number((p.settings as Record<string, unknown> | null)?.["target_seconds"] ?? 0)} /> : null}
                 {open === p.id ? <SceneEditor productionId={p.id} /> : null}
               </div>
             );
