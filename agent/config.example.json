@@ -4,5 +4,8 @@
   "output_dir": "C:\\EstudioAutomatico\\videos",
   "pexels_api_key": "",
   "pixabay_api_key": "",
-  "music_path": ""
+  "music_path": "",
+  "tts": "edge",
+  "edge_voice": "pt-BR-AntonioNeural",
+  "edge_rate": "+5%"
 }

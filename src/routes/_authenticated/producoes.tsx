@@ -32,6 +32,7 @@ function Producoes() {
   const [mode, setMode] = useState("auto");
   const [minutes, setMinutes] = useState("1");
   const [scenes, setScenes] = useState("");
+  const [style, setStyle] = useState("tiktok");
   const [refId, setRefId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -51,7 +52,7 @@ function Producoes() {
     const sc = scenes ? Number(scenes) : null;
     if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const settings = { target_seconds: Math.round(min * 60), ...(sc ? { scene_count: sc } : {}) };
+    const settings = { target_seconds: Math.round(min * 60), style, ...(sc ? { scene_count: sc } : {}) };
     const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); toast.success("Produção criada"); refresh();
@@ -94,6 +95,9 @@ function Producoes() {
           </select>
           <select value={mode} onChange={(e) => setMode(e.target.value)} className={input}>
             <option value="auto">Automático</option><option value="assisted">Assistido</option>
+          </select>
+          <select value={style} onChange={(e) => { setStyle(e.target.value); if (e.target.value === "youtube") { setAspect("16:9"); setMinutes("8"); } else { setAspect("9:16"); setMinutes("1"); } }} className={input}>
+            <option value="tiktok">TikTok/Shorts (dopamina)</option><option value="youtube">YouTube longo</option>
           </select>
         </div>
         <label className="text-xs text-muted-foreground">Duração (minutos)
