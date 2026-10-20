@@ -168,9 +168,12 @@ def archive_search(query: str) -> list[dict]:
     r.raise_for_status()
     out = []
     for d in r.json().get("response", {}).get("docs", []):
+        lic = d.get("licenseurl") or ""
+        if "publicdomain" not in lic and "creativecommons" not in lic:
+            continue  # sem licença clara (ex.: capas de filme) não entra
         i = d["identifier"]
         subj = d.get("subject") or []
-        out.append({"id": f"ia:{i}", "url": f"https://archive.org/services/img/{i}", "page": f"https://archive.org/details/{i}", "license": d.get("licenseurl") or "Internet Archive — conferir licença na página",
+        out.append({"id": f"ia:{i}", "url": f"https://archive.org/services/img/{i}", "page": f"https://archive.org/details/{i}", "license": lic,
                     "attribution": "Internet Archive", "text": " ".join([str(d.get("title") or "")] + (subj if isinstance(subj, list) else [str(subj)]))})
     return out
 
