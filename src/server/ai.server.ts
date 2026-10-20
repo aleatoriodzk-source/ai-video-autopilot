@@ -170,7 +170,7 @@ export async function aiImage(prompt: string, aspect: string, model: string): Pr
   return b64;
 }
 
-async function geminiJson<T>(opts: { system: string; user: string; schema: Record<string, unknown>; images?: string[] }): Promise<{ data: T; usage: Usage }> {
+async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
   const parts: Record<string, unknown>[] = [{ text: opts.user }];
   for (const url of opts.images ?? []) {
     const m = /^data:([^;]+);base64,(.*)$/.exec(url);
@@ -179,7 +179,7 @@ async function geminiJson<T>(opts: { system: string; user: string; schema: Recor
   const model = process.env["GEMINI_MODEL"] || "gemini-3.5-flash-lite";
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env["GEMINI_API_KEY"] ?? "" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: opts.system }] },
       contents: [{ role: "user", parts }],
@@ -192,4 +192,13 @@ async function geminiJson<T>(opts: { system: string; user: string; schema: Recor
   if (!text.trim()) throw new AiError(422, "O Gemini não retornou conteúdo");
   const u = j.usageMetadata ?? {};
   return { data: JSON.parse(text) as T, usage: { input_tokens: u.promptTokenCount ?? 0, output_tokens: u.candidatesTokenCount ?? 0, total_tokens: u.totalTokenCount ?? 0 } };
+}
+
+/** Small real request to check that a key works. */
+export async function testProvider(p: "gemini" | "openai" | "anthropic", key: string): Promise<void> {
+  const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
+  const o: AiOpts = { system: "Responda em JSON.", user: "Responda ok=true.", schemaName: "teste", schema };
+  if (p === "gemini") await geminiJson(o, key);
+  else if (p === "openai") await openaiJson(o, key);
+  else await claudeJson(o, key);
 }
