@@ -201,7 +201,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
             <button className={btn} onClick={() => setPick((p) => !p)}>Usar do acervo</button>
             {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Buscar automática</button>}
           </div>
-          {pick && <LibraryPicker productionId={productionId} onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
+          {pick && <LibraryPicker onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
         </div>
       </div>
       <CaptionPreview text={cur.caption || cur.narration} />
@@ -224,7 +224,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
 }
 
 /** Lista o acervo do usuário para escolher a mídia de uma cena. */
-function LibraryPicker({ productionId, onPick }: { productionId: string; onPick: (assetId: string) => void }) {
+function LibraryPicker({ onPick }: { onPick: (assetId: string) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["acervo"],
     queryFn: async () => (await supabase.from("assets").select("id, kind, storage_path, description, production_id").is("production_id", null).eq("source", "upload").in("kind", ["image", "video"]).order("created_at", { ascending: false })).data ?? [],
