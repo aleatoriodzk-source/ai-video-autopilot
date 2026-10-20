@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Clapperboard, Film, KeyRound, LayoutDashboard, Link2, LogOut, Menu, Monitor, X } from "lucide-react";
+import { Boxes, Clapperboard, Film, KeyRound, LayoutDashboard, Link2, LogOut, Menu, Monitor, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
