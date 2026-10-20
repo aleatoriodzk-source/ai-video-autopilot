@@ -1,12 +1,34 @@
 // AI tasks shared by the web panel (server functions) and the local agent API.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { aiJson, TEXT_MODEL, type Usage } from "./ai.server";
+import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
 import { channelAnalysisSchema, ideasSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
 
 type DB = SupabaseClient<Database>;
+
+const LABEL: Record<string, string> = { gemini: "Gemini (chave própria)", openai: "ChatGPT (chave própria)", anthropic: "Claude (chave própria)", lovable: "Créditos da plataforma" };
+
+/** User's own API keys (server-only table, read with admin access after the caller is identified). */
+export async function loadKeys(userId: string): Promise<AiKeys> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin.from("user_api_keys").select("provider,api_key").eq("user_id", userId);
+  return Object.fromEntries((data ?? []).map((r) => [r.provider, r.api_key])) as AiKeys;
+}
+
+let ctxUser = "";
+let ctxProvider = "auto";
+let lastProvider = "lovable";
+async function aiJson<T>(opts: Parameters<typeof rawAiJson>[0]) {
+  const r = await rawAiJson<T>({ ...opts, keys: await loadKeys(ctxUser), provider: ctxProvider });
+  lastProvider = r.provider;
+  return r;
+}
+function useAi(userId: string, s: AppSettings, override?: unknown) {
+  ctxUser = userId;
+  ctxProvider = typeof override === "string" && override ? override : s.ai.text_provider;
+}
 
 export async function loadSettings(db: DB, userId: string): Promise<AppSettings> {
   const { data } = await db.from("user_settings").select("data").eq("user_id", userId).maybeSingle();
@@ -36,7 +58,7 @@ export async function recordTextUsage(db: DB, userId: string, s: AppSettings, us
     user_id: userId,
     job_id: jobId,
     production_id: productionId,
-    provider: `Lovable AI (${TEXT_MODEL})`,
+    provider: LABEL[lastProvider] ?? lastProvider,
     operation,
     units: usage.total_tokens,
     unit_name: "tokens",
@@ -53,6 +75,7 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
   const { data: an } = await db.from("analyses").select("*, reference_sources(*)").eq("id", args.analysisId).single();
   if (!an) throw new Error("Análise não encontrada");
   const s = await guardBudget(db, userId, args.jobId, null);
+  useAi(userId, s);
   const isShort = an.kind === "short";
   const { data, usage } = await aiJson<Record<string, unknown> & { style_profile: StyleProfile }>({
     system: ETHICS,
@@ -97,6 +120,7 @@ async function productionContext(db: DB, productionId: string) {
 export async function runIdeas(db: DB, userId: string, productionId: string, jobId: string | null) {
   const { p, report } = await productionContext(db, productionId);
   const s = await guardBudget(db, userId, jobId, null);
+  useAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
   const { data, usage } = await aiJson<{ ideas: unknown[] }>({
     system: ETHICS,
     user:
@@ -116,6 +140,7 @@ export async function runIdeas(db: DB, userId: string, productionId: string, job
 export async function runScript(db: DB, userId: string, productionId: string, jobId: string | null, chosenTopic?: string) {
   const { p, report } = await productionContext(db, productionId);
   const s = await guardBudget(db, userId, jobId, null);
+  useAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
   const topic = chosenTopic ?? p.topic ?? "";
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
