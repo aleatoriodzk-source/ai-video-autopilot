@@ -23,6 +23,8 @@ export async function aiJson<T>(opts: {
   schema: Record<string, unknown>;
   images?: string[]; // data: URLs or https URLs
 }): Promise<{ data: T; usage: Usage }> {
+  // Own Gemini key (free tier) takes priority so platform credits are not consumed.
+  if (process.env["GEMINI_API_KEY"]) return geminiJson<T>(opts);
   const content: Record<string, unknown>[] = [{ type: "input_text", text: opts.user }];
   for (const url of opts.images ?? []) content.push({ type: "input_image", image_url: url });
   const res = await fetch(`${GATEWAY}/v1/responses`, {
