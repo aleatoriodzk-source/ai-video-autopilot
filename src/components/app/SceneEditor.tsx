@@ -244,11 +244,12 @@ function LibraryPicker({ onPick }: { onPick: (assetId: string) => void }) {
 
 function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; storage_path: string | null; description: string | null }; onPick: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
+  const path = asset.storage_path;
   useQuery({
     queryKey: ["acervo-url", asset.id],
     queryFn: async () => {
-      if (!asset.storage_path) return null;
-      const { data } = await supabase.storage.from("media").createSignedUrl(asset.storage_path, 3600);
+      if (!path) return null;
+      const { data } = await supabase.storage.from("media").createSignedUrl(path, 3600);
       setUrl(data?.signedUrl ?? null);
       return data?.signedUrl ?? null;
     },
