@@ -19,6 +19,9 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
     """Pede para a IA olhar a mídia baixada e confirmar se mostra o assunto da cena. Se a conferência falhar, aceita (não trava o vídeo)."""
     if not runner.cfg.get("check_images", True):
         return True
+    sc["_checks"] = sc.get("_checks", 0) + 1
+    if sc["_checks"] > 4:  # limite de conferências por cena (economiza IA)
+        return True
     thumb = path.with_name(path.stem + "_chk.jpg")
     try:
         args = ["ffmpeg", "-y"] + (["-ss", "1"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
