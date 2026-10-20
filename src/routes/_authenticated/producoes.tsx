@@ -7,6 +7,7 @@ import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { activeJob, setJobStatus, startProduction } from "@/lib/jobs";
 import { generateScript } from "@/lib/ai.functions";
 import { SceneEditor } from "@/components/app/SceneEditor";
+import { JobStatus } from "@/components/app/JobStatus";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
@@ -129,6 +130,7 @@ function Producoes() {
                   </div>
                   <StatusBadge status={p.status} />
                 </div>
+                {p.status !== "draft" && <JobStatus productionId={p.id} />}
                 {p.preview_path ? <VideoPlayer path={p.preview_path} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
                   <button disabled={b} className={btn} onClick={() => script(p.id)}>{s ? "Refazer roteiro" : "Gerar roteiro"}</button>
