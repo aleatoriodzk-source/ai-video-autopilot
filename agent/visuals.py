@@ -254,10 +254,13 @@ def pick_visuals(runner, job, ctx) -> None:
             recent.append(mine["id"])
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
-        # Acervo: prefere uma mídia sua que combine com o assunto da cena; se nenhuma combinar, usa outra ainda não usada.
-        q_lib = sc.get("visual_query") or sc.get("visual_description") or sc["narration"][:60]
-        cands = [u for u in uploads if u["id"] not in recent[-window:]]
-        a = next((u for u in cands if relevant(q_lib, " ".join([u.get("description") or "", str((u.get("meta") or {}).get("tags") or "")]))), None) or (cands[0] if cands else None)
+        for src in s["visuals"]["prefer"]:
+            if src == "upload" and uploads:
+                # Acervo: prefere uma mídia sua que combine com o assunto da cena; se nenhuma combinar, usa outra ainda não usada.
+                q_lib = sc.get("visual_query") or sc.get("visual_description") or sc["narration"][:60]
+                cands = [u for u in uploads if u["id"] not in recent[-window:]]
+                a = next((u for u in cands if relevant(q_lib, " ".join([u.get("description") or "", str((u.get("meta") or {}).get("tags") or "")]))), None) or (cands[0] if cands else None)
+                if a:
                     url = runner.api.call("download_url", path=a["storage_path"])["url"]
                     _download(url, out)
                     chosen = {"id": a["id"]}
