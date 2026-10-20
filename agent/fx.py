@@ -108,6 +108,7 @@ ARCHIVE_TAG = {"suspense": "suspense", "epico": "epic", "calmo": "ambient", "ale
 
 def archive_music(mood: str, folder: Path, log=print) -> Path | None:
     """Plano B: Internet Archive, somente Creative Commons que permite uso comercial (sem -nc)."""
+    folder.mkdir(parents=True, exist_ok=True)
     try:
         q = f"subject:({ARCHIVE_TAG.get(mood, mood)}) AND mediatype:audio AND licenseurl:*creativecommons* AND NOT licenseurl:*nc*"
         r = requests.get("https://archive.org/advancedsearch.php", params={"q": q, "fl[]": ["identifier", "licenseurl", "title"], "rows": 25, "output": "json"}, timeout=25)
