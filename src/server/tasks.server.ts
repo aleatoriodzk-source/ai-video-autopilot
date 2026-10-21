@@ -168,7 +168,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
         : ps["style"] === "tiktok"
           ? "\nESTILO TIKTOK/SHORTS (dopamina): gancho brutal na primeira frase (até 8 palavras), frases curtíssimas, cenas de 1,5 a 3 segundos, uma virada surpreendente a cada 2 ou 3 cenas, zero introdução, legendas de impacto, sugira efeitos sonoros (whoosh, impacto, riser) nos cortes, final que puxa para assistir de novo."
           : "") +
-      "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-4 termos concretos e filmáveis (ex.: 'astronaut floating space station', nunca termos abstratos) para busca em banco de vídeos/fotos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
+      "\nPara cada cena: narração; legenda curta (até 6 palavras, o essencial da fala); descrição visual CONTEXTUAL do que deve aparecer; visual_query em INGLÊS com 2-5 termos concretos; pausa após (ms); efeito sonoro sugerido ou ''; movimento e transição." +
+      "\nREGRA DA visual_query: SEMPRE use o NOME PRÓPRIO do assunto real (personagem, filme, pessoa, marca, lugar, evento, ano) — ex.: 'Spider-Man 2002 movie scene', 'Iron Man 2008 suit up', 'Wolverine Deadpool fight', 'Stan Lee interview', 'Marvel comics 1990s'. NUNCA metáforas genéricas de banco de imagem (escritório, dinheiro, cofre, calculadora, pessoas andando). Se a fala é abstrata (dívida, crise, risco), mostre o personagem/filme/pessoa de que ela fala. A descrição visual também deve citar esse assunto, sem detalhes exigentes." +
       "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
       (dnaOf(report) ? `\nDNA DO FORMATO DE REFERÊNCIA (siga o gancho, a estrutura com as porcentagens, o jeito de narrar, a retenção e o CTA — com conteúdo 100% novo, sem copiar falas): ${JSON.stringify(dnaOf(report)).slice(0, 8000)}` : "") +
@@ -251,8 +252,8 @@ export async function runCheckImage(db: DB, userId: string, jobId: string, produ
   const ai = makeAi(userId, s, override);
   const schema = { type: "object", properties: { match: { type: "boolean" }, reason: { type: "string" } }, required: ["match", "reason"], additionalProperties: false };
   const { data, usage } = await ai<{ match: boolean; reason: string }>({
-    system: "Você confere se uma imagem serve para uma cena de vídeo. Seja rigoroso com o assunto principal e tolerante com detalhes.",
-    user: `Tema do vídeo: "${topic}". A cena precisa mostrar: "${description}". A imagem anexada mostra o assunto principal certo (ex.: o animal, pessoa, lugar ou época pedidos), sem ser outro bicho, pessoa aleatória, texto/logotipo ou algo sem relação? Responda match e um motivo curto em português.`,
+    system: "Você confere se uma imagem serve para uma cena de vídeo. Só reprova o que é claramente de OUTRO assunto. Detalhes (ângulo, quantidade, cor, se é à mão ou máquina, silhueta, carimbo) NUNCA reprovam.",
+    user: `Tema do vídeo: "${topic}". A cena fala de: "${description}". A imagem anexada combina com o tema/assunto geral (mesmo personagem, filme, franquia, pessoa, objeto ou época, ou algo que ilustre bem a ideia)? Reprove SOMENTE se for algo sem relação (outro bicho, paisagem aleatória, botão de inscreva-se, tela preta, marca d'água grande). Na dúvida, aprove. Responda match e um motivo curto em português.`,
     schemaName: "image_check",
     schema,
     images: [image],
