@@ -278,3 +278,33 @@ export async function runCheckImage(db: DB, userId: string, jobId: string, produ
   await recordTextUsage(db, userId, s, usage, "conferir imagem", jobId, productionId);
   return data;
 }
+
+// Modo fatiador: a IA "assiste" um quadro de cada tomada do vídeo base e escolhe a melhor tomada para cada cena do roteiro.
+export async function runMatchShots(db: DB, userId: string, jobId: string, productionId: string | null, frames: string[], scenes: string[]) {
+  const s = await guardBudget(db, userId, jobId, null);
+  let override: unknown;
+  if (productionId) {
+    const { data: p } = await db.from("productions").select("settings").eq("id", productionId).maybeSingle();
+    override = (p?.settings as Record<string, unknown> | null)?.["ai_provider"];
+  }
+  const ai = makeAi(userId, s, override);
+  const schema = {
+    type: "object",
+    properties: {
+      shots: { type: "array", items: { type: "object", properties: { i: { type: "integer" }, who: { type: "string" }, what: { type: "string" }, energy: { type: "integer" } }, required: ["i", "who", "what", "energy"], additionalProperties: false } },
+      pick: { type: "array", items: { type: "array", items: { type: "integer" } } },
+    },
+    required: ["shots", "pick"],
+    additionalProperties: false,
+  };
+  const list = scenes.map((t, i) => `${i}: ${t}`).join("\n");
+  const { data, usage } = await ai<{ shots: { i: number; who: string; what: string; energy: number }[]; pick: number[][] }>({
+    system: "Você é um editor de vídeo profissional. Assiste as tomadas como uma pessoa: reconhece personagens, ações e emoção, e escolhe a tomada que melhor ilustra cada fala.",
+    user: `As imagens anexadas são, em ordem, um quadro de cada tomada (tomada 0, 1, 2...) de um vídeo base. Para cada tomada diga quem aparece (who), o que acontece (what) e energia de 1 a 5.\nDepois, para cada cena do roteiro abaixo, devolva em "pick" uma lista com 1 a 3 números de tomadas, em ordem de preferência, que mostram o personagem/assunto citado. Evite repetir tomadas entre cenas próximas. Use tomadas de alta energia no gancho (cena 0).\nCenas:\n${list}`,
+    schemaName: "shot_match",
+    schema,
+    images: frames,
+  });
+  await recordTextUsage(db, userId, s, usage, "casar tomadas com o roteiro", jobId, productionId);
+  return data;
+}
