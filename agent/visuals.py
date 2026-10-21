@@ -282,13 +282,28 @@ def web_images(q: str) -> list[dict]:
     h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
     r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
     m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
-    if not m:
-        raise RuntimeError("busca web indisponível agora")
-    r = requests.get("https://duckduckgo.com/i.js", headers={**h, "Referer": "https://duckduckgo.com/"}, timeout=30,
-                     params={"l": "wt-wt", "o": "json", "q": q, "vqd": m.group(1), "f": ",,,,,", "p": "1"})
-    r.raise_for_status()
-    return [{"id": f"web:{x['image'][-80:]}", "url": x["image"], "page": x.get("url"), "text": x.get("title", "")}
-            for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
+    if m:
+        r = requests.get("https://duckduckgo.com/i.js", headers={**h, "Referer": "https://duckduckgo.com/"}, timeout=30,
+                         params={"l": "wt-wt", "o": "json", "q": q, "vqd": m.group(1), "f": ",,,,,", "p": "1"})
+        if r.status_code == 200 and "results" in r.text:
+            res = [{"id": f"web:{x['image'][-80:]}", "url": x["image"], "page": x.get("url"), "text": x.get("title", "")}
+                   for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
+            if res:
+                return res
+    # Plano B: Bing Imagens.
+    import html as _h
+    r = requests.get("https://www.bing.com/images/async", params={"q": q, "first": 0, "count": 35, "qft": "+filterui:imagesize-large"}, headers=h, timeout=30)
+    out = []
+    for raw in re.findall(r'm="(\{.*?\})"', r.text):
+        try:
+            d = json.loads(_h.unescape(raw))
+        except Exception:
+            continue
+        if d.get("murl"):
+            out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
+    if not out:
+        raise RuntimeError("busca de imagens na web indisponível agora")
+    return out[:20]
 
 
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
