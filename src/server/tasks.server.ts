@@ -152,7 +152,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
   const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
   const rep = dna.replication ?? {};
-  const measured = (report as { scenes?: unknown[] } | null) && Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
+  const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
   // Reference pacing wins: a 0.9s-per-cut reference means ~1.5-2s narrated micro-scenes (one clip can carry 1-2 cuts).
   const refScene = measured ? Math.min(6, Math.max(1.5, measured * 1.6)) : ps["style"] === "tiktok" ? 2.2 : null;
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(120, Math.max(4, Math.round(target / refScene))) : null;
@@ -184,6 +184,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       "\nREGRA DA visual_query: SEMPRE use o NOME PRÓPRIO do assunto real (personagem, filme, pessoa, marca, lugar, evento, ano) — ex.: 'Spider-Man 2002 movie scene', 'Iron Man 2008 suit up', 'Wolverine Deadpool fight', 'Stan Lee interview', 'Marvel comics 1990s'. NUNCA metáforas genéricas de banco de imagem (escritório, dinheiro, cofre, calculadora, pessoas andando). Se a fala é abstrata (dívida, crise, risco), mostre o personagem/filme/pessoa de que ela fala. A descrição visual também deve citar esse assunto, sem detalhes exigentes." +
       "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
+      (rep.script_skeleton?.length && !ready ? `\nESQUELETO DA REFERÊNCIA (siga esta sequência de funções das frases, com conteúdo novo): ${rep.script_skeleton.join(" → ")}` : "") +
+      (rep.hook_anatomy ? `\nANATOMIA DO GANCHO DA REFERÊNCIA (replique a mecânica nos 3 primeiros segundos): ${rep.hook_anatomy}` : "") +
+      (measured ? `\nRITMO MEDIDO NA REFERÊNCIA: um corte a cada ${measured}s. Cenas curtas, uma ideia por cena, sem pausas longas (pause_after_ms entre 0 e 150).` : "") +
       (dnaOf(report) ? `\nDNA DO FORMATO DE REFERÊNCIA (siga o gancho, a estrutura com as porcentagens, o jeito de narrar, a retenção e o CTA — com conteúdo 100% novo, sem copiar falas): ${JSON.stringify(dnaOf(report)).slice(0, 8000)}` : "") +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
       `\nResumo do canal: ${JSON.stringify(report ?? "não disponível").slice(0, 12000)}`,
@@ -226,7 +229,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (rows.length) await db.from("scenes").insert(rows);
   // Keep the user's own title/topic: the AI must never rename the production.
   data.title = p.title || topic;
-  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 
