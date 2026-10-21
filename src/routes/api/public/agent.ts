@@ -221,9 +221,10 @@ async function bundle(db: any, job: { production_id: string | null; reference_id
     out.production = p;
     out.scenes = scenes;
     out.assets = assets;
-    // Modo fatiador precisa do vídeo de referência; voz clonada precisa da amostra.
-    if (p?.reference_id && !job.reference_id) {
-      const { data: r } = await db.from("reference_sources").select("id,urls,title").eq("id", p.reference_id).maybeSingle();
+    // Modo fatiador: vídeo das cenas (separado do vídeo de estilo); cai para a referência de estilo se não houver.
+    const srcId = (p?.settings as Record<string, unknown> | null)?.["scenes_reference_id"] ?? p?.reference_id;
+    if (typeof srcId === "string" && !job.reference_id) {
+      const { data: r } = await db.from("reference_sources").select("id,urls,title").eq("id", srcId).maybeSingle();
       out.source_reference = r;
     }
     const vid = (p?.settings as Record<string, unknown> | null)?.["voice_id"];

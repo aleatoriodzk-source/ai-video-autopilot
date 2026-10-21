@@ -46,6 +46,8 @@ function Producoes() {
   const [mediaRule, setMediaRule] = useState("auto");
   const [sourceMode, setSourceMode] = useState("search");
   const [voiceId, setVoiceId] = useState("");
+  const [scenesRef, setScenesRef] = useState("");
+  const [scenesUrl, setScenesUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
@@ -61,16 +63,24 @@ function Producoes() {
 
   async function create() {
     if (!topic.trim()) { toast.error(scriptMode === "ready" ? "Dê um título para o vídeo" : "Informe um tema ou instrução"); return; }
-    if (sourceMode === "reference" && !refId) { toast.error("Escolha o vídeo de referência para fatiar"); return; }
+    const link = scenesUrl.trim();
+    if (sourceMode === "reference" && !scenesRef && !/^https?:\/\//.test(link)) { toast.error("Escolha ou cole o link do vídeo das cenas"); return; }
     if (scriptMode === "ready" && readyScript.trim().split(/\s+/).length < 10) { toast.error("Cole o roteiro pronto (pelo menos algumas frases)"); return; }
     const min = Number(minutes.replace(",", "."));
     if (!(min >= 0.25 && min <= 30)) { toast.error("Duração entre 0,25 e 30 minutos"); return; }
     const sc = scenes ? Number(scenes) : null;
     if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
+    let srcId = scenesRef;
+    if (sourceMode === "reference" && !srcId) {
+      const { data: r, error: e } = await supabase.from("reference_sources").insert({ user_id: u.user!.id, urls: [link], platform: /tiktok\.com/.test(link) ? "tiktok" : "youtube", kind: "video", title: "Cenas: " + topic.trim().slice(0, 60) }).select("id").single();
+      if (e) { toast.error(e.message); return; }
+      srcId = r.id; qc.invalidateQueries({ queryKey: ["refs"] });
+    }
     const settings = {
       target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule,
       source_mode: sourceMode, ...(voiceId ? { voice_id: voiceId } : {}),
+      ...(sourceMode === "reference" && srcId ? { scenes_reference_id: srcId } : {}),
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
       ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
     };
@@ -123,10 +133,12 @@ function Producoes() {
             <option value="auto">Automático (cor da referência)</option><option value="neon">Verde neon (CapCut)</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option>
           </select>
         </label>
-        <select value={refId} onChange={(e) => setRefId(e.target.value)} className={input}>
-          <option value="">Sem referência</option>
-          {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}
-        </select>
+        <label className="text-xs text-muted-foreground">Vídeo de estilo (o curto que ele copia: ritmo, legenda, gancho)
+          <select value={refId} onChange={(e) => setRefId(e.target.value)} className={input + " mt-1"}>
+            <option value="">Sem referência de estilo</option>
+            {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}
+          </select>
+        </label>
         <div className="flex gap-2">
           <select value={aspect} onChange={(e) => setAspect(e.target.value)} className={input}>
             <option value="9:16">9:16 vertical</option><option value="16:9">16:9 horizontal</option><option value="1:1">1:1 quadrado</option>
@@ -152,9 +164,19 @@ function Producoes() {
         <label className="text-xs text-muted-foreground md:col-span-2">De onde vêm as cenas
           <select value={sourceMode} onChange={(e) => setSourceMode(e.target.value)} className={input + " mt-1"}>
             <option value="search">Buscar clipes e imagens (YouTube, web, bancos)</option>
-            <option value="reference">Fatiar o vídeo de referência (usa as cenas dele com o meu roteiro — bem mais rápido)</option>
+            <option value="reference">Fatiar um vídeo com as cenas (ex.: compilação Marvel) — bem mais rápido</option>
           </select>
         </label>
+        {sourceMode === "reference" && (
+          <div className="grid gap-2 rounded-md border border-border p-3 md:col-span-2">
+            <div className="text-xs text-muted-foreground">Vídeo das cenas (separado do vídeo de estilo acima). Escolha um salvo ou cole o link do YouTube/TikTok:</div>
+            <select value={scenesRef} onChange={(e) => { setScenesRef(e.target.value); if (e.target.value) setScenesUrl(""); }} className={input}>
+              <option value="">— colar link abaixo —</option>
+              {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}
+            </select>
+            {!scenesRef && <input value={scenesUrl} onChange={(e) => setScenesUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." className={input} />}
+          </div>
+        )}
         <label className="text-xs text-muted-foreground">Voz da narração
           <select value={voiceId ? `clone:${voiceId}` : voice} onChange={(e) => { const v = e.target.value; if (v.startsWith("clone:")) setVoiceId(v.slice(6)); else { setVoiceId(""); setVoice(v); } }} className={input + " mt-1"}>
             <option value="pt-BR-AntonioNeural">Antonio (masculina, firme)</option><option value="pt-BR-FranciscaNeural">Francisca (feminina, clara)</option><option value="pt-BR-ThalitaMultilingualNeural">Thalita (feminina, jovem)</option>
