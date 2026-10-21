@@ -157,16 +157,15 @@ def transitions(clips: list[Path], durs: list[float], trans: list[str], out: Pat
 
 
 def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, total: float) -> Path | None:
-    """Monta uma faixa de efeitos: o efeito pedido na cena entra no início dela; transições ganham whoosh."""
-    hits, t = [], 0.0
+    """SFX pontual (estilo viral): impacto no gancho e no máximo mais 2 efeitos pedidos pelo roteiro, com 8 s de distância. Nada de whoosh em todo corte."""
+    hits, t, last = [], 0.0, -99.0
     for i, sc in enumerate(scenes):
         k = sfx_kind(sc.get("sfx") or "")
-        if i == 0 and not k:
-            k = "impact"
-        if not k and i > 0 and (scenes[i - 1].get("transition") or "cut") != "cut":
-            k = "whoosh"
-        if k:
+        if i == 0:
+            k = k or "impact"
+        if k and (i == 0 or (len(hits) < 3 and t - last >= 8)):
             hits.append((max(0.0, t - (0.25 if k == "whoosh" else 0)), make_sfx(k, cache)))
+            last = t
         t += durs[i]
     if not hits:
         return None
@@ -174,7 +173,7 @@ def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, tot
     for n, (at, f) in enumerate(hits, 1):
         inputs += ["-i", str(f)]
         ms = int(at * 1000)
-        parts.append(f"[{n}:a]volume=0.6,adelay={ms}|{ms}[s{n}]")
+        parts.append(f"[{n}:a]volume=0.45,adelay={ms}|{ms}[s{n}]")
     mix = "".join(f"[s{n}]" for n in range(1, len(hits) + 1))
     graph = ";".join(parts) + f";[0:a]{mix}amix=inputs={len(hits) + 1}:duration=first:normalize=0[a]"
     media.run(["ffmpeg", "-y", *inputs, "-filter_complex", graph, "-map", "[a]", "-ar", "48000", str(out)])

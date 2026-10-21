@@ -40,6 +40,10 @@ function Producoes() {
   const [voice, setVoice] = useState("pt-BR-AntonioNeural");
   const [rate, setRate] = useState("+5%");
   const [mood, setMood] = useState("auto");
+  const [scriptMode, setScriptMode] = useState<"ai" | "ready">("ai");
+  const [readyScript, setReadyScript] = useState("");
+  const [captionStyle, setCaptionStyle] = useState("auto");
+  const [mediaRule, setMediaRule] = useState("auto");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
@@ -53,16 +57,21 @@ function Producoes() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["prods"] });
 
   async function create() {
-    if (!topic.trim()) { toast.error("Informe um tema ou instrução"); return; }
+    if (!topic.trim()) { toast.error(scriptMode === "ready" ? "Dê um título para o vídeo" : "Informe um tema ou instrução"); return; }
+    if (scriptMode === "ready" && readyScript.trim().split(/\s+/).length < 10) { toast.error("Cole o roteiro pronto (pelo menos algumas frases)"); return; }
     const min = Number(minutes.replace(",", "."));
     if (!(min >= 0.25 && min <= 30)) { toast.error("Duração entre 0,25 e 30 minutos"); return; }
     const sc = scenes ? Number(scenes) : null;
     if (sc !== null && !(sc >= 2 && sc <= 300)) { toast.error("Cenas entre 2 e 300"); return; }
     const { data: u } = await supabase.auth.getUser();
-    const settings = { target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}) };
-    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.slice(0, 80), topic, aspect, mode, reference_id: refId || null, settings });
+    const settings = {
+      target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule,
+      ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
+      ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
+    };
+    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect, mode, reference_id: refId || null, settings });
     if (error) { toast.error(error.message); return; }
-    setTopic(""); toast.success("Produção criada"); refresh();
+    setTopic(""); setReadyScript(""); toast.success("Produção criada"); refresh();
   }
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
@@ -91,7 +100,24 @@ function Producoes() {
     <div>
       <PageHeader title="Produções" subtitle="Crie um vídeo a partir de um tema. No modo automático o agente local executa todas as etapas; no assistido ele para para você aprovar cada uma." />
       <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-2">
-        <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} placeholder="Tema ou instrução, ex.: 5 curiosidades sobre o oceano profundo" className={input + " md:col-span-2"} />
+        <div className="flex gap-2 md:col-span-2">
+          <button type="button" className={btn + (scriptMode === "ai" ? " bg-accent" : "")} onClick={() => setScriptMode("ai")}>IA cria o roteiro</button>
+          <button type="button" className={btn + (scriptMode === "ready" ? " bg-accent" : "")} onClick={() => setScriptMode("ready")}>Tenho roteiro pronto</button>
+        </div>
+        <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={scriptMode === "ready" ? 1 : 2} placeholder={scriptMode === "ready" ? "Título do vídeo, ex.: Curiosidades do Thor" : "Tema ou instrução, ex.: Curiosidades do Thor (o título fica exatamente como você escrever)"} className={input + " md:col-span-2"} />
+        {scriptMode === "ready" && (
+          <textarea value={readyScript} onChange={(e) => setReadyScript(e.target.value)} rows={8} placeholder="Cole aqui o seu roteiro. O sistema não muda nenhuma palavra: só divide em cenas, escolhe os clipes, narra e monta." className={input + " md:col-span-2"} />
+        )}
+        <label className="text-xs text-muted-foreground">Tipo de mídia
+          <select value={mediaRule} onChange={(e) => setMediaRule(e.target.value)} className={input + " mt-1"}>
+            <option value="auto">Automático (segue a referência)</option><option value="video_only">Somente vídeos (ex.: Marvel, filmes, games)</option><option value="mixed">Vídeos e fotos</option>
+          </select>
+        </label>
+        <label className="text-xs text-muted-foreground">Estilo da legenda
+          <select value={captionStyle} onChange={(e) => setCaptionStyle(e.target.value)} className={input + " mt-1"}>
+            <option value="auto">Automático (cor da referência)</option><option value="neon">Verde neon (CapCut)</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option>
+          </select>
+        </label>
         <select value={refId} onChange={(e) => setRefId(e.target.value)} className={input}>
           <option value="">Sem referência</option>
           {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}

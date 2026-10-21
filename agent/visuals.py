@@ -308,9 +308,10 @@ def web_images(q: str) -> list[dict]:
 
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     """Mídia real do assunto: trecho do YouTube primeiro, depois imagem da web."""
+    video_only = bool((prod.get("settings") or {}).get("video_only")) or is_pop(q, prod.get("topic") or "")
     if runner.cfg.get("youtube_clips", True):
         vout = work / f"vid_{sc['idx']:03d}.mp4"
-        for _ in range(2):
+        for _ in range(3 if video_only else 2):
             c = youtube_clip(runner, job, q, sc, vout, yt_used)
             if not c:
                 break
@@ -320,6 +321,11 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
                                   "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar", "attribution": f"{c['channel']} — {c['title']}"[:200], "local_path": str(vout), "description": q})["id"]
             return {"id": aid, "key": c["id"]}
         vout.unlink(missing_ok=True)
+    if video_only and (sc.get("_vo_try") or 0) < 1:
+        # Nicho só de vídeos: tenta mais uma vez com uma busca mais ampla antes de aceitar foto.
+        sc["_vo_try"] = 1
+        base = " ".join((prod.get("topic") or q).split()[:4])
+        return _web_pick(runner, job, f"{base} movie scene", work, sc, prod, recent, window, yt_used)
     out = work / f"img_{sc['idx']:03d}.jpg"
     try:
         tried = 0
@@ -407,7 +413,7 @@ def pick_visuals(runner, job, ctx) -> None:
                     break
                 if chosen:
                     break
-                for ph in pexels_search(key, q, orientation):
+                for ph in ([] if (prod.get("settings") or {}).get("video_only") else pexels_search(key, q, orientation)):
                     pid = f"pexels:{ph['id']}"
                     if pid in recent[-window * 3:]:
                         continue

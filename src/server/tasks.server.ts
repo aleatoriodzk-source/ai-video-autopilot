@@ -151,13 +151,19 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : null;
   const words = Math.round(target * WORDS_PER_SECOND);
+  const ready = String(ps["ready_script"] ?? "").trim();
+  const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
+  const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos/.test(dnaText));
   let { data, usage } = await ai<ScriptOut>({
     system:
       ETHICS +
       " Você é um roteirista profissional de canais virais do YouTube brasileiro. Escreve como gente fala: frases curtas, ritmo, curiosidade, viradas e exemplos concretos. Proibido: clichês ('você sabia que', 'neste vídeo', 'fique até o final', 'incrível', 'nos dias de hoje'), frases vazias, repetição de ideias, enrolação, fatos inventados ou números sem base. Cada cena precisa entregar uma informação nova ou avançar a história.",
     user:
-      `Escreva um roteiro completo para narração em PT-BR sobre: "${topic}".` +
-      `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte. Formato ${p.aspect}.` +
+      (ready
+        ? `O usuário JÁ ESCREVEU o roteiro abaixo. Sua tarefa é só DIVIDIR em cenas e planejar o visual. Copie a narração PALAVRA POR PALAVRA, na mesma ordem, sem resumir, cortar, reescrever ou acrescentar nada (apenas escreva números por extenso e remova emojis/símbolos para a voz). O title deve ser exatamente: "${topic}". Formato ${p.aspect}.\nROTEIRO DO USUÁRIO:\n${ready.slice(0, 40000)}\n`
+        : `Escreva um roteiro completo para narração em PT-BR sobre: "${topic}". Mantenha o tema exatamente como o usuário pediu (não troque o ângulo, ex.: 'curiosidades' continua sendo curiosidades).` +
+          `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte. Formato ${p.aspect}.`) +
+      (videoOnly ? "\nREGRA DE MÍDIA: este nicho usa SOMENTE VÍDEOS em movimento (cenas de filmes, trailers, gameplay, clipes). Cada visual_query deve descrever uma CENA EM MOVIMENTO do assunto, ex.: 'Thor Ragnarok lightning fight scene', 'Thor hammer Mjolnir summon scene'. Nunca peça foto, pôster ou imagem parada." : "") +
       (sceneCount
         ? `\nO roteiro deve ter EXATAMENTE ${sceneCount} cenas (≈ ${Math.round(words / sceneCount)} palavras de narração por cena).`
         : `\nDivida em cenas de ${style?.pacing?.avg_scene_s ?? 4}-${(style?.pacing?.avg_scene_s ?? 4) + 3}s cada.`) +
@@ -180,7 +186,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   });
   await recordTextUsage(db, userId, s, usage, "roteiro", jobId, productionId);
   // The AI often writes less than asked (e.g. 39s instead of 60s): ask it to extend until it reaches the word target.
-  for (let round = 0; round < 2 && scriptIsShort(data.scenes, target); round++) {
+  for (let round = 0; !ready && round < 2 && scriptIsShort(data.scenes, target); round++) {
     const have = countWords(data.scenes);
     const r = await ai<ScriptOut>({
       system: ETHICS + " Você é um roteirista profissional. Mantém o tom, o gancho e a estrutura, e só acrescenta conteúdo novo, concreto e verdadeiro.",
@@ -212,7 +218,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
     transition: sc.transition,
   }));
   if (rows.length) await db.from("scenes").insert(rows);
-  await db.from("productions").update({ script: data as never, title: data.title, topic }).eq("id", productionId);
+  // Keep the user's own title/topic: the AI must never rename the production.
+  data.title = p.title || topic;
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 
