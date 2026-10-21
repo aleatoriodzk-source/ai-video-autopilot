@@ -149,8 +149,14 @@ class Runner:
         ctx["prod"], ctx["scenes"], ctx["assets"] = b["production"], b.get("scenes") or [], b.get("assets") or []
 
     def step_analyze(self, job, ctx):
-        if not job.get("analysis_id"):
-            self.log(job, "sem referência para analisar; etapa ignorada", step="analyze")
+        if job.get("analysis_id"):
+            return
+        p = ctx["prod"]
+        if not p.get("reference_id"):
+            self.log(job, "produção sem vídeo de referência: o estilo virá só das suas escolhas", step="analyze")
+            return
+        ps = p.get("settings") or {}
+        self.log(job, f"usando o DNA da referência já analisada (mídia: {'somente vídeos' if ps.get('video_only') else 'automática'}, legenda: {ps.get('caption_resolved') or ps.get('caption_style') or 'auto'})", step="analyze")
 
     def step_topic(self, job, ctx):
         if (ctx["prod"].get("topic") or "").strip():
