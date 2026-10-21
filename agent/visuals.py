@@ -258,9 +258,11 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         return None
     need = _scene_secs(sc)
     for e in data.get("entries") or []:
-        vid, dur = e.get("id"), e.get("duration") or 0
-        if not vid or dur < 20 or dur > 3600 or vid in used:
+        vid, dur = e.get("id"), e.get("duration")
+        # busca rápida às vezes vem sem duração: não descarta, assume um clipe de ~3 min
+        if not vid or vid in used or (dur and (dur < 15 or dur > 3600)):
             continue
+        dur = float(dur or 180)
         start = round(random.uniform(dur * 0.12, max(dur * 0.12, dur * 0.75 - need)), 1)
         out.unlink(missing_ok=True)
         try:

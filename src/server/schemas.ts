@@ -43,6 +43,17 @@ export const formatDnaSchema = obj({
   do_list: arr(str),
   dont_list: arr(str),
   new_video_ideas: arr(str),
+  replication: obj({
+    media_rule: enm("video_only", "images_only", "mixed"),
+    scene_seconds: num,
+    hook_anatomy: str,
+    voice_pace: str,
+    voice_rate_percent: num,
+    pause_style: str,
+    sfx_placement: str,
+    caption_color: enm("neon", "hormozi", "red", "clean"),
+    script_skeleton: arr(str),
+  }),
 });
 
 export const channelAnalysisSchema = obj({

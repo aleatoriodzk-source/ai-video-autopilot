@@ -81,7 +81,8 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
       (isShort
         ? "Analise a estrutura visual e temporal deste vídeo curto. Use as cenas detectadas automaticamente (tempos de corte do FFmpeg), a transcrição com tempos e os quadros-chave anexados (na ordem dos tempos indicados)."
         : "Analise este canal/perfil a partir dos metadados públicos, transcrições e estatísticas de cortes coletadas pelo agente local. Foram baixados vários vídeos (os mais e os menos vistos). Preencha video_comparison com cada vídeo analisado, common_patterns com o que se repete em todos e winning_formula com o que os mais vistos fazem diferente dos menos vistos. Só classifique desempenho se houver visualizações; senão use sem_dados.") +
-      "\n\nAlém disso, preencha format_dna como um especialista em formatos virais: descubra nicho e subnicho, público, a promessa do vídeo, o tipo exato de gancho e o molde da primeira frase (com 3 modelos reaproveitáveis com [TEMA]), a estrutura em partes com % do tempo, como a narração é escrita (pessoa, tom, palavras por segundo, tamanho das frases, recursos como perguntas, contrastes, números), técnicas de retenção e loops abertos, edição (cortes por minuto, zoom, transições, proporção de imagens de apoio), legendas, áudio, que tipo de imagem usar e em qual fonte (Wikimedia, NASA, Pexels, Pixabay, Internet Archive), CTA, padrão de título, o que fazer e o que evitar, e 5 ideias de vídeos novos no mesmo formato. Descreva o FORMATO, nunca copie falas ou conteúdo protegido. Se algo não pode ser medido, diga que é estimativa." +
+      "\n\nAlém disso, preencha format_dna como um especialista em formatos virais: descubra nicho e subnicho, público, a promessa do vídeo, o tipo exato de gancho e o molde da primeira frase (com 3 modelos reaproveitáveis com [TEMA]), a estrutura em partes com % do tempo, como a narração é escrita (pessoa, tom, palavras por segundo, tamanho das frases, recursos como perguntas, contrastes, números), técnicas de retenção e loops abertos, edição (cortes por minuto, zoom, transições, proporção de imagens de apoio), legendas, áudio, que tipo de imagem usar e em qual fonte (YouTube para cenas de filmes/clipes, web, Wikimedia, NASA, Pexels, Pixabay, Internet Archive), CTA, padrão de título, o que fazer e o que evitar, e 5 ideias de vídeos novos no mesmo formato. Descreva o FORMATO, nunca copie falas ou conteúdo protegido. Se algo não pode ser medido, diga que é estimativa." +
+      "\n\nANÁLISE FORENSE: os dados trazem, por vídeo, 'transcript' (falas com tempo), 'audio' (pausas medidas na voz, sound_hits = impactos/efeitos sonoros) e 'edit' (cortes por minuto em cada terço, cortes e texto dos 3 primeiros segundos, palavras por segundo, impactos que coincidem com cortes). Use esses NÚMEROS reais. Preencha format_dna.replication para que o vídeo novo seja uma cópia exata do FORMATO: media_rule ('video_only' se os quadros mostram clipes/cenas de filme/gameplay em movimento — nichos de filmes, heróis, anime, futebol, games quase sempre são video_only); scene_seconds = média medida entre cortes; hook_anatomy (o que acontece em cada segundo dos 3 primeiros: fala, corte, impacto); voice_pace (palavras/segundo medidas e energia); voice_rate_percent (velocidade para a voz sintética: 0 normal, 10 a 25 se fala rápida, -10 se lenta); pause_style (pausas medidas: quantas, média, onde ficam); sfx_placement (onde caem os impactos: gancho, viradas, cada corte); caption_color pelo destaque visto nos quadros (verde=neon, amarelo=hormozi, vermelho=red, branco=clean); script_skeleton = a sequência de funções de cada frase da transcrição (ex.: 'pergunta chocante', 'fato 1 com número', 'virada', 'CTA'), sem copiar as palavras." +
         "\n\nDADOS COLETADOS (JSON):\n" +
       JSON.stringify(args.collected).slice(0, 120_000),
     schemaName: isShort ? "short_analysis" : "channel_analysis",
@@ -149,11 +150,16 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const style = p.style_profiles?.profile as StyleProfile | undefined;
   const ps = (p.settings ?? {}) as Record<string, unknown>;
   const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
-  const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : null;
+  const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
+  const rep = dna.replication ?? {};
+  const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
+  // Reference pacing wins: a 0.9s-per-cut reference means ~1.5-2s narrated micro-scenes (one clip can carry 1-2 cuts).
+  const refScene = measured ? Math.min(6, Math.max(1.5, measured * 1.6)) : ps["style"] === "tiktok" ? 2.2 : null;
+  const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(120, Math.max(4, Math.round(target / refScene))) : null;
   const words = Math.round(target * WORDS_PER_SECOND);
   const ready = String(ps["ready_script"] ?? "").trim();
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
-  const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos/.test(dnaText));
+  const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "video_only" || /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos|cenas de filme|clipes de filme|trailer|gameplay/.test(dnaText)));
   let { data, usage } = await ai<ScriptOut>({
     system:
       ETHICS +
@@ -178,6 +184,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       "\nREGRA DA visual_query: SEMPRE use o NOME PRÓPRIO do assunto real (personagem, filme, pessoa, marca, lugar, evento, ano) — ex.: 'Spider-Man 2002 movie scene', 'Iron Man 2008 suit up', 'Wolverine Deadpool fight', 'Stan Lee interview', 'Marvel comics 1990s'. NUNCA metáforas genéricas de banco de imagem (escritório, dinheiro, cofre, calculadora, pessoas andando). Se a fala é abstrata (dívida, crise, risco), mostre o personagem/filme/pessoa de que ela fala. A descrição visual também deve citar esse assunto, sem detalhes exigentes." +
       "\nREGRAS DA NARRAÇÃO (será lida por voz sintética): só texto corrido falado. PROIBIDO emojis, símbolos (§ ¶ * # _ / % & + =), markdown, aspas decorativas, rubricas entre parênteses ou colchetes como (pausa) ou [música], e siglas soletradas. Escreva números, porcentagens e valores por extenso (ex.: 'vinte e cinco por cento', 'mil e quinhentos'). Evite palavras em inglês na narração." +
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
+      (rep.script_skeleton?.length && !ready ? `\nESQUELETO DA REFERÊNCIA (siga esta sequência de funções das frases, com conteúdo novo): ${rep.script_skeleton.join(" → ")}` : "") +
+      (rep.hook_anatomy ? `\nANATOMIA DO GANCHO DA REFERÊNCIA (replique a mecânica nos 3 primeiros segundos): ${rep.hook_anatomy}` : "") +
+      (measured ? `\nRITMO MEDIDO NA REFERÊNCIA: um corte a cada ${measured}s. Cenas curtas, uma ideia por cena, sem pausas longas (pause_after_ms entre 0 e 150).` : "") +
       (dnaOf(report) ? `\nDNA DO FORMATO DE REFERÊNCIA (siga o gancho, a estrutura com as porcentagens, o jeito de narrar, a retenção e o CTA — com conteúdo 100% novo, sem copiar falas): ${JSON.stringify(dnaOf(report)).slice(0, 8000)}` : "") +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
       `\nResumo do canal: ${JSON.stringify(report ?? "não disponível").slice(0, 12000)}`,
@@ -220,7 +229,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (rows.length) await db.from("scenes").insert(rows);
   // Keep the user's own title/topic: the AI must never rename the production.
   data.title = p.title || topic;
-  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 
