@@ -215,6 +215,16 @@ class Runner:
             self.log(job, f"o roteiro rende {total:.0f}s de {target:.0f}s pedidos. Para ficar maior, clique em 'Refazer roteiro'.", "warn", "narration")
 
     def step_visuals(self, job, ctx):
+        ps = ctx["prod"].get("settings") or {}
+        ref = ctx.get("source_reference")
+        if ps.get("source_mode") == "reference":
+            if not ref:
+                raise media.MediaError("modo fatiador ligado, mas a produção não tem vídeo de referência escolhido")
+            from slicer import slice_from_reference
+            for sc in ctx["scenes"]:
+                (ctx["work"] / f"img_{sc['idx']:03d}.jpg").unlink(missing_ok=True)
+            if slice_from_reference(self, job, ctx, ref):
+                return
         from visuals import pick_visuals
         pick_visuals(self, job, ctx)
 
