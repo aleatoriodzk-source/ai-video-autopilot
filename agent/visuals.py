@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 import requests
@@ -230,6 +231,117 @@ def _best_file(files: list[dict], w: int, h: int) -> dict | None:
     return ok[0] if ok else (max(mp4, key=lambda f: f["width"] * f["height"]) if mp4 else None)
 
 
+POP = ("marvel", "dc ", "dc comics", "hero", "herói", "heroi", "super", "avengers", "vingadores", "spider", "aranha", "batman", "superman", "x-men", "wolverine",
+       "deadpool", "iron man", "homem de ferro", "thor", "hulk", "captain", "capitão", "star wars", "disney", "pixar", "anime", "naruto", "dragon ball", "pokemon",
+       "game", "jogo", "minecraft", "gta", "fortnite", "filme", "movie", "film", "série", "serie", "netflix", "trailer", "scene", "celebr", "famoso", "futebol",
+       "football", "soccer", "nba", "ufc", "messi", "neymar", "ronaldo", "music", "música", "cantor", "rapper", "hollywood", "harry potter", "senhor dos anéis")
+
+
+def is_pop(q: str, topic: str) -> bool:
+    t = f" {q} {topic} ".lower()
+    return any(w in t for w in POP)
+
+
+def _scene_secs(sc: dict) -> float:
+    return max(3.0, min(12.0, len((sc.get("narration") or "").split()) / 2.5 + 1.0))
+
+
+def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
+    """Busca no YouTube (trailers/cenas) e baixa só o trecho que a cena precisa."""
+    import random
+    import subprocess
+    from analyzer import _ytdlp
+    try:
+        data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"]))
+    except Exception as e:
+        runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
+        return None
+    need = _scene_secs(sc)
+    for e in data.get("entries") or []:
+        vid, dur = e.get("id"), e.get("duration") or 0
+        if not vid or dur < 20 or dur > 3600 or vid in used:
+            continue
+        start = round(random.uniform(dur * 0.12, max(dur * 0.12, dur * 0.75 - need)), 1)
+        out.unlink(missing_ok=True)
+        try:
+            _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
+                    "--download-sections", f"*{start}-{start + need}", "--force-keyframes-at-cuts",
+                    "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
+        except Exception as ex:
+            runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            continue
+        if out.exists() and out.stat().st_size > 20000:
+            used.add(vid)
+            return {"id": f"yt:{vid}:{start}", "page": f"https://www.youtube.com/watch?v={vid}&t={int(start)}", "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
+    return None
+
+
+def web_images(q: str) -> list[dict]:
+    """Busca de imagens na web (DuckDuckGo): pôsteres, personagens, fotos reais. Sem chave."""
+    import re
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
+    r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
+    m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
+    if m:
+        r = requests.get("https://duckduckgo.com/i.js", headers={**h, "Referer": "https://duckduckgo.com/"}, timeout=30,
+                         params={"l": "wt-wt", "o": "json", "q": q, "vqd": m.group(1), "f": ",,,,,", "p": "1"})
+        if r.status_code == 200 and "results" in r.text:
+            res = [{"id": f"web:{x['image'][-80:]}", "url": x["image"], "page": x.get("url"), "text": x.get("title", "")}
+                   for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
+            if res:
+                return res
+    # Plano B: Bing Imagens.
+    import html as _h
+    r = requests.get("https://www.bing.com/images/async", params={"q": q, "first": 0, "count": 35, "qft": "+filterui:imagesize-large"}, headers=h, timeout=30)
+    out = []
+    for raw in re.findall(r'm="(\{.*?\})"', r.text):
+        try:
+            d = json.loads(_h.unescape(raw))
+        except Exception:
+            continue
+        if d.get("murl"):
+            out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
+    if not out:
+        raise RuntimeError("busca de imagens na web indisponível agora")
+    return out[:20]
+
+
+def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
+    """Mídia real do assunto: trecho do YouTube primeiro, depois imagem da web."""
+    if runner.cfg.get("youtube_clips", True):
+        vout = work / f"vid_{sc['idx']:03d}.mp4"
+        for _ in range(2):
+            c = youtube_clip(runner, job, q, sc, vout, yt_used)
+            if not c:
+                break
+            if not vision_ok(runner, job, vout, sc, prod):
+                continue
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube", "source_url": c["page"],
+                                  "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar", "attribution": f"{c['channel']} — {c['title']}"[:200], "local_path": str(vout), "description": q})["id"]
+            return {"id": aid, "key": c["id"]}
+        vout.unlink(missing_ok=True)
+    out = work / f"img_{sc['idx']:03d}.jpg"
+    try:
+        tried = 0
+        for c in web_images(q):
+            if c["id"] in recent[-window * 3:] or tried >= 4:
+                continue
+            tried += 1
+            try:
+                _download(c["url"], out)
+            except Exception:
+                continue
+            if not vision_ok(runner, job, out, sc, prod):
+                recent.append(c["id"])
+                continue
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "web", "source_url": c["page"],
+                                  "license": "Imagem da web — direitos do autor original; verifique antes de monetizar", "attribution": (c["text"] or "web")[:200], "local_path": str(out), "description": q})["id"]
+            return {"id": aid, "key": c["id"]}
+    except Exception as e:
+        runner.log(job, f"imagens web: {e}", "warn", "visuals")
+    return None
+
+
 def pick_visuals(runner, job, ctx) -> None:
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
     w, h = ctx["w"], ctx["h"]
@@ -239,7 +351,9 @@ def pick_visuals(runner, job, ctx) -> None:
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
+    yt_used: set = set()
     ai_used = 0
+    topic = prod.get("topic") or prod.get("title") or ""
     for sc in ctx["scenes"]:
         out = work / f"img_{sc['idx']:03d}.jpg"
         # Limpa mídias de renderizações anteriores (cenas podem ter sido editadas no site).
@@ -254,7 +368,11 @@ def pick_visuals(runner, job, ctx) -> None:
             recent.append(mine["id"])
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
-        for src in s["visuals"]["prefer"]:
+        q0 = sc.get("visual_query") or sc["narration"][:60]
+        if is_pop(q0, topic):
+            # Cultura pop / filmes / famosos: bancos de estoque não têm isso — vai direto no YouTube e na web.
+            chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
+        for src in ([] if chosen else s["visuals"]["prefer"]):
             if src == "upload" and uploads:
                 # Acervo: prefere uma mídia sua que combine com o assunto da cena; se nenhuma combinar, usa outra ainda não usada.
                 q_lib = sc.get("visual_query") or sc.get("visual_description") or sc["narration"][:60]
@@ -306,6 +424,8 @@ def pick_visuals(runner, job, ctx) -> None:
             if src == "pexels" and not chosen and pxb:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _pixabay(runner, job, pxb, q, orientation, w, h, work, sc, prod, recent, window)
+            if src == "pexels" and not chosen and not is_pop(q0, topic):
+                chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
             if src == "pexels" and not chosen:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _open_pick(runner, job, q, work, sc, prod, recent, window, open_order(q, prod.get("topic") or ""))
