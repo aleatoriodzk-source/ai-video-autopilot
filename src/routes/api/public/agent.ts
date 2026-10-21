@@ -154,7 +154,7 @@ export const Route = createFileRoute("/api/public/agent")({
               return json({ ok: true });
             }
             case "create_asset": {
-              const a = z.object({ production_id: uuid.nullable().optional(), kind: z.enum(["image", "video", "audio", "music", "sfx"]), source: z.enum(["upload", "ai_image", "ai_video", "pexels", "pixabay", "local"]), source_url: z.string().max(1000).nullable().optional(), license: z.string().max(300).nullable().optional(), attribution: z.string().max(300).nullable().optional(), local_path: z.string().max(500).nullable().optional(), storage_path: z.string().max(500).nullable().optional(), description: z.string().max(1000).nullable().optional(), meta: z.record(z.unknown()).optional() }).parse(body.asset);
+              const a = z.object({ production_id: uuid.nullable().optional(), kind: z.enum(["image", "video", "audio", "music", "sfx"]), source: z.enum(["upload", "ai_image", "ai_video", "pexels", "pixabay", "local", "openverse", "youtube", "web", "wikimedia", "nasa", "archive"]), source_url: z.string().max(1000).nullable().optional(), license: z.string().max(300).nullable().optional(), attribution: z.string().max(300).nullable().optional(), local_path: z.string().max(500).nullable().optional(), storage_path: z.string().max(500).nullable().optional(), description: z.string().max(1000).nullable().optional(), meta: z.record(z.unknown()).optional() }).parse(body.asset);
               const { data } = await db.from("assets").insert({ ...a, user_id: userId, meta: a.meta ?? {} } as never).select("id").single();
               return json({ id: data!.id });
             }
