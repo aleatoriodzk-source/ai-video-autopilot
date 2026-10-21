@@ -230,6 +230,102 @@ def _best_file(files: list[dict], w: int, h: int) -> dict | None:
     return ok[0] if ok else (max(mp4, key=lambda f: f["width"] * f["height"]) if mp4 else None)
 
 
+POP = ("marvel", "dc ", "dc comics", "hero", "herói", "heroi", "super", "avengers", "vingadores", "spider", "aranha", "batman", "superman", "x-men", "wolverine",
+       "deadpool", "iron man", "homem de ferro", "thor", "hulk", "captain", "capitão", "star wars", "disney", "pixar", "anime", "naruto", "dragon ball", "pokemon",
+       "game", "jogo", "minecraft", "gta", "fortnite", "filme", "movie", "film", "série", "serie", "netflix", "trailer", "scene", "celebr", "famoso", "futebol",
+       "football", "soccer", "nba", "ufc", "messi", "neymar", "ronaldo", "music", "música", "cantor", "rapper", "hollywood", "harry potter", "senhor dos anéis")
+
+
+def is_pop(q: str, topic: str) -> bool:
+    t = f" {q} {topic} ".lower()
+    return any(w in t for w in POP)
+
+
+def _scene_secs(sc: dict) -> float:
+    return max(3.0, min(12.0, len((sc.get("narration") or "").split()) / 2.5 + 1.0))
+
+
+def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
+    """Busca no YouTube (trailers/cenas) e baixa só o trecho que a cena precisa."""
+    import random
+    import subprocess
+    from analyzer import _ytdlp
+    try:
+        data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"]))
+    except Exception as e:
+        runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
+        return None
+    need = _scene_secs(sc)
+    for e in data.get("entries") or []:
+        vid, dur = e.get("id"), e.get("duration") or 0
+        if not vid or dur < 20 or dur > 3600 or vid in used:
+            continue
+        start = round(random.uniform(dur * 0.12, max(dur * 0.12, dur * 0.75 - need)), 1)
+        out.unlink(missing_ok=True)
+        try:
+            _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
+                    "--download-sections", f"*{start}-{start + need}", "--force-keyframes-at-cuts",
+                    "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
+        except Exception as ex:
+            runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            continue
+        if out.exists() and out.stat().st_size > 20000:
+            used.add(vid)
+            return {"id": f"yt:{vid}:{start}", "page": f"https://www.youtube.com/watch?v={vid}&t={int(start)}", "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
+    return None
+
+
+def web_images(q: str) -> list[dict]:
+    """Busca de imagens na web (DuckDuckGo): pôsteres, personagens, fotos reais. Sem chave."""
+    import re
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
+    r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
+    m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
+    if not m:
+        raise RuntimeError("busca web indisponível agora")
+    r = requests.get("https://duckduckgo.com/i.js", headers={**h, "Referer": "https://duckduckgo.com/"}, timeout=30,
+                     params={"l": "wt-wt", "o": "json", "q": q, "vqd": m.group(1), "f": ",,,,,", "p": "1"})
+    r.raise_for_status()
+    return [{"id": f"web:{x['image'][-80:]}", "url": x["image"], "page": x.get("url"), "text": x.get("title", "")}
+            for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
+
+
+def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
+    """Mídia real do assunto: trecho do YouTube primeiro, depois imagem da web."""
+    if runner.cfg.get("youtube_clips", True):
+        vout = work / f"vid_{sc['idx']:03d}.mp4"
+        for _ in range(2):
+            c = youtube_clip(runner, job, q, sc, vout, yt_used)
+            if not c:
+                break
+            if not vision_ok(runner, job, vout, sc, prod):
+                continue
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube", "source_url": c["page"],
+                                  "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar", "attribution": f"{c['channel']} — {c['title']}"[:200], "local_path": str(vout), "description": q})["id"]
+            return {"id": aid, "key": c["id"]}
+        vout.unlink(missing_ok=True)
+    out = work / f"img_{sc['idx']:03d}.jpg"
+    try:
+        tried = 0
+        for c in web_images(q):
+            if c["id"] in recent[-window * 3:] or tried >= 4:
+                continue
+            tried += 1
+            try:
+                _download(c["url"], out)
+            except Exception:
+                continue
+            if not vision_ok(runner, job, out, sc, prod):
+                recent.append(c["id"])
+                continue
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "web", "source_url": c["page"],
+                                  "license": "Imagem da web — direitos do autor original; verifique antes de monetizar", "attribution": (c["text"] or "web")[:200], "local_path": str(out), "description": q})["id"]
+            return {"id": aid, "key": c["id"]}
+    except Exception as e:
+        runner.log(job, f"imagens web: {e}", "warn", "visuals")
+    return None
+
+
 def pick_visuals(runner, job, ctx) -> None:
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
     w, h = ctx["w"], ctx["h"]
