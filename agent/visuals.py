@@ -411,9 +411,9 @@ def pick_visuals(runner, job, ctx) -> None:
                         "local_path": str(vout), "description": q})["id"]
                     chosen = {"id": aid, "key": pid}
                     break
-                if chosen or (prod.get("settings") or {}).get("video_only"):
+                if chosen:
                     break
-                for ph in pexels_search(key, q, orientation):
+                for ph in ([] if (prod.get("settings") or {}).get("video_only") else pexels_search(key, q, orientation)):
                     pid = f"pexels:{ph['id']}"
                     if pid in recent[-window * 3:]:
                         continue
