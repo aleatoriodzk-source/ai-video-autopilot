@@ -155,7 +155,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
   // Reference pacing wins: a 0.9s-per-cut reference means ~1.5-2s narrated micro-scenes (one clip can carry 1-2 cuts).
   const refScene = measured ? Math.min(6, Math.max(1.5, measured * 1.6)) : ps["style"] === "tiktok" ? 2.2 : null;
-  const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(120, Math.max(4, Math.round(target / refScene))) : null;
+  // Speed cap: automatic count never exceeds 1 scene per 5s (a 60s video => max 12 scenes); fast cuts happen inside each clip.
+  const autoCap = Math.max(4, Math.round(target / 5));
+  const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(autoCap, Math.max(4, Math.round(target / refScene))) : null;
   const words = Math.round(target * WORDS_PER_SECOND);
   const ready = String(ps["ready_script"] ?? "").trim();
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
