@@ -178,6 +178,27 @@ export const Route = createFileRoute("/api/public/agent")({
               if (error) throw error;
               return json({ url: data.signedUrl });
             }
+            case "save_voice": {
+              const id = uuid.parse(body.voice_id);
+              const f = z.object({ status: z.enum(["queued", "processing", "ready", "failed"]).optional(), sample_path: z.string().max(500).nullable().optional(), stats: z.record(z.unknown()).optional(), error: z.string().max(2000).nullable().optional() }).parse(body.fields ?? {});
+              await db.from("voices").update(f as never).eq("id", id).eq("user_id", userId);
+              return json({ ok: true });
+            }
+            case "cookies": {
+              // Arquivos de sessão (cookies.txt) que o usuário enviou para YouTube/TikTok.
+              const { data } = await db.from("linked_accounts").select("platform,cookies_path").eq("user_id", userId);
+              const out: Record<string, string> = {};
+              for (const a of data ?? []) {
+                const { data: s } = await db.storage.from("media").createSignedUrl(a.cookies_path, 600);
+                if (s) out[a.platform] = s.signedUrl;
+              }
+              return json({ cookies: out });
+            }
+            case "ai_match_shots": {
+              const job = await ownJob(body.job_id);
+              const { frames, scenes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(120_000)).min(1).max(40), scenes: z.array(z.string().max(400)).min(1).max(80) }).parse(body);
+              return json({ match: await tasks.runMatchShots(db, userId, job.id, job.production_id, frames, scenes) });
+            }
             default:
               return json({ error: "ação desconhecida" }, 400);
           }
@@ -200,6 +221,21 @@ async function bundle(db: any, job: { production_id: string | null; reference_id
     out.production = p;
     out.scenes = scenes;
     out.assets = assets;
+    // Modo fatiador precisa do vídeo de referência; voz clonada precisa da amostra.
+    if (p?.reference_id && !job.reference_id) {
+      const { data: r } = await db.from("reference_sources").select("id,urls,title").eq("id", p.reference_id).maybeSingle();
+      out.source_reference = r;
+    }
+    const vid = (p?.settings as Record<string, unknown> | null)?.["voice_id"];
+    if (typeof vid === "string") {
+      const { data: v } = await db.from("voices").select("*").eq("id", vid).maybeSingle();
+      out.voice = v;
+    }
+  }
+  const pv = (job as { payload?: Record<string, unknown> }).payload?.["voice_id"];
+  if (typeof pv === "string" && !out.voice) {
+    const { data: v } = await db.from("voices").select("*").eq("id", pv).maybeSingle();
+    out.voice = v;
   }
   if (job.reference_id) {
     const { data: r } = await db.from("reference_sources").select("*").eq("id", job.reference_id).single();
