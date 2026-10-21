@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 import requests
@@ -335,7 +336,9 @@ def pick_visuals(runner, job, ctx) -> None:
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
+    yt_used: set = set()
     ai_used = 0
+    topic = prod.get("topic") or prod.get("title") or ""
     for sc in ctx["scenes"]:
         out = work / f"img_{sc['idx']:03d}.jpg"
         # Limpa mídias de renderizações anteriores (cenas podem ter sido editadas no site).
@@ -350,7 +353,11 @@ def pick_visuals(runner, job, ctx) -> None:
             recent.append(mine["id"])
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
-        for src in s["visuals"]["prefer"]:
+        q0 = sc.get("visual_query") or sc["narration"][:60]
+        if is_pop(q0, topic):
+            # Cultura pop / filmes / famosos: bancos de estoque não têm isso — vai direto no YouTube e na web.
+            chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
+        for src in ([] if chosen else s["visuals"]["prefer"]):
             if src == "upload" and uploads:
                 # Acervo: prefere uma mídia sua que combine com o assunto da cena; se nenhuma combinar, usa outra ainda não usada.
                 q_lib = sc.get("visual_query") or sc.get("visual_description") or sc["narration"][:60]
@@ -402,6 +409,8 @@ def pick_visuals(runner, job, ctx) -> None:
             if src == "pexels" and not chosen and pxb:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _pixabay(runner, job, pxb, q, orientation, w, h, work, sc, prod, recent, window)
+            if src == "pexels" and not chosen and not is_pop(q0, topic):
+                chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
             if src == "pexels" and not chosen:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _open_pick(runner, job, q, work, sc, prod, recent, window, open_order(q, prod.get("topic") or ""))
