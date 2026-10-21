@@ -220,7 +220,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (rows.length) await db.from("scenes").insert(rows);
   // Keep the user's own title/topic: the AI must never rename the production.
   data.title = p.title || topic;
-  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly } as never }).eq("id", productionId);
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 
