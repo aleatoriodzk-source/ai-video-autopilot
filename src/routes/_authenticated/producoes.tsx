@@ -44,11 +44,14 @@ function Producoes() {
   const [readyScript, setReadyScript] = useState("");
   const [captionStyle, setCaptionStyle] = useState("auto");
   const [mediaRule, setMediaRule] = useState("auto");
+  const [sourceMode, setSourceMode] = useState("search");
+  const [voiceId, setVoiceId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
+  const { data: voices } = useQuery({ queryKey: ["voices"], queryFn: async () => (await supabase.from("voices").select("id,name,status")).data ?? [] });
   const { data: prods } = useQuery({
     queryKey: ["prods"],
     queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path,versions").order("created_at", { ascending: false })).data ?? [],
@@ -58,6 +61,7 @@ function Producoes() {
 
   async function create() {
     if (!topic.trim()) { toast.error(scriptMode === "ready" ? "Dê um título para o vídeo" : "Informe um tema ou instrução"); return; }
+    if (sourceMode === "reference" && !refId) { toast.error("Escolha o vídeo de referência para fatiar"); return; }
     if (scriptMode === "ready" && readyScript.trim().split(/\s+/).length < 10) { toast.error("Cole o roteiro pronto (pelo menos algumas frases)"); return; }
     const min = Number(minutes.replace(",", "."));
     if (!(min >= 0.25 && min <= 30)) { toast.error("Duração entre 0,25 e 30 minutos"); return; }
@@ -66,6 +70,7 @@ function Producoes() {
     const { data: u } = await supabase.auth.getUser();
     const settings = {
       target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule,
+      source_mode: sourceMode, ...(voiceId ? { voice_id: voiceId } : {}),
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
       ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
     };
@@ -144,9 +149,16 @@ function Producoes() {
             <option value="">Padrão (definida em Chaves de IA)</option><option value="gemini">Gemini</option><option value="openai">ChatGPT</option><option value="anthropic">Claude</option><option value="lovable">Créditos da plataforma</option>
           </select>
         </label>
+        <label className="text-xs text-muted-foreground md:col-span-2">De onde vêm as cenas
+          <select value={sourceMode} onChange={(e) => setSourceMode(e.target.value)} className={input + " mt-1"}>
+            <option value="search">Buscar clipes e imagens (YouTube, web, bancos)</option>
+            <option value="reference">Fatiar o vídeo de referência (usa as cenas dele com o meu roteiro — bem mais rápido)</option>
+          </select>
+        </label>
         <label className="text-xs text-muted-foreground">Voz da narração
-          <select value={voice} onChange={(e) => setVoice(e.target.value)} className={input + " mt-1"}>
+          <select value={voiceId ? `clone:${voiceId}` : voice} onChange={(e) => { const v = e.target.value; if (v.startsWith("clone:")) setVoiceId(v.slice(6)); else { setVoiceId(""); setVoice(v); } }} className={input + " mt-1"}>
             <option value="pt-BR-AntonioNeural">Antonio (masculina, firme)</option><option value="pt-BR-FranciscaNeural">Francisca (feminina, clara)</option><option value="pt-BR-ThalitaMultilingualNeural">Thalita (feminina, jovem)</option>
+            {voices?.filter((v) => v.status === "ready").map((v) => <option key={v.id} value={`clone:${v.id}`}>Clonada: {v.name}</option>)}
           </select>
         </label>
         <div className="flex gap-2">
