@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Boxes, Clapperboard, Film, KeyRound, LayoutDashboard, Link2, LogOut, Menu, Monitor, X } from "lucide-react";
+import { Boxes, Clapperboard, Film, KeyRound, LayoutDashboard, Link2, LogOut, Menu, Mic, Monitor, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,8 @@ const NAV = [
   { to: "/referencias", label: "Referências", icon: Link2 },
   { to: "/producoes", label: "Produções", icon: Film },
   { to: "/acervo", label: "Acervo", icon: Boxes },
+  { to: "/vozes", label: "Banco de Vozes", icon: Mic },
+  { to: "/contas", label: "Contas e Explorador", icon: Search },
   { to: "/agente", label: "Agente local", icon: Monitor },
   { to: "/configuracoes", label: "Chaves de IA", icon: KeyRound },
 ] as const;
