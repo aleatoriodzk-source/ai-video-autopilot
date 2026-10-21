@@ -88,8 +88,13 @@ class Runner:
     # ---------- entrada ----------
     def run(self, job: dict, bundle: dict):
         try:
+            self.load_cookies()
             if job["type"] == "analyze_reference":
                 self.analyze_reference(job, bundle)
+            elif job["type"] == "extract_voice":
+                self.extract_voice(job, bundle)
+            elif job["type"] == "search_videos":
+                self.search_videos(job)
             else:
                 self.production(job, bundle)
         except Paused as p:
@@ -129,7 +134,8 @@ class Runner:
         w, h = media.size_for(prod["aspect"], settings["export"]["resolution"])
         work = Path(self.cfg["work_dir"]) / prod["id"]
         work.mkdir(parents=True, exist_ok=True)
-        ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or []}
+        ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
+               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice")}
 
         for i, step in enumerate(STEPS):
             if step in done:
