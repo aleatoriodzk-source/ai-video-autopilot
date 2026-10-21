@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/vozes")({
 
 const input = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
-type Voice = { id: string; name: string; status: string; sample_path: string | null; stats: Record<string, unknown>; error: string | null };
+type Voice = { id: string; name: string; status: string; sample_path: string | null; stats: { wpm?: number; pauses_count?: number; pause_avg_s?: number; isolation?: string; engine_available?: string | null }; error: string | null };
 
 function Vozes() {
   const qc = useQueryClient();
@@ -81,7 +81,7 @@ function Vozes() {
       {!voices?.length ? <Empty>Nenhuma voz ainda. Cadastre um vídeo em Referências e extraia a voz dele aqui.</Empty> : (
         <div className="grid gap-3 md:grid-cols-2">
           {voices.map((v) => {
-            const s = v.stats || {};
+            const s = v.stats ?? {};
             return (
               <div key={v.id} className="panel space-y-2 p-4 text-sm">
                 <div className="flex items-center justify-between gap-2">
