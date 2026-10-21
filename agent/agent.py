@@ -264,12 +264,32 @@ class Runner:
         ps = ctx["prod"].get("settings") or {}
         edge_voice = ps.get("voice") or self.cfg.get("edge_voice") or "pt-BR-AntonioNeural"
         edge_rate = ps.get("voice_rate") or self.cfg.get("edge_rate") or "+0%"
+        # Voz clonada do banco de vozes
+        clone, cv = None, ctx.get("voice")
+        if cv and cv.get("status") == "ready" and cv.get("sample_path"):
+            import voice as vc
+            if vc.engine():
+                clone = ctx["work"] / "clone_sample.wav"
+                r = requests.get(self.api.call("download_url", path=cv["sample_path"])["url"], timeout=120)
+                r.raise_for_status()
+                clone.write_bytes(r.content)
+                self.log(job, f"narrando com a voz clonada '{cv['name']}'", step="narration")
+            else:
+                edge_rate = vc.edge_rate_for((cv.get("stats") or {}).get("wpm"))
+                self.log(job, f"clonagem não instalada no PC (rode install_voice_clone.bat). Usando voz Edge no ritmo da voz '{cv['name']}' ({edge_rate})", "warn", step="narration")
         for n, sc in enumerate(ctx["scenes"]):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
             raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             done = False
-            if use_edge:
+            if clone:
+                try:
+                    import voice as vc
+                    vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
+                    done = True
+                except media.MediaError as e:
+                    self.log(job, f"cena {sc['idx'] + 1}: clonagem falhou ({e}); usando Edge", "warn", step="narration")
+            if not done and use_edge:
                 try:
                     media.edge_tts(sc["narration"], edge_voice, raw, edge_rate)
                     done = True
