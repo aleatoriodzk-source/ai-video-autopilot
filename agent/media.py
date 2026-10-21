@@ -103,7 +103,7 @@ def edge_tts(text: str, voice: str, out_wav: Path, rate: str = "+0%") -> None:
 
 def scene_audio(raw_wav: Path, out_wav: Path, pause_ms: int) -> float:
     """Converte para 48 kHz e adiciona a pausa ao fim da cena. Retorna a duração final."""
-    pad = max(0, pause_ms) / 1000
+    pad = min(max(0, pause_ms), 250) / 1000  # no máximo 0,25 s: nada de silêncio morto
     run(["ffmpeg", "-y", "-i", str(raw_wav), "-af", f"apad=pad_dur={pad:.3f}", "-ar", "48000", "-ac", "1", str(out_wav)])
     return duration(out_wav)
 
@@ -136,9 +136,21 @@ def _esc(t: str) -> str:
     return re.sub(r"[{}\\]", "", t).replace("\n", " ")
 
 
-def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black") -> None:
-    fs = int(h * (0.045 if h > w else 0.06))
-    margin_v = int(h * (0.28 if h > w else 0.1))
+CAPTION_STYLES = {
+    # cor principal, cor de destaque (palavra-chave), contorno — formato ASS &HBBGGRR
+    "neon": ("&H00FFFFFF", "&H0000FF39", "&H00000000"),
+    "hormozi": ("&H00FFFFFF", "&H0000D7FF", "&H00000000"),
+    "red": ("&H00FFFFFF", "&H002C2CFF", "&H00000000"),
+    "clean": ("&H00FFFFFF", "&H00FFFFFF", "&H00202020"),
+}
+
+
+def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black", style: str = "hormozi") -> None:
+    """Legenda estilo TikTok: centro da tela, caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida."""
+    main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
+    vertical = h > w
+    fs = int(h * (0.062 if vertical else 0.07))
+    align, margin_v = (5, 0) if vertical else (2, int(h * 0.1))
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -147,15 +159,23 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{font},{fs},&H00FFFFFF,&H0000D7FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{max(3, fs // 12)},2,2,60,60,{margin_v},1
+Style: Main,{font},{fs},{main},{hi},{outline},&H96000000,1,0,0,0,100,100,1,0,1,{max(4, fs // 9)},3,{align},70,70,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    lines = [
-        f"Dialogue: 0,{_ts(c['start'])},{_ts(c['end'])},Main,,0,0,0,,{{\\fad(60,40)\\fscx80\\fscy80\\t(0,120,\\fscx100\\fscy100)}}{_esc(c['text']).upper()}"
-        for c in cues if c["end"] > c["start"]
-    ]
+    lines = []
+    for n, c in enumerate(cues):
+        if c["end"] <= c["start"]:
+            continue
+        words = _esc(c["text"]).upper().split()
+        if not words:
+            continue
+        # destaca a palavra mais longa do bloco (geralmente a palavra-chave)
+        k = max(range(len(words)), key=lambda i: len(words[i]))
+        words[k] = "{\\c" + hi + "&}" + words[k] + "{\\c" + main + "&}"
+        pulse = "{\\fad(40,30)\\fscx70\\fscy70\\t(0,90,\\fscx112\\fscy112)\\t(90,160,\\fscx100\\fscy100)}"
+        lines.append(f"Dialogue: 0,{_ts(c['start'])},{_ts(c['end'])},Main,,0,0,0,,{pulse}{' '.join(words)}")
     out.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
 
 
