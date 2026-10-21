@@ -17,3 +17,4 @@
 9b. [ ] Prévia da voz antes de gerar
 10. [x] Versões do vídeo e renderização mais rápida
 11. [~] ZIP novo gerado com tudo; falta o Júlio trocar os arquivos no PC. Agente do PC: gerar ZIP novo e trocar os arquivos no PC (deixado para o final, a pedido do Júlio)
+- [x] Mídia real por assunto: trechos do YouTube + imagens da web para cultura pop/filmes/famosos; IA de conferência menos rígida; roteiro usa nomes próprios na busca
