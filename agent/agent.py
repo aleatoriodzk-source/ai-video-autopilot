@@ -88,8 +88,13 @@ class Runner:
     # ---------- entrada ----------
     def run(self, job: dict, bundle: dict):
         try:
+            self.load_cookies()
             if job["type"] == "analyze_reference":
                 self.analyze_reference(job, bundle)
+            elif job["type"] == "extract_voice":
+                self.extract_voice(job, bundle)
+            elif job["type"] == "search_videos":
+                self.search_videos(job)
             else:
                 self.production(job, bundle)
         except Paused as p:
@@ -106,6 +111,79 @@ class Runner:
                 self.api.call("update_job", job_id=job["id"], patch={"status": "queued" if retry else "failed", "attempts": attempts, "error": f"{e}\n{tb[-1500:]}", "payload": payload})
             except Exception:
                 pass
+
+    # ---------- contas vinculadas ----------
+    def load_cookies(self):
+        import analyzer
+        try:
+            urls = self.api.call("cookies").get("cookies") or {}
+        except Exception:
+            return
+        d = ROOT / "cookies"
+        d.mkdir(exist_ok=True)
+        for plat in ("youtube", "tiktok"):
+            f = d / f"{plat}.txt"
+            if plat in urls:
+                try:
+                    r = requests.get(urls[plat], timeout=60)
+                    r.raise_for_status()
+                    f.write_bytes(r.content)
+                    analyzer.COOKIES[plat] = f
+                except Exception as e:
+                    print(f"cookies {plat}: {e}")
+            else:
+                f.unlink(missing_ok=True)
+                analyzer.COOKIES.pop(plat, None)
+
+    # ---------- explorador ----------
+    def search_videos(self, job):
+        from analyzer import search_videos
+        p = job.get("payload") or {}
+        self.update(job, status="waiting_download", step="search", progress=20, wait_reason="buscando no YouTube")
+        res = search_videos(str(p.get("query") or ""), bool(p.get("shorts")))
+        self.update(job, status="done", progress=100, wait_reason=None, payload={**p, "results": res})
+
+    # ---------- clonagem de voz ----------
+    def extract_voice(self, job, bundle):
+        import voice as vc
+        from analyzer import fetch_video, audio_forensics, transcript
+        v, ref = bundle.get("voice"), bundle.get("reference")
+        if not v or not ref:
+            raise media.MediaError("voz ou referência não encontrada")
+        try:
+            self.api.call("save_voice", voice_id=v["id"], fields={"status": "processing", "error": None})
+            work = Path(self.cfg["work_dir"]) / f"voice_{v['id']}"
+            self.update(job, status="waiting_download", step="voice", progress=10, wait_reason="baixando o vídeo")
+            url = ref["urls"][0]
+            base = fetch_video(url, work / "base.mp4", resolve=lambda p: self.api.call("download_url", path=p)["url"], max_h=480)
+            self.update(job, status="running", progress=35, wait_reason="isolando a voz")
+            vocals = vc.isolate(base, work, lambda m: self.log(job, m, step="voice"))
+            self.update(job, progress=70, wait_reason="medindo ritmo e pausas")
+            a = audio_forensics(vocals)
+            dur = media.duration(vocals)
+            words = 0
+            if not url.startswith("storage:"):
+                try:
+                    words = sum(len(w["text"].split()) for w in transcript(url, work))
+                except Exception:
+                    words = 0
+            speech = max(1.0, dur - (a.get("pauses_count") or 0) * (a.get("pause_avg_s") or 0))
+            stats = {"duration_s": round(dur, 1), "pauses_count": a.get("pauses_count"), "pause_avg_s": a.get("pause_avg_s"),
+                     "pause_max_s": a.get("pause_max_s"), "loudness_lufs": a.get("loudness_avg_lufs"),
+                     "wpm": round(words / speech * 60) if words else None,
+                     "isolation": "demucs" if vc.has_demucs() else "filtro simples", "engine_available": vc.engine()}
+            sample = vc.best_sample(vocals, work)
+            up = self.api.call("upload_url", name=f"voices/{v['id']}.wav")
+            with open(sample, "rb") as fh:
+                requests.put(up["signed_url"], data=fh, headers={"Content-Type": "audio/wav", "x-upsert": "true"}, timeout=300).raise_for_status()
+            self.api.call("save_voice", voice_id=v["id"], fields={"status": "ready", "sample_path": up["path"], "stats": stats})
+            self.log(job, f"voz pronta: {stats}", step="voice")
+            self.update(job, status="done", progress=100, wait_reason=None, completed_steps=["voice"])
+        except Paused:
+            raise
+        except Exception as e:
+            self.api.call("save_voice", voice_id=v["id"], fields={"status": "failed", "error": str(e)[:1500]})
+            raise media.MediaError(str(e))
 
     # ---------- análise de referência ----------
     def analyze_reference(self, job, bundle):
@@ -129,7 +207,8 @@ class Runner:
         w, h = media.size_for(prod["aspect"], settings["export"]["resolution"])
         work = Path(self.cfg["work_dir"]) / prod["id"]
         work.mkdir(parents=True, exist_ok=True)
-        ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or []}
+        ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
+               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice")}
 
         for i, step in enumerate(STEPS):
             if step in done:
@@ -185,12 +264,32 @@ class Runner:
         ps = ctx["prod"].get("settings") or {}
         edge_voice = ps.get("voice") or self.cfg.get("edge_voice") or "pt-BR-AntonioNeural"
         edge_rate = ps.get("voice_rate") or self.cfg.get("edge_rate") or "+0%"
+        # Voz clonada do banco de vozes
+        clone, cv = None, ctx.get("voice")
+        if cv and cv.get("status") == "ready" and cv.get("sample_path"):
+            import voice as vc
+            if vc.engine():
+                clone = ctx["work"] / "clone_sample.wav"
+                r = requests.get(self.api.call("download_url", path=cv["sample_path"])["url"], timeout=120)
+                r.raise_for_status()
+                clone.write_bytes(r.content)
+                self.log(job, f"narrando com a voz clonada '{cv['name']}'", step="narration")
+            else:
+                edge_rate = vc.edge_rate_for((cv.get("stats") or {}).get("wpm"))
+                self.log(job, f"clonagem não instalada no PC (rode install_voice_clone.bat). Usando voz Edge no ritmo da voz '{cv['name']}' ({edge_rate})", "warn", step="narration")
         for n, sc in enumerate(ctx["scenes"]):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
             raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             done = False
-            if use_edge:
+            if clone:
+                try:
+                    import voice as vc
+                    vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
+                    done = True
+                except media.MediaError as e:
+                    self.log(job, f"cena {sc['idx'] + 1}: clonagem falhou ({e}); usando Edge", "warn", step="narration")
+            if not done and use_edge:
                 try:
                     media.edge_tts(sc["narration"], edge_voice, raw, edge_rate)
                     done = True
@@ -215,6 +314,16 @@ class Runner:
             self.log(job, f"o roteiro rende {total:.0f}s de {target:.0f}s pedidos. Para ficar maior, clique em 'Refazer roteiro'.", "warn", "narration")
 
     def step_visuals(self, job, ctx):
+        ps = ctx["prod"].get("settings") or {}
+        ref = ctx.get("source_reference")
+        if ps.get("source_mode") == "reference":
+            if not ref:
+                raise media.MediaError("modo fatiador ligado, mas a produção não tem vídeo de referência escolhido")
+            from slicer import slice_from_reference
+            for sc in ctx["scenes"]:
+                (ctx["work"] / f"img_{sc['idx']:03d}.jpg").unlink(missing_ok=True)
+            if slice_from_reference(self, job, ctx, ref):
+                return
         from visuals import pick_visuals
         pick_visuals(self, job, ctx)
 

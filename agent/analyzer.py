@@ -14,11 +14,53 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=android,web"]
 
 
+# Arquivos cookies.txt das contas vinculadas no site ({"youtube": Path, "tiktok": Path}).
+COOKIES: dict = {}
+
+
 def _ytdlp(args: list[str]) -> str:
-    p = subprocess.run(["yt-dlp", *BASE, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    joined = " ".join(args)
+    plat = "tiktok" if "tiktok.com" in joined else "youtube"
+    extra = ["--cookies", str(COOKIES[plat])] if COOKIES.get(plat) and Path(COOKIES[plat]).exists() else []
+    p = subprocess.run(["yt-dlp", *BASE, *extra, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if p.returncode != 0 and extra:
+        # cookie vencido não pode travar tudo: tenta sem a conta
+        p = subprocess.run(["yt-dlp", *BASE, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:
         raise RuntimeError("yt-dlp: " + p.stderr[-800:])
     return p.stdout
+
+
+def search_videos(query: str, shorts: bool = False, n: int = 20) -> list[dict]:
+    """Busca vídeos no YouTube (com a sua conta, se vinculada)."""
+    q = f"{query} #shorts" if shorts else query
+    data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch{n}:{q}"]))
+    out = []
+    for e in data.get("entries") or []:
+        vid = e.get("id")
+        if not vid:
+            continue
+        out.append({"id": vid, "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
+                    "duration": e.get("duration"), "views": e.get("view_count"),
+                    "url": f"https://www.youtube.com/watch?v={vid}", "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"})
+    return out
+
+
+def fetch_video(url: str, out: Path, resolve=None, max_h: int = 1080) -> Path:
+    """Baixa um vídeo inteiro (link ou 'storage:' do site) para usar como base."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists() and out.stat().st_size > 50000:
+        return out
+    if url.startswith("storage:"):
+        import requests
+        with requests.get(resolve(url[len("storage:"):]), stream=True, timeout=600) as r:
+            r.raise_for_status()
+            with open(out, "wb") as fh:
+                for c in r.iter_content(1 << 20):
+                    fh.write(c)
+        return out
+    _ytdlp(["-f", f"bv*[height<={max_h}][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4", "-o", str(out), "--no-playlist", "--force-overwrites", url])
+    return out
 
 
 def scene_cuts(video: Path, threshold: float = 0.3) -> list[float]:

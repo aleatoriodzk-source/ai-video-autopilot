@@ -15,9 +15,11 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAcervoRouteImport } from './routes/_authenticated/acervo'
 import { Route as AuthenticatedAgenteRouteImport } from './routes/_authenticated/agente'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedContasRouteImport } from './routes/_authenticated/contas'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedProducoesRouteImport } from './routes/_authenticated/producoes'
 import { Route as AuthenticatedReferenciasRouteImport } from './routes/_authenticated/referencias'
+import { Route as AuthenticatedVozesRouteImport } from './routes/_authenticated/vozes'
 import { Route as ApiPublicAgentRouteImport } from './routes/api/public/agent'
 
 const IndexRoute = IndexRouteImport.update({
@@ -50,6 +52,11 @@ const AuthenticatedConfiguracoesRoute =
     path: '/configuracoes',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedContasRoute = AuthenticatedContasRouteImport.update({
+  id: '/contas',
+  path: '/contas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   id: '/painel',
   path: '/painel',
@@ -66,6 +73,11 @@ const AuthenticatedReferenciasRoute =
     path: '/referencias',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedVozesRoute = AuthenticatedVozesRouteImport.update({
+  id: '/vozes',
+  path: '/vozes',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicAgentRoute = ApiPublicAgentRouteImport.update({
   id: '/api/public/agent',
   path: '/api/public/agent',
@@ -78,9 +90,11 @@ export interface FileRoutesByFullPath {
   '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/contas': typeof AuthenticatedContasRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
+  '/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
 export interface FileRoutesByTo {
@@ -89,9 +103,11 @@ export interface FileRoutesByTo {
   '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/contas': typeof AuthenticatedContasRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
+  '/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
 export interface FileRoutesById {
@@ -102,9 +118,11 @@ export interface FileRoutesById {
   '/_authenticated/acervo': typeof AuthenticatedAcervoRoute
   '/_authenticated/agente': typeof AuthenticatedAgenteRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/_authenticated/contas': typeof AuthenticatedContasRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/producoes': typeof AuthenticatedProducoesRoute
   '/_authenticated/referencias': typeof AuthenticatedReferenciasRoute
+  '/_authenticated/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
 }
 export interface FileRouteTypes {
@@ -115,9 +133,11 @@ export interface FileRouteTypes {
     | '/acervo'
     | '/agente'
     | '/configuracoes'
+    | '/contas'
     | '/painel'
     | '/producoes'
     | '/referencias'
+    | '/vozes'
     | '/api/public/agent'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -126,9 +146,11 @@ export interface FileRouteTypes {
     | '/acervo'
     | '/agente'
     | '/configuracoes'
+    | '/contas'
     | '/painel'
     | '/producoes'
     | '/referencias'
+    | '/vozes'
     | '/api/public/agent'
   id:
     | '__root__'
@@ -138,9 +160,11 @@ export interface FileRouteTypes {
     | '/_authenticated/acervo'
     | '/_authenticated/agente'
     | '/_authenticated/configuracoes'
+    | '/_authenticated/contas'
     | '/_authenticated/painel'
     | '/_authenticated/producoes'
     | '/_authenticated/referencias'
+    | '/_authenticated/vozes'
     | '/api/public/agent'
   fileRoutesById: FileRoutesById
 }
@@ -195,6 +219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/contas': {
+      id: '/_authenticated/contas'
+      path: '/contas'
+      fullPath: '/contas'
+      preLoaderRoute: typeof AuthenticatedContasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/painel': {
       id: '/_authenticated/painel'
       path: '/painel'
@@ -216,6 +247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReferenciasRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/vozes': {
+      id: '/_authenticated/vozes'
+      path: '/vozes'
+      fullPath: '/vozes'
+      preLoaderRoute: typeof AuthenticatedVozesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/agent': {
       id: '/api/public/agent'
       path: '/api/public/agent'
@@ -230,18 +268,22 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAcervoRoute: typeof AuthenticatedAcervoRoute
   AuthenticatedAgenteRoute: typeof AuthenticatedAgenteRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
+  AuthenticatedContasRoute: typeof AuthenticatedContasRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedProducoesRoute: typeof AuthenticatedProducoesRoute
   AuthenticatedReferenciasRoute: typeof AuthenticatedReferenciasRoute
+  AuthenticatedVozesRoute: typeof AuthenticatedVozesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAcervoRoute: AuthenticatedAcervoRoute,
   AuthenticatedAgenteRoute: AuthenticatedAgenteRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
+  AuthenticatedContasRoute: AuthenticatedContasRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedProducoesRoute: AuthenticatedProducoesRoute,
   AuthenticatedReferenciasRoute: AuthenticatedReferenciasRoute,
+  AuthenticatedVozesRoute: AuthenticatedVozesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -289,6 +289,33 @@ export type Database = {
           },
         ]
       }
+      linked_accounts: {
+        Row: {
+          cookies_path: string
+          id: string
+          label: string | null
+          platform: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cookies_path: string
+          id?: string
+          label?: string | null
+          platform: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cookies_path?: string
+          id?: string
+          label?: string | null
+          platform?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       productions: {
         Row: {
           aspect: string
@@ -628,6 +655,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      voices: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          name: string
+          reference_id: string | null
+          sample_path: string | null
+          stats: Json
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          name: string
+          reference_id?: string | null
+          sample_path?: string | null
+          stats?: Json
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          name?: string
+          reference_id?: string | null
+          sample_path?: string | null
+          stats?: Json
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voices_reference_id_fkey"
+            columns: ["reference_id"]
+            isOneToOne: false
+            referencedRelation: "reference_sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
