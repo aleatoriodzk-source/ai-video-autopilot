@@ -282,7 +282,7 @@ export async function runCheckImage(db: DB, userId: string, jobId: string, produ
 }
 
 // Modo fatiador: a IA "assiste" um quadro de cada tomada do vídeo base e escolhe a melhor tomada para cada cena do roteiro.
-export async function runMatchShots(db: DB, userId: string, jobId: string, productionId: string | null, frames: string[], scenes: string[]) {
+export async function runMatchShots(db: DB, userId: string, jobId: string, productionId: string | null, frames: string[], scenes: string[], notes: string[] = []) {
   const s = await guardBudget(db, userId, jobId, null);
   let override: unknown;
   if (productionId) {
@@ -295,14 +295,21 @@ export async function runMatchShots(db: DB, userId: string, jobId: string, produ
     properties: {
       shots: { type: "array", items: { type: "object", properties: { i: { type: "integer" }, who: { type: "string" }, what: { type: "string" }, energy: { type: "integer" } }, required: ["i", "who", "what", "energy"], additionalProperties: false } },
       pick: { type: "array", items: { type: "array", items: { type: "integer" } } },
+      text_band: { type: "object", properties: { has: { type: "boolean" }, y0: { type: "number" }, y1: { type: "number" } }, required: ["has", "y0", "y1"], additionalProperties: false },
     },
-    required: ["shots", "pick"],
+    required: ["shots", "pick", "text_band"],
     additionalProperties: false,
   };
   const list = scenes.map((t, i) => `${i}: ${t}`).join("\n");
-  const { data, usage } = await ai<{ shots: { i: number; who: string; what: string; energy: number }[]; pick: number[][] }>({
+  const per = Math.max(1, Math.round(frames.length / Math.max(1, notes.length || frames.length)));
+  const said = notes.map((t, i) => (t ? `tomada ${i} (narração original nesse trecho): ${t}` : "")).filter(Boolean).join("\n");
+  const { data, usage } = await ai<{ shots: { i: number; who: string; what: string; energy: number }[]; pick: number[][]; text_band: { has: boolean; y0: number; y1: number } }>({
     system: "Você é um editor de vídeo profissional. Assiste as tomadas como uma pessoa: reconhece personagens, ações e emoção, e escolhe a tomada que melhor ilustra cada fala.",
-    user: `As imagens anexadas são, em ordem, um quadro de cada tomada (tomada 0, 1, 2...) de um vídeo base. Para cada tomada diga quem aparece (who), o que acontece (what) e energia de 1 a 5.\nDepois, para cada cena do roteiro abaixo, devolva em "pick" uma lista com 1 a 3 números de tomadas, em ordem de preferência, que mostram o personagem/assunto citado. Evite repetir tomadas entre cenas próximas. Use tomadas de alta energia no gancho (cena 0).\nCenas:\n${list}`,
+    user: `As imagens anexadas são quadros de um vídeo base, ${per} por tomada, em ordem (as ${per} primeiras são da tomada 0, as seguintes da tomada 1, etc.). Para cada tomada diga quem aparece (who, pelo nome do personagem/pessoa/objeto quando reconhecível), o que acontece (what) e energia de 1 a 5.
+${said ? "O que a narração original dizia em cada tomada (forte pista de quem aparece):\n" + said + "\n" : ""}
+Depois, para cada cena do roteiro, devolva em "pick" 1 a 3 tomadas, em ordem de preferência, que MOSTRAM EXATAMENTE o personagem/assunto que a fala cita. Regras: 1) o assunto da fala manda — nunca escolha uma tomada de outro personagem só porque é bonita; 2) se o roteiro segue a mesma ordem do vídeo base, mantenha essa ordem; 3) evite repetir tomadas entre cenas próximas, mas repetir é melhor que mostrar o assunto errado; 4) gancho (cena 0) com a tomada mais forte do assunto principal.
+Por fim, em "text_band", diga se os quadros têm legenda/texto queimado na imagem (has) e a faixa vertical onde ele costuma ficar, como fração da altura (y0 topo, y1 base, ex.: 0.62 e 0.80). Se não houver, has=false, y0=0, y1=0.
+Cenas:\n${list}`,
     schemaName: "shot_match",
     schema,
     images: frames,

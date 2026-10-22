@@ -369,6 +369,10 @@ class Runner:
             cues += media.word_timings(media.clean_tts(sc["narration"]), speech, start=t)
             t += total
         ps = ctx["prod"].get("settings") or {}
+        if ps.get("caption_style") == "none":
+            (ctx["work"] / "subs.ass").unlink(missing_ok=True)
+            self.log(job, "sem legenda (escolha sua)", step="captions")
+            return
         media.write_ass(cues, ctx["w"], ctx["h"], ctx["work"] / "subs.ass", style=ps.get("caption_resolved") or ps.get("caption_style") or "hormozi")
 
     def step_audio(self, job, ctx):
@@ -385,9 +389,12 @@ class Runner:
         fx.transitions(clips, durs, trans, ctx["work"] / "video.mp4", ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"])
         cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
         sfx = None
-        try:
+        if ((ctx["prod"].get("settings") or {}).get("sfx") or "off") != "on":
+            self.log(job, "sem efeitos sonoros (escolha sua)", step="render")
+        else:
+          try:
             sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs))
-        except media.MediaError as err:
+          except media.MediaError as err:
             self.log(job, f"efeitos sonoros ignorados: {err}", "warn", step="render")
         out_dir = Path(ctx["settings"]["export"].get("output_dir") or self.cfg["output_dir"])
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -404,7 +411,7 @@ class Runner:
         if music:
             self.log(job, f"música: {Path(music).name}", step="render")
         e = ctx["settings"]["export"]
-        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass", tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"], sfx)
+        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass" if (ctx["work"] / "subs.ass").exists() else None, tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"], sfx)
         final = out_dir / f"{safe} - {ctx['prod']['aspect'].replace(':', 'x')} - {time.strftime('%Y%m%d-%H%M')}.mp4"
         final.write_bytes(tmp.read_bytes())
         ctx["final"] = final
