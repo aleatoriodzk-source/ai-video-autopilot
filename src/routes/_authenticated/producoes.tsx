@@ -44,6 +44,8 @@ function Producoes() {
   const [readyScript, setReadyScript] = useState("");
   const [captionStyle, setCaptionStyle] = useState("auto");
   const [mediaRule, setMediaRule] = useState("auto");
+  const [sfxOn, setSfxOn] = useState("off");
+  const [baseCaps, setBaseCaps] = useState("hide");
   const [sourceMode, setSourceMode] = useState("search");
   const [voiceId, setVoiceId] = useState("");
   const [scenesRef, setScenesRef] = useState("");
@@ -78,7 +80,7 @@ function Producoes() {
       srcId = r.id; qc.invalidateQueries({ queryKey: ["refs"] });
     }
     const settings = {
-      target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule,
+      target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule, sfx: sfxOn, base_captions: baseCaps,
       source_mode: sourceMode, ...(voiceId ? { voice_id: voiceId } : {}),
       ...(sourceMode === "reference" && srcId ? { scenes_reference_id: srcId } : {}),
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
@@ -130,9 +132,21 @@ function Producoes() {
         </label>
         <label className="text-xs text-muted-foreground">Estilo da legenda
           <select value={captionStyle} onChange={(e) => setCaptionStyle(e.target.value)} className={input + " mt-1"}>
-            <option value="auto">Automático (cor da referência)</option><option value="neon">Verde neon (CapCut)</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option>
+            <option value="auto">Automático (cor da referência)</option><option value="neon">Verde neon (CapCut)</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option><option value="none">Sem legenda</option>
           </select>
         </label>
+        <label className="text-xs text-muted-foreground">Efeitos sonoros
+          <select value={sfxOn} onChange={(e) => setSfxOn(e.target.value)} className={input + " mt-1"}>
+            <option value="off">Sem efeitos sonoros</option><option value="on">Com efeitos sonoros</option>
+          </select>
+        </label>
+        {sourceMode === "reference" && (
+          <label className="text-xs text-muted-foreground">Legenda que já vem no vídeo das cenas
+            <select value={baseCaps} onChange={(e) => setBaseCaps(e.target.value)} className={input + " mt-1"}>
+              <option value="hide">Esconder (desfoca a faixa de texto)</option><option value="keep">Manter como está</option>
+            </select>
+          </label>
+        )}
         <label className="text-xs text-muted-foreground">Vídeo de estilo (o curto que ele copia: ritmo, legenda, gancho)
           <select value={refId} onChange={(e) => setRefId(e.target.value)} className={input + " mt-1"}>
             <option value="">Sem referência de estilo</option>

@@ -220,11 +220,11 @@ def concat(files: list[Path], out: Path, workdir: Path, audio: bool) -> None:
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), *codec, str(out)])
 
 
-def final_mix(video: Path, voice: Path, subs_name: str, out: Path, workdir: Path, music: Path | None,
+def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdir: Path, music: Path | None,
               music_db: float = -20, lufs: float = -16, crf: int = 20, sfx: Path | None = None) -> None:
     """Queima legendas, normaliza a voz, aplica ducking na música e soma a faixa de efeitos sonoros."""
     inputs = ["-i", str(video), "-i", str(voice)]
-    vf = f"[0:v]subtitles={subs_name}[v]"
+    vf = f"[0:v]subtitles={subs_name}[v]" if subs_name else "[0:v]null[v]"
     af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11"
     mix, n = [], 2
     if music and music.exists():

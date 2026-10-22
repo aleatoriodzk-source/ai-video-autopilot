@@ -196,8 +196,8 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "ai_match_shots": {
               const job = await ownJob(body.job_id);
-              const { frames, scenes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(120_000)).min(1).max(40), scenes: z.array(z.string().max(400)).min(1).max(80) }).parse(body);
-              return json({ match: await tasks.runMatchShots(db, userId, job.id, job.production_id, frames, scenes) });
+              const { frames, scenes, notes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(120_000)).min(1).max(80), scenes: z.array(z.string().max(400)).min(1).max(80), notes: z.array(z.string().max(300)).max(40).optional() }).parse(body);
+              return json({ match: await tasks.runMatchShots(db, userId, job.id, job.production_id, frames, scenes, notes ?? []) });
             }
             default:
               return json({ error: "ação desconhecida" }, 400);
