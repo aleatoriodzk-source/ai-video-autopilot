@@ -36,19 +36,47 @@ function Vozes() {
     refetchInterval: 8000,
   });
 
+  const [file, setFile] = useState<File | null>(null);
+  const [link, setLink] = useState("");
+  const [progress, setProgress] = useState("");
+
   async function create() {
-    if (!name.trim() || !refId) { toast.error("Dê um nome e escolha o vídeo de onde tirar a voz"); return; }
+    if (!name.trim()) { toast.error("Dê um nome para a voz"); return; }
+    if (!file && !link.trim() && !refId) { toast.error("Envie um vídeo/áudio, cole um link ou escolha uma referência"); return; }
     setBusy(true);
     try {
       const { data: u } = await supabase.auth.getUser();
-      const { data: v, error } = await supabase.from("voices").insert({ user_id: u.user!.id, name: name.trim().slice(0, 60), reference_id: refId }).select("id").single();
+      const uid = u.user!.id;
+      let rid = refId;
+      if (file) {
+        if (!/^(video|audio)\//.test(file.type)) throw new Error("Envie um arquivo de vídeo ou áudio (MP4, MOV, MP3, WAV...)");
+        if (file.size > 2 * 1024 ** 3) throw new Error("Arquivo maior que 2 GB");
+        setProgress("Enviando arquivo...");
+        const ext = (file.name.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `${uid}/voices/${Date.now()}.${ext}`;
+        const up = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
+        if (up.error) throw up.error;
+        const { data: r, error } = await supabase.from("reference_sources").insert({ user_id: uid, urls: [`storage:${path}`], platform: "other", kind: "video", title: `Voz: ${file.name}` }).select("id").single();
+        if (error) throw error;
+        rid = r.id;
+      } else if (link.trim()) {
+        const url = link.trim();
+        if (!/^https?:\/\//.test(url)) throw new Error("Link inválido (precisa começar com https://)");
+        const platform = url.includes("tiktok.com") ? "tiktok" : url.includes("youtu") ? "youtube" : "other";
+        const { data: r, error } = await supabase.from("reference_sources").insert({ user_id: uid, urls: [url], platform, kind: "video", title: `Voz: ${name.trim()}` }).select("id").single();
+        if (error) throw error;
+        rid = r.id;
+      }
+      setProgress("Criando voz...");
+      const { data: v, error } = await supabase.from("voices").insert({ user_id: uid, name: name.trim().slice(0, 60), reference_id: rid }).select("id").single();
       if (error) throw error;
-      const { error: e2 } = await supabase.from("jobs").insert({ user_id: u.user!.id, type: "extract_voice", reference_id: refId, payload: { voice_id: v.id } });
+      const { error: e2 } = await supabase.from("jobs").insert({ user_id: uid, type: "extract_voice", reference_id: rid, payload: { voice_id: v.id } });
       if (e2) throw e2;
-      setName("");
-      toast.success("Enviado ao agente: ele vai isolar e medir a voz");
+      setName(""); setFile(null); setLink(""); setRefId("");
+      toast.success("Enviado ao agente: ele vai isolar e clonar a voz");
       qc.invalidateQueries({ queryKey: ["voices-full"] });
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+      qc.invalidateQueries({ queryKey: ["refs"] });
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); setProgress(""); }
   }
 
   async function listen(v: Voice) {
@@ -70,13 +98,21 @@ function Vozes() {
         <p>Sem isso instalado, o sistema avisa no registro e narra com a voz da Microsoft na mesma velocidade da voz original — ele não finge que clonou.</p>
         <p>Use só vozes que você tem direito de usar (a sua, de quem autorizou, ou de conteúdo licenciado).</p>
       </div>
-      <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-3">
+      <div className="panel mb-6 space-y-3 p-4">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da voz, ex.: Narrador misterioso" className={input} />
-        <select value={refId} onChange={(e) => setRefId(e.target.value)} className={input}>
-          <option value="">Vídeo de onde tirar a voz</option>
-          {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}
-        </select>
-        <button onClick={create} disabled={busy} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Extrair e clonar voz</button>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex cursor-pointer flex-col justify-center rounded-md border border-dashed border-input px-3 py-2 text-sm hover:bg-accent">
+            <span className="font-medium">1. Enviar vídeo ou áudio do PC</span>
+            <span className="truncate text-xs text-muted-foreground">{file ? file.name : "MP4, MOV, MKV, WEBM, MP3, WAV"}</span>
+            <input type="file" accept="video/*,audio/*" className="hidden" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setLink(""); setRefId(""); }} />
+          </label>
+          <input value={link} onChange={(e) => { setLink(e.target.value); setFile(null); setRefId(""); }} placeholder="2. Ou cole link do YouTube/TikTok" className={input} />
+          <select value={refId} onChange={(e) => { setRefId(e.target.value); setFile(null); setLink(""); }} className={input}>
+            <option value="">3. Ou escolha uma referência salva</option>
+            {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0]}</option>)}
+          </select>
+        </div>
+        <button onClick={create} disabled={busy} className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy ? progress || "Enviando..." : "Extrair e clonar voz"}</button>
       </div>
       {!voices?.length ? <Empty>Nenhuma voz ainda. Cadastre um vídeo em Referências e extraia a voz dele aqui.</Empty> : (
         <div className="grid gap-3 md:grid-cols-2">
