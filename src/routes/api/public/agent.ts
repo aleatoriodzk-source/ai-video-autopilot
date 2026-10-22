@@ -196,7 +196,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "ai_match_shots": {
               const job = await ownJob(body.job_id);
-              const { frames, scenes, notes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(600_000)).min(1).max(100), scenes: z.array(z.string().max(400)).min(1).max(120), notes: z.array(z.string().max(300)).max(60).optional() }).parse(body);
+              const { frames, scenes, notes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(600_000)).min(1).max(100), scenes: z.array(z.string().max(2000)).min(1).max(120), notes: z.array(z.string().max(2000)).max(60).optional() }).parse(body);
               return json({ match: await tasks.runMatchShots(db, userId, job.id, job.production_id, frames, scenes, notes ?? []) });
             }
             default:
