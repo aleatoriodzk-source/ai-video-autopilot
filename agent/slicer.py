@@ -53,7 +53,7 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
         try:
             for line in transcript(urls[0], work):
                 for i, (a, b) in enumerate(shots):
-                    if a - 0.3 <= line["t"] < b and len(notes[i]) < 250:
+                    if a - 0.3 <= line["t"] < b and len(notes[i]) < 600:
                         notes[i] = (notes[i] + " " + line["text"]).strip()
                         break
             if any(notes):
@@ -63,8 +63,8 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
     scenes = ctx["scenes"]
     runner.update(job, status="waiting_api", wait_reason="IA assistindo as tomadas do vídeo base")
     match = runner.api.call("ai_match_shots", job_id=job["id"], frames=frames,
-                            scenes=[(sc.get("visual_query") or "") + " — " + sc["narration"][:300] for sc in scenes],
-                            notes=notes)["match"]
+                            scenes=[(((sc.get("visual_query") or "") + " — " + sc["narration"])[:1500]) for sc in scenes],
+                            notes=[n[:1500] for n in notes])["match"]
     band = match.get("text_band") or {}
     blur = ""
     keep = ((ctx["prod"].get("settings") or {}).get("base_captions") or "hide") == "keep"

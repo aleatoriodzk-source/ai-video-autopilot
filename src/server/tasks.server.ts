@@ -300,9 +300,9 @@ export async function runMatchShots(db: DB, userId: string, jobId: string, produ
     required: ["shots", "pick", "text_band"],
     additionalProperties: false,
   };
-  const list = scenes.map((t, i) => `${i}: ${t}`).join("\n");
+  const list = scenes.map((t, i) => `${i}: ${t.slice(0, 1500)}`).join("\n");
   const per = Math.max(1, Math.round(frames.length / Math.max(1, notes.length || frames.length)));
-  const said = notes.map((t, i) => (t ? `tomada ${i} (narração original nesse trecho): ${t}` : "")).filter(Boolean).join("\n");
+  const said = notes.map((t, i) => (t ? `tomada ${i} (narração original nesse trecho): ${t.slice(0, 1500)}` : "")).filter(Boolean).join("\n");
   const { data, usage } = await ai<{ shots: { i: number; who: string; what: string; energy: number }[]; pick: number[][]; text_band: { has: boolean; y0: number; y1: number } }>({
     system: "Você é um editor de vídeo profissional. Assiste as tomadas como uma pessoa: reconhece personagens, ações e emoção, e escolhe a tomada que melhor ilustra cada fala.",
     user: `As imagens anexadas são quadros de um vídeo base, ${per} por tomada, em ordem (as ${per} primeiras são da tomada 0, as seguintes da tomada 1, etc.). Para cada tomada diga quem aparece (who, pelo nome do personagem/pessoa/objeto quando reconhecível), o que acontece (what) e energia de 1 a 5.
