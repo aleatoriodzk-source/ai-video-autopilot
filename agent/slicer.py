@@ -53,7 +53,7 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
         try:
             for line in transcript(urls[0], work):
                 for i, (a, b) in enumerate(shots):
-                    if a - 0.3 <= line["t"] < b and len(notes[i]) < 250:
+                    if a - 0.3 <= line["t"] < b and len(notes[i]) < 600:
                         notes[i] = (notes[i] + " " + line["text"]).strip()
                         break
             if any(notes):
