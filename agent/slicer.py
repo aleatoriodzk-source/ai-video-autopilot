@@ -71,7 +71,7 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
     if band.get("has") and not keep:
         y0 = max(0.0, min(0.95, float(band.get("y0") or 0) - 0.02))
         y1 = max(y0 + 0.04, min(1.0, float(band.get("y1") or 0) + 0.02))
-        blur = (f"split[a][b];[b]crop=iw:ih*{y1 - y0:.3f}:0:ih*{y0:.3f},boxblur=25:2[t];"
+        blur = (f"split[a][b];[b]crop=iw:ih*{y1 - y0:.3f}:0:ih*{y0:.3f},boxblur=10:4[t];"
                 f"[a][t]overlay=0:H*{y0:.3f}")
         log(f"escondendo a legenda do vídeo base (faixa {y0:.0%}–{y1:.0%} da altura)")
     for s in (match.get("shots") or [])[:60]:
