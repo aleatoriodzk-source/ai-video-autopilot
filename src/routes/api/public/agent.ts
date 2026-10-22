@@ -196,7 +196,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "ai_match_shots": {
               const job = await ownJob(body.job_id);
-              const { frames, scenes, notes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(120_000)).min(1).max(80), scenes: z.array(z.string().max(400)).min(1).max(80), notes: z.array(z.string().max(300)).max(40).optional() }).parse(body);
+              const { frames, scenes, notes } = z.object({ frames: z.array(z.string().startsWith("data:image/").max(600_000)).min(1).max(100), scenes: z.array(z.string().max(400)).min(1).max(120), notes: z.array(z.string().max(300)).max(60).optional() }).parse(body);
               return json({ match: await tasks.runMatchShots(db, userId, job.id, job.production_id, frames, scenes, notes ?? []) });
             }
             default:
@@ -223,7 +223,7 @@ async function bundle(db: any, job: { production_id: string | null; reference_id
     out.assets = assets;
     // Modo fatiador: vídeo das cenas (separado do vídeo de estilo); cai para a referência de estilo se não houver.
     const srcId = (p?.settings as Record<string, unknown> | null)?.["scenes_reference_id"] ?? p?.reference_id;
-    if (typeof srcId === "string" && !job.reference_id) {
+    if (typeof srcId === "string") {
       const { data: r } = await db.from("reference_sources").select("id,urls,title").eq("id", srcId).maybeSingle();
       out.source_reference = r;
     }
