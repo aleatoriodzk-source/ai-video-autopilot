@@ -103,8 +103,17 @@ def edge_tts(text: str, voice: str, out_wav: Path, rate: str = "+0%") -> None:
 
 def scene_audio(raw_wav: Path, out_wav: Path, pause_ms: int) -> float:
     """Converte para 48 kHz e adiciona a pausa ao fim da cena. Retorna a duração final."""
-    pad = min(max(0, pause_ms), 250) / 1000  # no máximo 0,25 s: nada de silêncio morto
-    run(["ffmpeg", "-y", "-i", str(raw_wav), "-af", f"apad=pad_dur={pad:.3f}", "-ar", "48000", "-ac", "1", str(out_wav)])
+    pad = min(max(0, pause_ms), 60) / 1000  # ritmo de Shorts: quase sem respiro entre cenas
+    # Corta o silêncio do começo e do fim da fala e encurta pausas internas longas (>0,25 s).
+    trim = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03,"
+            "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,"
+            "silenceremove=stop_periods=-1:stop_duration=0.25:stop_threshold=-45dB")
+    try:
+        run(["ffmpeg", "-y", "-i", str(raw_wav), "-af", f"{trim},apad=pad_dur={pad:.3f}", "-ar", "48000", "-ac", "1", str(out_wav)])
+        if duration(out_wav) < 0.3:
+            raise MediaError("áudio vazio após corte")
+    except MediaError:
+        run(["ffmpeg", "-y", "-i", str(raw_wav), "-af", f"apad=pad_dur={pad:.3f}", "-ar", "48000", "-ac", "1", str(out_wav)])
     return duration(out_wav)
 
 
