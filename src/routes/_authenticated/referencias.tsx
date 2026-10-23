@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { channelIdeas, generateScript } from "@/lib/ai.functions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -45,9 +46,44 @@ function Referencias() {
   });
   const reportOf = (id: string) => reports?.find((a) => a.reference_id === id)?.report;
 
+  const [plat, setPlat] = useState<"youtube" | "tiktok">("youtube");
+  const [ideas, setIdeas] = useState<Record<string, { title: string; hook: string; angle: string; why_fits: string; factual: boolean }[]>>({});
+  const [wish, setWish] = useState("");
+  const [thinking, setThinking] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  async function suggest(id: string) {
+    setThinking(id);
+    try {
+      const r = await channelIdeas({ data: { referenceId: id, wish } });
+      if (!r.ok) throw new Error(r.error);
+      setIdeas((m) => ({ ...m, [id]: r.ideas }));
+    } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
+  }
+
+  async function createFrom(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
+    setThinking(refId + idea.title);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
+      const settings = { target_seconds: short ? 50 : 300, style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "off", base_captions: "hide", source_mode: "search" };
+      const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
+      const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
+      if (error) throw error;
+      const s = await generateScript({ data: { productionId: p.id, topic } });
+      if (!s.ok) throw new Error(s.error);
+      toast.success("Roteiro criado no estilo do canal");
+      navigate({ to: "/producoes" });
+    } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
+  }
+
   async function add() {
-    const urls = text.split(/\s+/).map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s));
-    if (!urls.length) { toast.error("Cole pelo menos um link válido (https://...)"); return; }
+    const urls = text.split(/\s+/).map((s) => s.trim()).filter(Boolean).map((s) => {
+      const h = s.match(/^@([\w.\-]{2,60})$/);
+      if (!h) return s;
+      return plat === "tiktok" ? `https://www.tiktok.com/@${h[1]}` : `https://www.youtube.com/@${h[1]}/videos`;
+    }).filter((s) => /^https?:\/\//.test(s));
+    if (!urls.length) { toast.error("Cole um link (https://...) ou digite o @ do canal"); return; }
     setBusy(true);
     try {
       const { data: u } = await supabase.auth.getUser();
@@ -95,7 +131,13 @@ function Referencias() {
       <PageHeader title="Referências" subtitle="Cole links de canais ou vídeos do YouTube/TikTok. Vários links do mesmo criador viram uma única referência. O download e a análise são feitos pelo agente local no seu computador." />
       <div className="panel mb-6 space-y-3 p-4">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nome (opcional), ex.: Canal de curiosidades" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="https://www.youtube.com/@canal  ou  https://www.tiktok.com/@perfil/video/..." className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" />
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Se digitar só o @, é canal do:</span>
+          {(["youtube", "tiktok"] as const).map((p) => (
+            <button key={p} onClick={() => setPlat(p)} className={`rounded-md border px-3 py-1 ${plat === p ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}>{p === "youtube" ? "YouTube" : "TikTok"}</button>
+          ))}
+        </div>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="@nomedocanal  ou  https://www.youtube.com/@canal  ou  https://www.tiktok.com/@perfil/video/..." className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" />
         <button disabled={busy} onClick={add} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Salvar referência</button>
         <label
           onDragOver={(e) => e.preventDefault()}
@@ -123,6 +165,22 @@ function Referencias() {
               </div>
             </div>
             {open === r.id ? <div className="mt-4 border-t border-border pt-4"><DnaView report={reportOf(r.id)} /></div> : null}
+            {reportOf(r.id) ? (
+              <div className="mt-4 space-y-3 border-t border-border pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input value={wish} onChange={(e) => setWish(e.target.value)} placeholder="Preferência (opcional), ex.: temas de terror" className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs" />
+                  <button disabled={thinking === r.id} onClick={() => suggest(r.id)} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50">{thinking === r.id ? "Pensando…" : ideas[r.id] ? "Sugerir outros temas" : "Sugerir temas no estilo deste canal"}</button>
+                </div>
+                {ideas[r.id]?.map((i) => (
+                  <div key={i.title} className="rounded-md border border-border p-3">
+                    <div className="font-medium">{i.title}</div>
+                    <div className="mt-1 text-xs">Gancho: “{i.hook}”</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{i.why_fits}{i.factual ? " · precisa conferir fatos" : ""}</div>
+                    <button disabled={!!thinking} onClick={() => createFrom(r.id, r.platform, i)} className="mt-2 rounded-md border border-border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50">{thinking === r.id + i.title ? "Escrevendo roteiro…" : "Criar vídeo com este tema"}</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             </div>
           ))}
         </div>
