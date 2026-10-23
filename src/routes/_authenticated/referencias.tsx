@@ -61,20 +61,45 @@ function Referencias() {
     } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
   }
 
+  async function makeProduction(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
+    const { data: u } = await supabase.auth.getUser();
+    const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
+    const settings = { target_seconds: short ? 50 : 300, style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "off", base_captions: "hide", source_mode: "search" };
+    const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
+    const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
+    if (error) throw error;
+    const s = await generateScript({ data: { productionId: p.id, topic } });
+    if (!s.ok) throw new Error(s.error);
+    return p.id;
+  }
+
   async function createFrom(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
     setThinking(refId + idea.title);
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
-      const settings = { target_seconds: short ? 50 : 300, style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "off", base_captions: "hide", source_mode: "search" };
-      const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
-      const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
-      if (error) throw error;
-      const s = await generateScript({ data: { productionId: p.id, topic } });
-      if (!s.ok) throw new Error(s.error);
+      await makeProduction(refId, platform, idea);
       toast.success("Roteiro criado no estilo do canal");
       navigate({ to: "/producoes" });
     } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
+  }
+
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+  const [batch, setBatch] = useState<string | null>(null);
+  async function runBatch(refId: string, platform: string) {
+    const list = (ideas[refId] ?? []).filter((i) => picked[refId]?.includes(i.title));
+    if (!list.length) return;
+    setThinking(refId + ":batch");
+    let ok = 0;
+    for (const [n, idea] of list.entries()) {
+      setBatch(`Escrevendo roteiro ${n + 1} de ${list.length}…`);
+      try {
+        const pid = await makeProduction(refId, platform, idea);
+        await startProduction(pid, { needsAnalysis: false, referenceId: refId });
+        ok++;
+      } catch (e) { toast.error(`"${idea.title}": ${(e as Error).message}`); }
+    }
+    setBatch(null); setThinking(null);
+    setPicked((m) => ({ ...m, [refId]: [] }));
+    if (ok) { toast.success(`${ok} vídeo(s) na fila. O agente faz um depois do outro.`); navigate({ to: "/producoes" }); }
   }
 
   async function add() {
