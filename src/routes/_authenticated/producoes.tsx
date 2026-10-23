@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { activeJob, setJobStatus, startProduction } from "@/lib/jobs";
-import { generateScript } from "@/lib/ai.functions";
+import { generateScript, postKit } from "@/lib/ai.functions";
 import { SceneEditor } from "@/components/app/SceneEditor";
 import { JobStatus } from "@/components/app/JobStatus";
 import { ScriptView } from "@/components/app/ScriptView";
@@ -54,6 +54,7 @@ function Producoes() {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
+  const [kit, setKit] = useState<string | null>(null);
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: voices } = useQuery({ queryKey: ["voices"], queryFn: async () => (await supabase.from("voices").select("id,name,status")).data ?? [] });
@@ -247,9 +248,12 @@ function Producoes() {
                   <button disabled={b} className={btn} onClick={() => control(p.id, "queued")}>Retomar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "cancelled")}>Cancelar</button>
                   {s ? <button className={btn + (view === p.id ? " bg-accent" : "")} onClick={() => setView(view === p.id ? null : p.id)}>{view === p.id ? "Fechar roteiro" : "Ler roteiro"}</button> : null}
+                  {s ? <button disabled={b} className={btn} onClick={() => run(p.id, async () => { const r = await postKit({ data: { productionId: p.id } }); if (!r.ok) throw new Error(r.error); setKit(p.id); }, "Kit de postagem pronto")}>{b ? "Gerando…" : (p.settings as Record<string, unknown> | null)?.["post_kit"] ? "Refazer kit de postagem" : "Kit de postagem"}</button> : null}
+                  {(p.settings as Record<string, unknown> | null)?.["post_kit"] ? <button className={btn + (kit === p.id ? " bg-accent" : "")} onClick={() => setKit(kit === p.id ? null : p.id)}>{kit === p.id ? "Fechar kit" : "Ver kit"}</button> : null}
                   {s ? <button className={btn + (open === p.id ? " bg-accent" : "")} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Fechar cenas" : "Ver e editar cenas"}</button> : null}
                 </div>
                 {view === p.id && s ? <ScriptView productionId={p.id} script={s} targetSeconds={Number((p.settings as Record<string, unknown> | null)?.["target_seconds"] ?? 0)} /> : null}
+                {kit === p.id && (p.settings as Record<string, unknown> | null)?.["post_kit"] ? <PostKit kit={(p.settings as Record<string, unknown>)["post_kit"] as Kit} /> : null}
                 {open === p.id ? <SceneEditor productionId={p.id} /> : null}
               </div>
             );
@@ -298,6 +302,27 @@ function VideoPlayer({ path }: { path: string }) {
     <div className="space-y-2">
       <video src={url} controls preload="metadata" className="max-h-[480px] w-full rounded-md bg-muted" />
       <a href={url} download className={btn + " inline-block"}>Baixar MP4</a>
+    </div>
+  );
+}
+
+type Kit = { titles: string[]; description: string; hashtags: string[]; thumbnail_text: string[]; pinned_comment: string };
+
+function Copy({ text }: { text: string }) {
+  return <button className={btn} onClick={() => { navigator.clipboard.writeText(text); toast.success("Copiado"); }}>Copiar</button>;
+}
+
+/** Títulos, descrição, hashtags e texto da capa prontos para colar na hora de postar. */
+function PostKit({ kit }: { kit: Kit }) {
+  const tags = kit.hashtags.join(" ");
+  const row = "flex items-start justify-between gap-3 rounded-md border border-border p-2";
+  return (
+    <div className="space-y-3 rounded-md bg-muted/40 p-3 text-xs">
+      <div className="space-y-1"><div className="font-medium">Títulos</div>{kit.titles.map((t) => <div key={t} className={row}><span>{t}</span><Copy text={t} /></div>)}</div>
+      <div className="space-y-1"><div className="font-medium">Descrição</div><div className={row}><span className="whitespace-pre-wrap">{kit.description}</span><Copy text={kit.description} /></div></div>
+      <div className="space-y-1"><div className="font-medium">Hashtags</div><div className={row}><span>{tags}</span><Copy text={tags} /></div></div>
+      <div className="space-y-1"><div className="font-medium">Texto para a capa</div>{kit.thumbnail_text.map((t) => <div key={t} className={row}><span className="font-semibold uppercase">{t}</span><Copy text={t} /></div>)}</div>
+      <div className="space-y-1"><div className="font-medium">Comentário fixado</div><div className={row}><span>{kit.pinned_comment}</span><Copy text={kit.pinned_comment} /></div></div>
     </div>
   );
 }
