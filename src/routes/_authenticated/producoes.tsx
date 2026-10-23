@@ -9,6 +9,7 @@ import { generateScript } from "@/lib/ai.functions";
 import { SceneEditor } from "@/components/app/SceneEditor";
 import { JobStatus } from "@/components/app/JobStatus";
 import { ScriptView } from "@/components/app/ScriptView";
+import { suggestedSeconds } from "@/lib/duration";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
