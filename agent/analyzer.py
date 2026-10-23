@@ -230,7 +230,7 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
 
 def channel_url(url: str) -> str:
     """Canal do YouTube sem aba retorna só as abas; força /videos (ou mantém /shorts)."""
-    u = url.rstrip("/")
+    u = re.sub(r"[?#].*$", "", url.strip()).rstrip("/")  # remove ?si=... de links compartilhados
     if re.search(r"youtube\.com/(@[^/]+|c/[^/]+|channel/[^/]+|user/[^/]+)$", u):
         return u + "/videos"
     return u

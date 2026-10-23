@@ -79,7 +79,7 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
     user:
       (isShort
         ? "Analise a estrutura visual e temporal deste vídeo curto. Use as cenas detectadas automaticamente (tempos de corte do FFmpeg), a transcrição com tempos e os quadros-chave anexados (na ordem dos tempos indicados)."
-        : "Analise este canal/perfil a partir dos metadados públicos, transcrições e estatísticas de cortes coletadas pelo agente local. Foram baixados vários vídeos (os mais e os menos vistos). Preencha video_comparison com cada vídeo analisado, common_patterns com o que se repete em todos e winning_formula com o que os mais vistos fazem diferente dos menos vistos. Só classifique desempenho se houver visualizações; senão use sem_dados.") +
+        : "Analise este canal/perfil a partir dos metadados públicos, transcrições e estatísticas de cortes coletadas pelo agente local. Foram baixados os vídeos mais recentes do canal, com a transcrição completa de cada um. Descubra o nicho REAL pelo que é falado nas transcrições e títulos, nunca pelo nome do canal. Preencha video_comparison com cada vídeo analisado, common_patterns com o que se repete em todos e winning_formula com o que os mais vistos fazem diferente dos menos vistos. Só classifique desempenho se houver visualizações; senão use sem_dados.") +
       "\n\nAlém disso, preencha format_dna como um especialista em formatos virais: descubra nicho e subnicho, público, a promessa do vídeo, o tipo exato de gancho e o molde da primeira frase (com 3 modelos reaproveitáveis com [TEMA]), a estrutura em partes com % do tempo, como a narração é escrita (pessoa, tom, palavras por segundo, tamanho das frases, recursos como perguntas, contrastes, números), técnicas de retenção e loops abertos, edição (cortes por minuto, zoom, transições, proporção de imagens de apoio), legendas, áudio, que tipo de imagem usar e em qual fonte (YouTube para cenas de filmes/clipes, web, Wikimedia, NASA, Pexels, Pixabay, Internet Archive), CTA, padrão de título, o que fazer e o que evitar, e 5 ideias de vídeos novos no mesmo formato. Descreva o FORMATO, nunca copie falas ou conteúdo protegido. Se algo não pode ser medido, diga que é estimativa." +
       "\n\nANÁLISE FORENSE: os dados trazem, por vídeo, 'transcript' (falas com tempo), 'audio' (pausas medidas na voz, sound_hits = impactos/efeitos sonoros) e 'edit' (cortes por minuto em cada terço, cortes e texto dos 3 primeiros segundos, palavras por segundo, impactos que coincidem com cortes). Use esses NÚMEROS reais. Preencha format_dna.replication para que o vídeo novo seja uma cópia exata do FORMATO: media_rule ('video_only' se os quadros mostram clipes/cenas de filme/gameplay em movimento — nichos de filmes, heróis, anime, futebol, games quase sempre são video_only); scene_seconds = média medida entre cortes; hook_anatomy (o que acontece em cada segundo dos 3 primeiros: fala, corte, impacto); voice_pace (palavras/segundo medidas e energia); voice_rate_percent (velocidade para a voz sintética: 0 normal, 10 a 25 se fala rápida, -10 se lenta); pause_style (pausas medidas: quantas, média, onde ficam); sfx_placement (onde caem os impactos: gancho, viradas, cada corte); caption_color pelo destaque visto nos quadros (verde=neon, amarelo=hormozi, vermelho=red, branco=clean); script_skeleton = a sequência de funções de cada frase da transcrição (ex.: 'pergunta chocante', 'fato 1 com número', 'virada', 'CTA'), sem copiar as palavras." +
         "\n\nDADOS COLETADOS (JSON):\n" +
@@ -89,6 +89,8 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
     images: (args.frames ?? []).slice(0, 10),
   });
   await recordTextUsage(db, userId, s, usage, isShort ? "análise de vídeo curto" : "análise de canal", args.jobId, null);
+  const measured = measureReference(args.collected);
+  if (measured) (data as Record<string, unknown>)["measured"] = measured;
   await db.from("analyses").update({ status: "done", report: data as never, error: null }).eq("id", an.id);
   const ref = an.reference_sources as { title: string | null; urls: string[] } | null;
   const { data: style } = await db
@@ -103,6 +105,18 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
     .select("id")
     .single();
   return { report: data, styleId: style?.id };
+}
+
+/** Real numbers from the downloaded reference videos: average length and words spoken (from transcripts). */
+export function measureReference(collected: unknown): { avg_duration_s: number; avg_words: number | null; words_per_second: number | null; videos: number } | null {
+  const vs = ((collected as { videos?: { duration_s?: number; transcript?: { text: string }[] }[] } | null)?.videos ?? []).filter((v) => Number(v.duration_s) > 0);
+  if (!vs.length) return null;
+  const avgDur = vs.reduce((a, v) => a + Number(v.duration_s), 0) / vs.length;
+  const withText = vs.filter((v) => (v.transcript ?? []).length > 3);
+  const words = withText.map((v) => (v.transcript ?? []).reduce((a, t) => a + t.text.split(/\s+/).filter(Boolean).length, 0));
+  const avgWords = words.length ? words.reduce((a, b) => a + b, 0) / words.length : null;
+  const wps = words.length ? words.reduce((a, b) => a + b, 0) / withText.reduce((a, v) => a + Number(v.duration_s), 0) : null;
+  return { avg_duration_s: Math.round(avgDur), avg_words: avgWords ? Math.round(avgWords) : null, words_per_second: wps ? Math.round(wps * 100) / 100 : null, videos: vs.length };
 }
 
 function dnaOf(report: unknown): unknown {
@@ -196,7 +210,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
   const ps = (p.settings ?? {}) as Record<string, unknown>;
-  const target = effectiveTargetSeconds(p.aspect, ps["target_seconds"]);
+  const meas = (report as { measured?: { avg_duration_s?: number; words_per_second?: number | null } } | null)?.measured;
+  // No length chosen by the user: copy the real average length of the reference videos.
+  const target = effectiveTargetSeconds(p.aspect, ps["target_seconds"] ?? meas?.avg_duration_s);
   const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
   const rep = dna.replication ?? {};
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
@@ -205,7 +221,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   // Speed cap: at most 1 narrated scene per 4s (60s => 15 scenes); the agent adds the reference cut rhythm inside each clip (cut_seconds).
   const autoCap = Math.max(4, Math.round(target / 4));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(autoCap, Math.max(4, Math.round(target / refScene))) : null;
-  const words = Math.round(target * WORDS_PER_SECOND);
+  const wps = meas?.words_per_second && meas.words_per_second > 1 && meas.words_per_second < 4.5 ? meas.words_per_second : WORDS_PER_SECOND;
+  const words = Math.round(target * wps);
   const ready = String(ps["ready_script"] ?? "").trim();
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
   const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "video_only" || /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos|cenas de filme|clipes de filme|trailer|gameplay/.test(dnaText)));
