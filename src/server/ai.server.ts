@@ -157,7 +157,7 @@ async function lovableJson<T>(opts: AiOpts): Promise<{ data: T; usage: Usage }> 
 }
 
 export async function aiImage(prompt: string, aspect: string, model: string): Promise<string> {
-  const size = aspect === "9:16" ? "1024x1536" : aspect === "16:9" ? "1536x1024" : "1024x1024";
+  const size = (aspect === "9:16" || aspect === "3:4") ? "1024x1536" : aspect === "16:9" ? "1536x1024" : "1024x1024";
   const res = await fetch(`${GATEWAY}/v1/images/generations`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },

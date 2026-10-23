@@ -9,7 +9,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
+ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "3:4": (1080, 1440)}
 
 
 class MediaError(RuntimeError):
