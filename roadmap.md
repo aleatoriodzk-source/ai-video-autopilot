@@ -22,4 +22,6 @@
 - [x] Modo fatiador: IA assiste as tomadas do vídeo de referência e monta o roteiro com elas
 - [x] Contas vinculadas (cookies.txt YouTube/TikTok) + Explorador de busca no YouTube
 - [x] Narração sem pausas, fatiador fiel à IA, faxina de 24h
+- [x] Legenda sincronizada com a fala real (ignora pausas)
+- [ ] Próximos: efeitos sonoros reais, voz clonada mais rápida, sugestões de temas após análise de canal
 - [ ] Testar no PC do Júlio (depende de trocar os arquivos do agente)

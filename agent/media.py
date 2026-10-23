@@ -136,6 +136,52 @@ def word_timings(text: str, speech_s: float, start: float = 0.0, max_words: int 
     return out
 
 
+def speech_spans(wav: Path, threshold_db: int = -38, min_silence: float = 0.12) -> list[tuple[float, float]]:
+    """Trechos com fala de verdade no WAV (via silencedetect)."""
+    total = duration(wav)
+    p = subprocess.run(["ffmpeg", "-i", str(wav), "-af", f"silencedetect=n={threshold_db}dB:d={min_silence}", "-f", "null", "-"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", p.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", p.stderr)]
+    spans, cur = [], 0.0
+    for i, s in enumerate(starts):
+        if s - cur > 0.05:
+            spans.append((cur, s))
+        cur = ends[i] if i < len(ends) else total
+    if total - cur > 0.05:
+        spans.append((cur, total))
+    return spans or [(0.0, total)]
+
+
+def aligned_timings(text: str, wav: Path, start: float = 0.0, max_words: int = 3) -> list[dict]:
+    """Legenda sincronizada com a fala real: distribui os blocos só dentro dos trechos com voz,
+    então as pausas não empurram a legenda para fora do tempo."""
+    chunks = chunk_words(text, max_words)
+    if not chunks:
+        return []
+    try:
+        spans = speech_spans(wav)
+    except Exception:
+        return word_timings(text, duration(wav), start, max_words)
+    voiced = sum(b - a for a, b in spans) or 1.0
+    total_chars = sum(len(c) for c in chunks) or 1
+
+    def to_time(frac: float) -> float:  # posição na fala (0-1) -> segundo real no arquivo
+        target, acc = frac * voiced, 0.0
+        for a, b in spans:
+            if acc + (b - a) >= target:
+                return a + (target - acc)
+            acc += b - a
+        return spans[-1][1]
+
+    out, done = [], 0
+    for c in chunks:
+        s, done = to_time(done / total_chars), done + len(c)
+        e = to_time(done / total_chars)
+        out.append({"text": c, "start": round(start + s, 3), "end": round(start + max(e, s + 0.15), 3)})
+    return out
+
+
 def _ts(s: float) -> str:
     cs = int(round(s * 100))
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
