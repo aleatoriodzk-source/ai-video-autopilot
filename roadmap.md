@@ -34,4 +34,4 @@
 - [x] Campo de tema no Laboratório (sem janelinha do navegador)
 - [x] Narração reaproveitada se o agente reiniciar
 - [x] Smart crop (personagem centralizado) e personagem bater com a fala
-- [ ] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
+- [x] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
