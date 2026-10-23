@@ -116,7 +116,7 @@ def transcript(url: str, work: Path) -> list[dict]:
             out.append({"t": round(int(h) * 3600 + int(m) * 60 + float(s), 2), "text": t})
     for x in work.glob("subs*.vtt"):
         x.unlink(missing_ok=True)
-    return out[:400]
+    return out[:3000]
 
 
 def edit_forensics(dur: float, cuts: list[float], words: list[dict], audio: dict) -> dict:
@@ -230,7 +230,7 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
 
 def channel_url(url: str) -> str:
     """Canal do YouTube sem aba retorna só as abas; força /videos (ou mantém /shorts)."""
-    u = url.rstrip("/")
+    u = re.sub(r"[?#].*$", "", url.strip()).rstrip("/")  # remove ?si=... de links compartilhados
     if re.search(r"youtube\.com/(@[^/]+|c/[^/]+|channel/[^/]+|user/[^/]+)$", u):
         return u + "/videos"
     return u
