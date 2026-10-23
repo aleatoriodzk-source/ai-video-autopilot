@@ -36,12 +36,14 @@ function Referencias() {
   const [busy, setBusy] = useState(false);
   const { data: refs } = useQuery({
     queryKey: ["refs"],
+    refetchInterval: 8000,
     queryFn: async () => (await supabase.from("reference_sources").select("*").or("notes.is.null,notes.neq.lab").order("created_at", { ascending: false })).data ?? [],
   });
 
   const [open, setOpen] = useState<string | null>(null);
   const { data: reports } = useQuery({
     queryKey: ["analyses-done"],
+    refetchInterval: 8000,
     queryFn: async () => (await supabase.from("analyses").select("reference_id, report, created_at").eq("status", "done").order("created_at", { ascending: false })).data ?? [],
   });
   const reportOf = (id: string) => reports?.find((a) => a.reference_id === id)?.report;
@@ -151,6 +153,14 @@ function Referencias() {
     } catch (e) { toast.error((e as Error).message); }
   }
 
+  async function remove(id: string) {
+    if (!window.confirm("Excluir esta referência e as análises dela?")) return;
+    const { error } = await supabase.from("reference_sources").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Referência excluída");
+    qc.invalidateQueries({ queryKey: ["refs"] });
+  }
+
   return (
     <div>
       <PageHeader title="Referências" subtitle="Cole links de canais ou vídeos do YouTube/TikTok. Vários links do mesmo criador viram uma única referência. O download e a análise são feitos pelo agente local no seu computador." />
@@ -184,9 +194,10 @@ function Referencias() {
                 <div className="text-xs text-muted-foreground">{r.platform} · {r.kind === "channel" ? "canal/perfil" : "vídeo"} · {r.urls.length} link(s)</div>
               </div>
               <div className="flex items-center gap-2">
-                <StatusBadge status={r.status} />
+                <StatusBadge status={reportOf(r.id) && r.status !== "queued" && r.status !== "running" ? "done" : r.status} />
                 {reportOf(r.id) ? <button onClick={() => setOpen(open === r.id ? null : r.id)} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground">{open === r.id ? "Fechar DNA" : "Ver DNA do formato"}</button> : null}
-                <button onClick={() => analyze(r.id, r.kind)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">Analisar</button>
+                <button onClick={() => analyze(r.id, r.kind)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">{reportOf(r.id) ? "Analisar de novo" : "Analisar"}</button>
+                <button onClick={() => remove(r.id)} className="rounded-md border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10">Excluir</button>
               </div>
             </div>
             {open === r.id ? <div className="mt-4 border-t border-border pt-4"><DnaView report={reportOf(r.id)} /></div> : null}
