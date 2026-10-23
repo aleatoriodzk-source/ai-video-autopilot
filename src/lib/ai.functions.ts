@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { runChannelIdeas, runIdeas, runRewriteScene, runScript } from "@/server/tasks.server";
+import { runPostKit, runChannelIdeas, runIdeas, runRewriteScene, runScript } from "@/server/tasks.server";
 
 export const channelIdeas = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -44,6 +44,18 @@ export const rewriteScene = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     try {
       await runRewriteScene(context.supabase, context.userId, data.sceneId, data.instruction);
+      return { ok: true as const };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  });
+
+export const postKit = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { productionId: string }) => ({ productionId: String(i.productionId) }))
+  .handler(async ({ data, context }) => {
+    try {
+      await runPostKit(context.supabase, context.userId, data.productionId);
       return { ok: true as const };
     } catch (e) {
       return { ok: false as const, error: (e as Error).message };

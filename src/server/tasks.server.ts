@@ -2,7 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
-import { channelAnalysisSchema, ideasSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
+import { channelAnalysisSchema, ideasSchema, postKitSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
 import { WORDS_PER_SECOND, countWords, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
@@ -162,6 +162,31 @@ export async function runChannelIdeas(db: DB, userId: string, referenceId: strin
   });
   await recordTextUsage(db, userId, s, usage, "ideias do canal", null, null);
   return data.ideas;
+}
+
+/** Kit de postagem: títulos, descrição, hashtags e texto da capa a partir do roteiro pronto. */
+export async function runPostKit(db: DB, userId: string, productionId: string) {
+  const { p, report } = await productionContext(db, productionId);
+  const script = p.script as { title?: string; hook?: string; scenes?: { narration: string }[] } | null;
+  if (!script?.scenes?.length) throw new Error("Gere o roteiro antes do kit de postagem");
+  const s = await guardBudget(db, userId, null, null);
+  const ai = makeAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
+  const short = p.aspect === "9:16";
+  const { data, usage } = await ai<{ titles: string[]; description: string; hashtags: string[]; thumbnail_text: string[]; pinned_comment: string }>({
+    system: ETHICS,
+    user:
+      `Crie o kit de postagem deste vídeo ${short ? "curto (TikTok/Shorts/Reels)" : "do YouTube"}. ` +
+      `titles: 5 títulos com curiosidade, sem clickbait mentiroso (${short ? "até 60" : "até 70"} caracteres), no padrão de título do canal de referência se houver. ` +
+      `description: ${short ? "2 a 3 linhas" : "1 parágrafo forte + 3 tópicos do que o vídeo mostra + chamada para inscrever"}. ` +
+      "hashtags: 8 a 12, com #, misturando amplas e do nicho. thumbnail_text: 3 opções de texto curto (2 a 4 palavras) para a capa. pinned_comment: um comentário fixado que puxe conversa." +
+      `\nRoteiro: ${JSON.stringify({ title: script.title, hook: script.hook, narration: script.scenes.map((x) => x.narration).join(" ") }).slice(0, 15000)}` +
+      `\nDNA do canal de referência: ${JSON.stringify((report as Record<string, unknown> | null)?.["format_dna"] ?? "não disponível").slice(0, 8000)}`,
+    schemaName: "post_kit",
+    schema: postKitSchema,
+  });
+  await recordTextUsage(db, userId, s, usage, "kit de postagem", null, productionId);
+  await db.from("productions").update({ settings: { ...((p.settings ?? {}) as Record<string, unknown>), post_kit: data } as never }).eq("id", productionId);
+  return data;
 }
 
 export async function runScript(db: DB, userId: string, productionId: string, jobId: string | null, chosenTopic?: string) {

@@ -140,3 +140,11 @@ export type ScriptOut = {
   references: { claim: string; how_to_verify: string }[];
   notes: string;
 };
+
+export const postKitSchema = obj({
+  titles: arr(str),
+  description: str,
+  hashtags: arr(str),
+  thumbnail_text: arr(str),
+  pinned_comment: str,
+});
