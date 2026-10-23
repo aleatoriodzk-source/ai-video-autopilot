@@ -16,6 +16,7 @@ import { Route as AuthenticatedAcervoRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedAgenteRouteImport } from './routes/_authenticated/agente'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedContasRouteImport } from './routes/_authenticated/contas'
+import { Route as AuthenticatedLaboratorioRouteImport } from './routes/_authenticated/laboratorio'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedProducoesRouteImport } from './routes/_authenticated/producoes'
 import { Route as AuthenticatedReferenciasRouteImport } from './routes/_authenticated/referencias'
@@ -57,6 +58,12 @@ const AuthenticatedContasRoute = AuthenticatedContasRouteImport.update({
   path: '/contas',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLaboratorioRoute =
+  AuthenticatedLaboratorioRouteImport.update({
+    id: '/laboratorio',
+    path: '/laboratorio',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   id: '/painel',
   path: '/painel',
@@ -91,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/contas': typeof AuthenticatedContasRoute
+  '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
@@ -104,6 +112,7 @@ export interface FileRoutesByTo {
   '/agente': typeof AuthenticatedAgenteRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/contas': typeof AuthenticatedContasRoute
+  '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
@@ -119,6 +128,7 @@ export interface FileRoutesById {
   '/_authenticated/agente': typeof AuthenticatedAgenteRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/contas': typeof AuthenticatedContasRoute
+  '/_authenticated/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/producoes': typeof AuthenticatedProducoesRoute
   '/_authenticated/referencias': typeof AuthenticatedReferenciasRoute
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/agente'
     | '/configuracoes'
     | '/contas'
+    | '/laboratorio'
     | '/painel'
     | '/producoes'
     | '/referencias'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/agente'
     | '/configuracoes'
     | '/contas'
+    | '/laboratorio'
     | '/painel'
     | '/producoes'
     | '/referencias'
@@ -161,6 +173,7 @@ export interface FileRouteTypes {
     | '/_authenticated/agente'
     | '/_authenticated/configuracoes'
     | '/_authenticated/contas'
+    | '/_authenticated/laboratorio'
     | '/_authenticated/painel'
     | '/_authenticated/producoes'
     | '/_authenticated/referencias'
@@ -226,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedContasRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/laboratorio': {
+      id: '/_authenticated/laboratorio'
+      path: '/laboratorio'
+      fullPath: '/laboratorio'
+      preLoaderRoute: typeof AuthenticatedLaboratorioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/painel': {
       id: '/_authenticated/painel'
       path: '/painel'
@@ -269,6 +289,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenteRoute: typeof AuthenticatedAgenteRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedContasRoute: typeof AuthenticatedContasRoute
+  AuthenticatedLaboratorioRoute: typeof AuthenticatedLaboratorioRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedProducoesRoute: typeof AuthenticatedProducoesRoute
   AuthenticatedReferenciasRoute: typeof AuthenticatedReferenciasRoute
@@ -280,6 +301,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenteRoute: AuthenticatedAgenteRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedContasRoute: AuthenticatedContasRoute,
+  AuthenticatedLaboratorioRoute: AuthenticatedLaboratorioRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedProducoesRoute: AuthenticatedProducoesRoute,
   AuthenticatedReferenciasRoute: AuthenticatedReferenciasRoute,
