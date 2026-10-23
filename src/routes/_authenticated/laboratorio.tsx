@@ -50,7 +50,7 @@ function Lab() {
 
   async function dissect() {
     const label = name.trim() || file?.name || "Vídeo do laboratório";
-    if (!file && !/^https?:\/\//.test(link.trim())) return toast.error("Envie um vídeo ou cole um link do TikTok/YouTube");
+    if (!file && !/^https?:\/\//.test(link.trim())) { toast.error("Envie um vídeo ou cole um link do TikTok/YouTube"); return; }
     setBusy(true);
     try {
       const uid = (await supabase.auth.getUser()).data.user!.id;
@@ -87,9 +87,9 @@ function Lab() {
     const topic = window.prompt("Tema do novo vídeo com este kit:");
     if (!topic?.trim()) return;
     const uid = (await supabase.auth.getUser()).data.user!.id;
-    const settings: Record<string, unknown> = { target_seconds: 50, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
+    const settings: any = { target_seconds: 50, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Produção criada com o kit do laboratório");
     nav({ to: "/producoes" });
   }
