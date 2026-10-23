@@ -14,7 +14,7 @@ import media
 from analyzer import fetch_video, scene_cuts, transcript
 
 
-def _shots(dur: float, cuts: list[float], min_len: float = 0.5, max_n: int = 40) -> list[tuple[float, float]]:
+def _shots(dur: float, cuts: list[float], min_len: float = 0.5, max_n: int = 50) -> list[tuple[float, float]]:
     pts = [0.0] + [c for c in cuts if 0 < c < dur] + [dur]
     shots = []
     for a, b in zip(pts, pts[1:]):
@@ -82,9 +82,13 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
     recent: list[int] = []
     for n, sc in enumerate(scenes):
         need = float(sc.get("duration_s") or 2.0)
-        cand = [i for i in (picks[n] if n < len(picks) else []) if 0 <= i < len(shots)]
-        cand += [i for i in range(len(shots)) if i not in cand]
-        idx = next((i for i in cand if i not in recent[-6:]), cand[0])
+        # A escolha da IA manda: só evita repetir a tomada anterior se a IA deu outra opção.
+        ai = [i for i in (picks[n] if n < len(picks) else []) if 0 <= i < len(shots)]
+        if ai:
+            idx = next((i for i in ai if not recent or i != recent[-1]), ai[0])
+        else:
+            rest = [i for i in range(len(shots)) if i not in recent[-6:]] or list(range(len(shots)))
+            idx = rest[0]
         recent.append(idx)
         a, b = shots[idx]
         start = a + 0.05
@@ -92,7 +96,11 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
             start = a + min(0.3, (b - a - need) / 2)
         start = max(0.0, min(start, dur - need - 0.05))
         out = work / f"vid_{sc['idx']:03d}.mp4"
-        media.run(["ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(base), "-t", f"{need + 0.2:.3f}", "-an", *(["-vf", blur] if blur else []),
+        short = (b - a) < need
+        if short:  # tomada mais curta que a fala: repete só essa tomada (não invade a próxima cena)
+            start = a + 0.05
+        src = ["-stream_loop", "-1", "-ss", f"{start:.3f}", "-t", f"{max(0.3, b - a - 0.1):.3f}", "-i", str(base)] if short else ["-ss", f"{start:.3f}", "-i", str(base)]
+        media.run(["ffmpeg", "-y", *src, "-t", f"{need + 0.2:.3f}", "-an", *(["-vf", blur] if blur else []),
                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(out)])
         runner.log(job, f"cena {sc['idx'] + 1}: tomada {idx} ({start:.1f}s do vídeo base)", step="visuals")
     return True

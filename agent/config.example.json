@@ -7,5 +7,6 @@
   "music_path": "",
   "tts": "edge",
   "edge_voice": "pt-BR-AntonioNeural",
-  "edge_rate": "+5%"
+  "edge_rate": "+5%",
+  "cleanup_hours": 24
 }

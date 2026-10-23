@@ -10,6 +10,7 @@ import base64
 import json
 import platform
 import random
+import shutil
 import sys
 import time
 import traceback
@@ -447,6 +448,31 @@ class Runner:
             raise media.MediaError("vídeo final reprovado na validação: " + "; ".join(rep["issues"]))
 
 
+def cleanup(cfg: dict) -> None:
+    """Faxina: apaga do PC o que tem mais de N horas (padrão 24). O vídeo continua salvo no site."""
+    hours = float(cfg.get("cleanup_hours", 24) or 0)
+    if hours <= 0:
+        return
+    limit = time.time() - hours * 3600
+    dirs = [Path(cfg["work_dir"]), Path(cfg.get("cache_dir") or ROOT / "cache") / "base", Path(cfg["output_dir"])]
+    freed = 0
+    for d in dirs:
+        if not d.exists():
+            continue
+        for p in d.iterdir():
+            try:
+                newest = max([p.stat().st_mtime] + ([f.stat().st_mtime for f in p.rglob("*")] if p.is_dir() else []))
+                if newest >= limit:
+                    continue
+                size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.is_dir() else p.stat().st_size
+                shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+                freed += size
+            except OSError:
+                pass
+    if freed:
+        print(f"  faxina: {freed / 1e6:.0f} MB de arquivos com mais de {hours:g}h apagados")
+
+
 def pick_music(cfg: dict, mood: str) -> str | None:
     """Escolhe uma música da pasta music/<clima>/ (ou de qualquer subpasta em 'auto')."""
     if mood == "none":
@@ -488,8 +514,12 @@ def main():
     runner = Runner(api, cfg)
     print(f"Agente {VERSION} conectado a {cfg['api_url']}. Ctrl+C para parar.")
     last_beat = 0.0
+    last_clean = 0.0
     while True:
         try:
+            if time.time() - last_clean > 3600:
+                cleanup(cfg)
+                last_clean = time.time()
             if time.time() - last_beat > 30:
                 api.call("heartbeat", info=info())
                 last_beat = time.time()

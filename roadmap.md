@@ -21,4 +21,5 @@
 - [x] Banco de Vozes: isolar voz (Demucs) + medir ritmo/pausas + clonar (F5-TTS/XTTS no PC via install_voice_clone.bat)
 - [x] Modo fatiador: IA assiste as tomadas do vídeo de referência e monta o roteiro com elas
 - [x] Contas vinculadas (cookies.txt YouTube/TikTok) + Explorador de busca no YouTube
+- [x] Narração sem pausas, fatiador fiel à IA, faxina de 24h
 - [ ] Testar no PC do Júlio (depende de trocar os arquivos do agente)
