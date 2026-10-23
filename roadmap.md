@@ -25,3 +25,13 @@
 - [x] Legenda sincronizada com a fala real (ignora pausas)
 - [ ] Próximos: efeitos sonoros reais, voz clonada mais rápida, sugestões de temas após análise de canal
 - [ ] Testar no PC do Júlio (depende de trocar os arquivos do agente)
+
+## Lista de correções (Out/2026)
+- [x] Mínimo 60s em vídeos curtos
+- [x] Legenda na zona segura inferior
+- [x] Análise de canal: 5 vídeos mais recentes + link /videos
+- [x] Excluir referências + atualização automática + selo "Analisado"
+- [x] Campo de tema no Laboratório (sem janelinha do navegador)
+- [x] Narração reaproveitada se o agente reiniciar
+- [ ] Smart crop (personagem centralizado) e personagem bater com a fala
+- [ ] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
