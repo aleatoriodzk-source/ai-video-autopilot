@@ -141,6 +141,29 @@ export async function runIdeas(db: DB, userId: string, productionId: string, job
   return data.ideas;
 }
 
+/** Ideias de vídeo novas a partir do DNA de um canal já analisado (sem produção ainda). */
+export async function runChannelIdeas(db: DB, userId: string, referenceId: string, wish: string) {
+  const { data: r } = await db.from("reference_sources").select("id,title,urls,platform").eq("id", referenceId).eq("user_id", userId).maybeSingle();
+  if (!r) throw new Error("Referência não encontrada");
+  const { data: a } = await db.from("analyses").select("report").eq("reference_id", r.id).eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!a?.report) throw new Error("Analise o canal primeiro (botão Analisar) para a IA aprender o formato.");
+  const s = await guardBudget(db, userId, null, null);
+  const ai = makeAi(userId, s);
+  const { data, usage } = await ai<{ ideas: { title: string; hook: string; angle: string; why_fits: string; factual: boolean }[] }>({
+    system: ETHICS,
+    user:
+      "Você estudou o canal abaixo. Sugira 8 temas NOVOS e originais que esse criador faria e que têm potencial de viralizar no mesmo formato. " +
+      "Não repita temas de vídeos que ele já fez. Em 'hook' escreva a primeira frase do vídeo no molde de gancho do canal; em 'why_fits' explique em 1 frase por que funciona nesse formato. Marque factual=true se depende de fatos verificáveis." +
+      (wish ? `\nPreferência do usuário: ${wish}` : "") +
+      `\nCanal: ${r.title ?? r.urls[0]} (${r.platform})` +
+      `\nRelatório/DNA do canal: ${JSON.stringify(a.report).slice(0, 30000)}`,
+    schemaName: "ideas",
+    schema: ideasSchema,
+  });
+  await recordTextUsage(db, userId, s, usage, "ideias do canal", null, null);
+  return data.ideas;
+}
+
 export async function runScript(db: DB, userId: string, productionId: string, jobId: string | null, chosenTopic?: string) {
   const { p, report } = await productionContext(db, productionId);
   const s = await guardBudget(db, userId, jobId, null);
