@@ -42,3 +42,13 @@ describe("duração mínima de vídeos curtos", () => {
   it("vídeo 3:4 sem duração usa 65s", () => expect(effectiveTargetSeconds("3:4", undefined)).toBe(65));
   it("vídeo 16:9 pode ter 30s", () => expect(effectiveTargetSeconds("16:9", 30)).toBe(30));
 });
+
+import { measureReference } from "@/server/tasks.server";
+describe("measureReference", () => {
+  it("mede duração média e palavras reais das transcrições", () => {
+    const t = Array.from({ length: 10 }, () => ({ text: "um dois tres quatro cinco" }));
+    const m = measureReference({ videos: [{ duration_s: 600, transcript: t }, { duration_s: 800, transcript: t }] });
+    expect(m?.avg_duration_s).toBe(700);
+    expect(m?.avg_words).toBe(50);
+  });
+});
