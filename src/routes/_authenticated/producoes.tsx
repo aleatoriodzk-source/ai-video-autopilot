@@ -168,7 +168,7 @@ function Producoes() {
         </label>
         <div className="flex gap-2">
           <select value={aspect} onChange={(e) => setAspect(e.target.value)} className={input}>
-            <option value="9:16">9:16 vertical</option><option value="16:9">16:9 horizontal</option><option value="1:1">1:1 quadrado</option>
+            <option value="9:16">9:16 vertical</option><option value="3:4">3:4 retrato</option><option value="16:9">16:9 horizontal</option><option value="1:1">1:1 quadrado</option>
           </select>
           <select value={mode} onChange={(e) => setMode(e.target.value)} className={input}>
             <option value="auto">Automático</option><option value="assisted">Assistido</option>

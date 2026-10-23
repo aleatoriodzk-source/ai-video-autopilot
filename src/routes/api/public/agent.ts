@@ -132,7 +132,7 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "ai_image": {
               const job = await ownJob(body.job_id);
-              const { prompt, aspect, used } = z.object({ prompt: z.string().min(3).max(2000), aspect: z.enum(["9:16", "16:9", "1:1"]), used: z.number().int().min(0) }).parse(body);
+              const { prompt, aspect, used } = z.object({ prompt: z.string().min(3).max(2000), aspect: z.enum(["9:16", "16:9", "1:1", "3:4"]), used: z.number().int().min(0) }).parse(body);
               const s = await tasks.guardBudget(db, userId, job.id, null);
               const { canGenerateAiImage } = await import("@/lib/costs");
               const ok = canGenerateAiImage({ allowPaid: s.ai.allow_ai_images, usedInVideo: used, limits: s.limits });

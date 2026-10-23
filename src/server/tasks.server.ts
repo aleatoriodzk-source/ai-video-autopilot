@@ -128,7 +128,7 @@ export async function runIdeas(db: DB, userId: string, productionId: string, job
   const { data, usage } = await ai<{ ideas: unknown[] }>({
     system: ETHICS,
     user:
-      `Sugira 6 temas originais de vídeo ${p.aspect === "9:16" ? "curto vertical" : "para YouTube"} alinhados ao nicho.` +
+      `Sugira 6 temas originais de vídeo ${(p.aspect === "9:16" || p.aspect === "3:4") ? "curto vertical" : "para YouTube"} alinhados ao nicho.` +
       `\nTema/instrução do usuário: ${p.topic ?? "(livre)"}` +
       `\nRelatório do canal de referência: ${JSON.stringify(report ?? "não disponível").slice(0, 20000)}` +
       `\nPerfil de estilo: ${JSON.stringify(p.style_profiles?.profile ?? "não definido")}` +
@@ -171,7 +171,7 @@ export async function runPostKit(db: DB, userId: string, productionId: string) {
   if (!script?.scenes?.length) throw new Error("Gere o roteiro antes do kit de postagem");
   const s = await guardBudget(db, userId, null, null);
   const ai = makeAi(userId, s, (p.settings as Record<string, unknown> | null)?.["ai_provider"]);
-  const short = p.aspect === "9:16";
+  const short = (p.aspect === "9:16" || p.aspect === "3:4");
   const { data, usage } = await ai<{ titles: string[]; description: string; hashtags: string[]; thumbnail_text: string[]; pinned_comment: string }>({
     system: ETHICS,
     user:
@@ -197,7 +197,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
   const ps = (p.settings ?? {}) as Record<string, unknown>;
-  const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? (p.aspect === "9:16" ? 45 : 240))));
+  const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? ((p.aspect === "9:16" || p.aspect === "3:4") ? 45 : 240))));
   const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
   const rep = dna.replication ?? {};
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
