@@ -170,6 +170,9 @@ function Lab() {
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Voz isolada e clonada</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
                     {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz isolada</button>)}
+                    {k.voice?.status === "ready" && (st.isolation === "demucs" || /demucs/i.test(String(st.isolation ?? ""))
+                      ? <span className="mb-1 inline-block rounded bg-success/15 px-2 py-0.5 text-xs text-success">Isolamento com IA</span>
+                      : k.voice?.status === "ready" && <span className="mb-1 inline-block rounded bg-warning/15 px-2 py-0.5 text-xs text-warning">Filtro simples — a música pode vazar. Rode install_voice_clone.bat e disseque de novo.</span>)}
                     {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas · isolamento: {st.isolation}</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
                   </div>
                   <div className="rounded-md border border-border p-3">
