@@ -31,3 +31,7 @@ describe("costs", () => {
     expect(canGenerateAiImage({ allowPaid: true, usedInVideo: 6, limits: { max_ai_images_per_video: 6 } }).allowed).toBe(false);
   });
 });
+
+import { suggestedSeconds as _sugg } from "@/lib/duration";
+import { test as _t, expect as _e } from "vitest";
+_t("300 palavras em velocidade normal sugerem 120s", () => { _e(_sugg(Array(300).fill("a").join(" "), "+0%")).toBe(120); });

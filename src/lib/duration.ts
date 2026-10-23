@@ -10,3 +10,10 @@ export function countWords(scenes: { narration: string }[]): number {
 export function scriptIsShort(scenes: { narration: string }[], targetSeconds: number): boolean {
   return countWords(scenes) < targetSeconds * WORDS_PER_SECOND * 0.9;
 }
+
+/** Suggested video length (seconds) for a ready script, adjusted by the voice speed (e.g. "+15%"). */
+export function suggestedSeconds(text: string, rate = "+0%"): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const pct = Number(rate.replace("%", "")) || 0;
+  return Math.round(words / (WORDS_PER_SECOND * (1 + pct / 100)));
+}
