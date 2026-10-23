@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
-import { requestAnalysis } from "@/lib/jobs";
+import { requestAnalysis, startProduction } from "@/lib/jobs";
 import { DnaView } from "@/components/app/DnaView";
 
 export const Route = createFileRoute("/_authenticated/referencias")({
@@ -61,20 +61,45 @@ function Referencias() {
     } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
   }
 
+  async function makeProduction(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
+    const { data: u } = await supabase.auth.getUser();
+    const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
+    const settings = { target_seconds: short ? 50 : 300, style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "off", base_captions: "hide", source_mode: "search" };
+    const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
+    const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
+    if (error) throw error;
+    const s = await generateScript({ data: { productionId: p.id, topic } });
+    if (!s.ok) throw new Error(s.error);
+    return p.id;
+  }
+
   async function createFrom(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
     setThinking(refId + idea.title);
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
-      const settings = { target_seconds: short ? 50 : 300, style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "off", base_captions: "hide", source_mode: "search" };
-      const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
-      const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
-      if (error) throw error;
-      const s = await generateScript({ data: { productionId: p.id, topic } });
-      if (!s.ok) throw new Error(s.error);
+      await makeProduction(refId, platform, idea);
       toast.success("Roteiro criado no estilo do canal");
       navigate({ to: "/producoes" });
     } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
+  }
+
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+  const [batch, setBatch] = useState<string | null>(null);
+  async function runBatch(refId: string, platform: string) {
+    const list = (ideas[refId] ?? []).filter((i) => picked[refId]?.includes(i.title));
+    if (!list.length) return;
+    setThinking(refId + ":batch");
+    let ok = 0;
+    for (const [n, idea] of list.entries()) {
+      setBatch(`Escrevendo roteiro ${n + 1} de ${list.length}…`);
+      try {
+        const pid = await makeProduction(refId, platform, idea);
+        await startProduction(pid, { needsAnalysis: false, referenceId: refId });
+        ok++;
+      } catch (e) { toast.error(`"${idea.title}": ${(e as Error).message}`); }
+    }
+    setBatch(null); setThinking(null);
+    setPicked((m) => ({ ...m, [refId]: [] }));
+    if (ok) { toast.success(`${ok} vídeo(s) na fila. O agente faz um depois do outro.`); navigate({ to: "/producoes" }); }
   }
 
   async function add() {
@@ -171,9 +196,18 @@ function Referencias() {
                   <input value={wish} onChange={(e) => setWish(e.target.value)} placeholder="Preferência (opcional), ex.: temas de terror" className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs" />
                   <button disabled={thinking === r.id} onClick={() => suggest(r.id)} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50">{thinking === r.id ? "Pensando…" : ideas[r.id] ? "Sugerir outros temas" : "Sugerir temas no estilo deste canal"}</button>
                 </div>
+                {ideas[r.id]?.length ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                    <span className="text-muted-foreground">Modo fábrica: marque vários temas e o agente faz todos, um depois do outro.</span>
+                    <button disabled={!!thinking || !picked[r.id]?.length} onClick={() => runBatch(r.id, r.platform)} className="rounded-md bg-primary px-3 py-1 text-primary-foreground disabled:opacity-50">{thinking === r.id + ":batch" ? batch : `Gerar lote (${picked[r.id]?.length ?? 0})`}</button>
+                  </div>
+                ) : null}
                 {ideas[r.id]?.map((i) => (
                   <div key={i.title} className="rounded-md border border-border p-3">
-                    <div className="font-medium">{i.title}</div>
+                    <label className="flex cursor-pointer items-start gap-2 font-medium">
+                      <input type="checkbox" className="mt-1" checked={!!picked[r.id]?.includes(i.title)} onChange={(e) => setPicked((m) => ({ ...m, [r.id]: e.target.checked ? [...(m[r.id] ?? []), i.title] : (m[r.id] ?? []).filter((t) => t !== i.title) }))} />
+                      {i.title}
+                    </label>
                     <div className="mt-1 text-xs">Gancho: “{i.hook}”</div>
                     <div className="mt-1 text-xs text-muted-foreground">{i.why_fits}{i.factual ? " · precisa conferir fatos" : ""}</div>
                     <button disabled={!!thinking} onClick={() => createFrom(r.id, r.platform, i)} className="mt-2 rounded-md border border-border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50">{thinking === r.id + i.title ? "Escrevendo roteiro…" : "Criar vídeo com este tema"}</button>

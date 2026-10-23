@@ -159,11 +159,11 @@ export function SceneEditor({ productionId }: { productionId: string }) {
             key={d.id ?? `new-${i}`}
             onClick={() => setSel(i)}
             style={{ minWidth: `${Math.max(88, est(d) * 22)}px` }}
-            className={"flex h-20 flex-col justify-between rounded-md border p-1.5 text-left text-[10px] leading-tight transition-colors " + (i === sel ? "border-primary bg-primary/15" : "border-border bg-background hover:bg-accent")}
+            className={"flex h-28 flex-col justify-between gap-0.5 rounded-md border p-1.5 text-left text-[10px] leading-tight transition-colors " + (i === sel ? "border-primary bg-primary/15" : "border-border bg-background hover:bg-accent")}
           >
             <span className="flex justify-between font-medium"><span>#{i + 1}</span><span className="text-muted-foreground">{est(d).toFixed(1)}s</span></span>
+            <SceneThumb assetId={d.asset_id} />
             <span className="line-clamp-2 text-muted-foreground">{d.narration || "(sem fala)"}</span>
-            <span className="truncate font-mono text-primary">{d.visual_query || "—"}</span>
           </button>
         ))}
       </div>
@@ -263,6 +263,22 @@ function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; st
     </button>
   );
 }
+/** Miniatura da mídia da cena na linha do tempo (mesma consulta da prévia). */
+function SceneThumb({ assetId }: { assetId: string | null }) {
+  const { data } = useQuery({
+    queryKey: ["asset-preview", assetId],
+    enabled: !!assetId,
+    queryFn: async () => {
+      const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
+      if (!a) return null;
+      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, url };
+    },
+  });
+  if (!assetId || !data?.url) return <div className="flex h-10 w-full items-center justify-center rounded bg-muted text-[9px] text-muted-foreground">{assetId ? "…" : "auto"}</div>;
+  return data.kind === "video" ? <video src={data.url + "#t=0.5"} muted preload="metadata" className="h-10 w-full rounded object-cover" /> : <img src={data.url} alt="" className="h-10 w-full rounded object-cover" />;
+}
+
 function SceneMedia({ assetId }: { assetId: string | null }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
