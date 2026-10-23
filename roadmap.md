@@ -33,5 +33,5 @@
 - [x] Excluir referências + atualização automática + selo "Analisado"
 - [x] Campo de tema no Laboratório (sem janelinha do navegador)
 - [x] Narração reaproveitada se o agente reiniciar
-- [ ] Smart crop (personagem centralizado) e personagem bater com a fala
+- [x] Smart crop (personagem centralizado) e personagem bater com a fala
 - [ ] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
