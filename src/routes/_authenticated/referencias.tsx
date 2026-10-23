@@ -36,7 +36,7 @@ function Referencias() {
   const [busy, setBusy] = useState(false);
   const { data: refs } = useQuery({
     queryKey: ["refs"],
-    queryFn: async () => (await supabase.from("reference_sources").select("*").order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("reference_sources").select("*").or("notes.is.null,notes.neq.lab").order("created_at", { ascending: false })).data ?? [],
   });
 
   const [open, setOpen] = useState<string | null>(null);
