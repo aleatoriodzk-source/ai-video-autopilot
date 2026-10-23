@@ -75,10 +75,41 @@ def engine() -> str | None:
         return None
 
 
+_F5 = None
+_REF_TEXT: dict[str, str] = {}
+
+
+def _f5_model():
+    """Carrega o F5-TTS UMA vez e reaproveita em todas as frases (antes recarregava 1.5GB por frase)."""
+    global _F5
+    if _F5 is None:
+        try:
+            from f5_tts.api import F5TTS
+            _F5 = F5TTS()
+        except Exception:
+            _F5 = False
+    return _F5 or None
+
+
 def clone_tts(text: str, sample: Path, out_wav: Path, ref_text: str = "") -> str:
     """Fala o texto com o timbre da amostra. Retorna o motor usado."""
     eng = engine()
     if eng == "f5":
+        m = _f5_model()
+        if m is not None:
+            key = str(sample)
+            if not ref_text:
+                # Transcreve a amostra só uma vez por vídeo (antes o Whisper rodava em toda frase).
+                if key not in _REF_TEXT:
+                    try:
+                        _REF_TEXT[key] = m.transcribe(key)
+                    except Exception:
+                        _REF_TEXT[key] = ""
+                ref_text = _REF_TEXT[key]
+            res = out_wav.parent / f"f5_{out_wav.stem}.wav"
+            m.infer(ref_file=key, ref_text=ref_text, gen_text=text, file_wave=str(res), remove_silence=True)
+            media.run(["ffmpeg", "-y", "-i", str(res), "-ac", "1", "-ar", "44100", str(out_wav)])
+            return "F5-TTS"
         tmp = out_wav.parent / f"f5_{out_wav.stem}"
         tmp.mkdir(exist_ok=True)
         cmd = ["f5-tts_infer-cli", "--ref_audio", str(sample), "--ref_text", ref_text or "", "--gen_text", text, "--output_dir", str(tmp), "--output_file", "out.wav"]

@@ -288,7 +288,7 @@ class Runner:
                     import voice as vc
                     vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
                     done = True
-                except media.MediaError as e:
+                except Exception as e:
                     self.log(job, f"cena {sc['idx'] + 1}: clonagem falhou ({e}); usando Edge", "warn", step="narration")
             if not done and use_edge:
                 try:
