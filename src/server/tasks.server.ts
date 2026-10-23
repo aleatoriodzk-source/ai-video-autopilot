@@ -197,7 +197,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
   const ps = (p.settings ?? {}) as Record<string, unknown>;
-  const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? ((p.aspect === "9:16" || p.aspect === "3:4") ? 45 : 240))));
+  const target = effectiveTargetSeconds(p.aspect, ps["target_seconds"]);
   const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
   const rep = dna.replication ?? {};
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;

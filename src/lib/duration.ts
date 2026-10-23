@@ -2,6 +2,20 @@
 /** Average speaking rate of the Brazilian Portuguese neural voices (words per second). */
 export const WORDS_PER_SECOND = 2.5;
 
+/** Fixed channel rule: every short (vertical) video lasts at least 60 seconds. */
+export const MIN_SHORT_SECONDS = 60;
+
+export function isShortAspect(aspect: string | null | undefined): boolean {
+  return aspect === "9:16" || aspect === "3:4";
+}
+
+/** Target length used by the script writer, enforcing the 60s minimum for shorts. */
+export function effectiveTargetSeconds(aspect: string | null | undefined, requested: unknown): number {
+  const short = isShortAspect(aspect);
+  const n = Number(requested ?? (short ? 65 : 240)) || (short ? 65 : 240);
+  return Math.min(1800, Math.max(short ? MIN_SHORT_SECONDS : 15, n));
+}
+
 export function countWords(scenes: { narration: string }[]): number {
   return scenes.reduce((a, s) => a + s.narration.split(/\s+/).filter(Boolean).length, 0);
 }

@@ -87,7 +87,7 @@ function Lab() {
     const topic = window.prompt("Tema do novo vídeo com este kit:");
     if (!topic?.trim()) return;
     const uid = (await supabase.auth.getUser()).data.user!.id;
-    const settings: any = { target_seconds: 50, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
+    const settings: any = { target_seconds: 65, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
     if (error) { toast.error(error.message); return; }
     toast.success("Produção criada com o kit do laboratório");
