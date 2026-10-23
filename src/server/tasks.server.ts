@@ -202,8 +202,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;
   // Reference pacing wins: a 0.9s-per-cut reference means ~1.5-2s narrated micro-scenes (one clip can carry 1-2 cuts).
   const refScene = measured ? Math.min(6, Math.max(1.5, measured * 1.6)) : ps["style"] === "tiktok" ? 2.2 : null;
-  // Speed cap: automatic count never exceeds 1 scene per 5s (a 60s video => max 12 scenes); fast cuts happen inside each clip.
-  const autoCap = Math.max(4, Math.round(target / 5));
+  // Speed cap: at most 1 narrated scene per 4s (60s => 15 scenes); the agent adds the reference cut rhythm inside each clip (cut_seconds).
+  const autoCap = Math.max(4, Math.round(target / 4));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(autoCap, Math.max(4, Math.round(target / refScene))) : null;
   const words = Math.round(target * WORDS_PER_SECOND);
   const ready = String(ps["ready_script"] ?? "").trim();
@@ -279,7 +279,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (rows.length) await db.from("scenes").insert(rows);
   // Keep the user's own title/topic: the AI must never rename the production.
   data.title = p.title || topic;
-  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, video_only: videoOnly, ...(measured || ps["style"] === "tiktok" ? { cut_seconds: Math.min(6, Math.max(0.8, measured ?? 2.2)) } : {}), ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 

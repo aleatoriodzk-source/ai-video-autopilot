@@ -357,7 +357,8 @@ class Runner:
         dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
         out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
         if vid.exists():
-            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf)
+            cut = float((ctx["prod"].get("settings") or {}).get("cut_seconds") or 0)
+            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut)
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")

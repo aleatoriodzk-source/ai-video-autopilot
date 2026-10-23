@@ -296,17 +296,35 @@ def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None) -> str:
             f"[b]scale={w}:-2[fg];[bg][fg]overlay=0:(H-h)/2")
 
 
-def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20) -> None:
-    """Corta/repete o trecho para a duração da cena, mantendo o personagem no quadro (smart crop)."""
+def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20, cut_s: float = 0) -> None:
+    """Corta/repete o trecho para a duração da cena, mantendo o personagem no quadro (smart crop).
+    Com cut_s, faz cortes secos dentro da cena (pedaços de pontos diferentes do trecho) no ritmo da referência."""
+    total = duration(src) or dur
+    k = int(dur // cut_s) if cut_s and dur >= cut_s * 1.5 and total >= dur else 1
+    if k > 1:
+        parts, each = [], dur / k
+        for i in range(k):
+            part = out.with_name(f"{out.stem}_p{i}.mp4")
+            off = (total - each) * i / max(1, k - 1)
+            _video_part(src, off, each, w, h, fps, part, crf, total)
+            parts.append(part)
+        concat(parts, out, out.parent, audio=False)
+        for p in parts:
+            p.unlink(missing_ok=True)
+        return
+    _video_part(src, 0, dur, w, h, fps, out, crf, total)
+
+
+def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float) -> None:
     n = max(1, int(round(dur * fps)))
     try:
         st = next(x for x in probe(src)["streams"] if x.get("codec_type") == "video")
         sw, sh = int(st["width"]), int(st["height"])
     except Exception:
         sw, sh = w, h
-    cx = subject_center_x(src, min(dur, duration(src) or dur)) if sw / max(1, sh) > (w / h) * 1.15 else None
+    cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
     vf = f"{reframe_filter(sw, sh, w, h, cx)},fps={fps},format=yuv420p,setsar=1"
-    run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
+    run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
 
