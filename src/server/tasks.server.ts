@@ -1,10 +1,9 @@
-// AI tasks shared by the web panel (server functions) and the local agent API.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
 import { channelAnalysisSchema, ideasSchema, postKitSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
-import { WORDS_PER_SECOND, countWords, scriptIsShort } from "@/lib/duration";
+import { WORDS_PER_SECOND, countWords, effectiveTargetSeconds, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
 
 type DB = SupabaseClient<Database>;
@@ -197,7 +196,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   if (!topic.trim()) throw new Error("Defina ou escolha um tema antes de gerar o roteiro");
   const style = p.style_profiles?.profile as StyleProfile | undefined;
   const ps = (p.settings ?? {}) as Record<string, unknown>;
-  const target = Math.min(1800, Math.max(15, Number(ps["target_seconds"] ?? ((p.aspect === "9:16" || p.aspect === "3:4") ? 45 : 240))));
+  const target = effectiveTargetSeconds(p.aspect, ps["target_seconds"]);
   const dna = (dnaOf(report) ?? {}) as { replication?: { media_rule?: string; scene_seconds?: number; voice_rate_percent?: number; caption_color?: string; script_skeleton?: string[]; hook_anatomy?: string } };
   const rep = dna.replication ?? {};
   const measured = Number(rep.scene_seconds) > 0 ? Number(rep.scene_seconds) : null;

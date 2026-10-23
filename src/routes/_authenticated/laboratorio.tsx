@@ -32,6 +32,8 @@ function Lab() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [kitFor, setKitFor] = useState<string | null>(null);
+  const [topic, setTopic] = useState("");
 
   const { data } = useQuery({
     queryKey: ["lab"],
@@ -84,10 +86,9 @@ function Lab() {
   }
 
   async function useKit(k: any) {
-    const topic = window.prompt("Tema do novo vídeo com este kit:");
-    if (!topic?.trim()) return;
+    if (!topic.trim()) { toast.error("Escreva o tema do vídeo"); return; }
     const uid = (await supabase.auth.getUser()).data.user!.id;
-    const settings: any = { target_seconds: 50, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
+    const settings: any = { target_seconds: 65, style: "tiktok", caption_style: "auto", sfx: true, ...(k.voice?.status === "ready" ? { voice_id: k.voice.id } : {}), lab_kit: k.id };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
     if (error) { toast.error(error.message); return; }
     toast.success("Produção criada com o kit do laboratório");
@@ -123,10 +124,21 @@ function Lab() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b className="text-sm">{k.title?.replace(/^Lab: /, "")}</b>
                   <div className="flex gap-2">
-                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => useKit(k)}>Usar num vídeo novo</button>
+                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { setKitFor(kitFor === k.id ? null : k.id); setTopic(""); }}>Usar num vídeo novo</button>
                     <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => remove(k.id)}>Apagar</button>
                   </div>
                 </div>
+                {kitFor === k.id && (
+                  <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+                    <label className="text-sm font-medium">Sobre o que vai ser o novo vídeo?</label>
+                    <input autoFocus className={input} placeholder="Ex.: 3 erros no filme do Homem-Aranha" value={topic} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => e.key === "Enter" && useKit(k)} />
+                    <p className="text-xs text-muted-foreground">Usa a voz, o ritmo, a legenda e os filtros deste kit. Duração mínima de 60 segundos.</p>
+                    <div className="flex gap-2">
+                      <button className={btn} onClick={() => useKit(k)}>Criar vídeo</button>
+                      <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => setKitFor(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
                 <div className="grid gap-2 text-sm md:grid-cols-2">
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Voz isolada e clonada</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>

@@ -35,3 +35,10 @@ describe("costs", () => {
 import { suggestedSeconds as _sugg } from "@/lib/duration";
 import { test as _t, expect as _e } from "vitest";
 _t("300 palavras em velocidade normal sugerem 120s", () => { _e(_sugg(Array(300).fill("a").join(" "), "+0%")).toBe(120); });
+
+import { effectiveTargetSeconds } from "@/lib/duration";
+describe("duração mínima de vídeos curtos", () => {
+  it("vídeo 9:16 pedido com 45s vira 60s", () => expect(effectiveTargetSeconds("9:16", 45)).toBe(60));
+  it("vídeo 3:4 sem duração usa 65s", () => expect(effectiveTargetSeconds("3:4", undefined)).toBe(65));
+  it("vídeo 16:9 pode ter 30s", () => expect(effectiveTargetSeconds("16:9", 30)).toBe(30));
+});

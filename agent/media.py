@@ -201,11 +201,11 @@ CAPTION_STYLES = {
 
 
 def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black", style: str = "hormozi") -> None:
-    """Legenda estilo TikTok: centro da tela, caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida."""
+    """Legenda estilo TikTok: zona segura inferior (não cobre rostos), caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida."""
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
     vertical = h > w
-    fs = int(h * (0.062 if vertical else 0.07))
-    align, margin_v = (5, 0) if vertical else (2, int(h * 0.1))
+    fs = int(h * (0.052 if vertical else 0.065))
+    align, margin_v = (2, int(h * 0.24)) if vertical else (2, int(h * 0.1))
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
