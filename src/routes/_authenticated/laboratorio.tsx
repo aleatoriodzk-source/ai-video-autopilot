@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { DnaView } from "@/components/app/DnaView";
+import { channelIdeas } from "@/lib/ai.functions";
 
 export const Route = createFileRoute("/_authenticated/laboratorio")({
   head: () => ({
@@ -34,6 +35,23 @@ function Lab() {
   const [open, setOpen] = useState<string | null>(null);
   const [kitFor, setKitFor] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
+  const [ideas, setIdeas] = useState<Record<string, any[]>>({});
+  const [ideasBusy, setIdeasBusy] = useState(false);
+  const [audio, setAudio] = useState<Record<string, string>>({});
+
+  async function listen(v: any) {
+    const { data, error } = await supabase.storage.from("media").createSignedUrl(v.sample_path, 3600);
+    if (error || !data) { toast.error("Não consegui abrir a amostra"); return; }
+    setAudio((a) => ({ ...a, [v.id]: data.signedUrl }));
+  }
+
+  async function loadIdeas(id: string) {
+    setIdeasBusy(true);
+    const r = await channelIdeas({ data: { referenceId: id } });
+    setIdeasBusy(false);
+    if (!r.ok) { toast.error(r.error); return; }
+    setIdeas((m) => ({ ...m, [id]: r.ideas }));
+  }
 
   const { data } = useQuery({
     queryKey: ["lab"],
@@ -44,7 +62,7 @@ function Lab() {
       if (!ids.length) return [];
       const [{ data: an }, { data: vs }] = await Promise.all([
         supabase.from("analyses").select("id,reference_id,status,report,error,created_at").in("reference_id", ids).order("created_at", { ascending: false }),
-        supabase.from("voices").select("id,reference_id,status,stats,error").in("reference_id", ids),
+        supabase.from("voices").select("id,reference_id,status,stats,error,sample_path").in("reference_id", ids),
       ]);
       return (refs ?? []).map((r) => ({ ...r, analysis: (an ?? []).find((a) => a.reference_id === r.id), voice: (vs ?? []).find((v) => v.reference_id === r.id) }));
     },
@@ -124,7 +142,7 @@ function Lab() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b className="text-sm">{k.title?.replace(/^Lab: /, "")}</b>
                   <div className="flex gap-2">
-                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { setKitFor(kitFor === k.id ? null : k.id); setTopic(""); }}>Usar num vídeo novo</button>
+                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
                     <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => remove(k.id)}>Apagar</button>
                   </div>
                 </div>
@@ -132,6 +150,15 @@ function Lab() {
                   <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
                     <label className="text-sm font-medium">Sobre o que vai ser o novo vídeo?</label>
                     <input autoFocus className={input} placeholder="Ex.: 3 erros no filme do Homem-Aranha" value={topic} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => e.key === "Enter" && useKit(k)} />
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">{ideasBusy && !ideas[k.id] ? "A IA está pensando em temas do mesmo nicho…" : "Sugestões da IA (toque para usar):"}</p>
+                      {(ideas[k.id] ?? []).map((i: any, n: number) => (
+                        <button key={n} onClick={() => setTopic(i.title)} className={`block w-full rounded-md border px-3 py-2 text-left text-sm ${topic === i.title ? "border-primary bg-primary/10" : "border-border hover:bg-accent"}`}>
+                          <b>{i.title}</b><span className="block text-xs text-muted-foreground">{i.hook}</span>
+                        </button>
+                      ))}
+                      {ideas[k.id] && <button className="text-xs text-primary" disabled={ideasBusy} onClick={() => loadIdeas(k.id)}>{ideasBusy ? "Gerando…" : "Outras sugestões"}</button>}
+                    </div>
                     <p className="text-xs text-muted-foreground">Usa a voz, o ritmo, a legenda e os filtros deste kit. Duração mínima de 60 segundos.</p>
                     <div className="flex gap-2">
                       <button className={btn} onClick={() => useKit(k)}>Criar vídeo</button>
@@ -142,6 +169,7 @@ function Lab() {
                 <div className="grid gap-2 text-sm md:grid-cols-2">
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Voz isolada e clonada</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
+                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz isolada</button>)}
                     {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas · isolamento: {st.isolation}</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
                   </div>
                   <div className="rounded-md border border-border p-3">
