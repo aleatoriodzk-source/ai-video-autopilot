@@ -183,12 +183,13 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
             imgs = _analyze_file(vid, name, out, imgs, work, log)
             continue
         if kind == "channel":
+            url = channel_url(url)
             meta = json.loads(_ytdlp(["-J", "--flat-playlist", "--playlist-end", "30", url]))
             out["title"] = meta.get("title") or meta.get("uploader")
             out["entries"] = [{k: e.get(k) for k in ("title", "duration", "view_count", "url")} for e in meta.get("entries") or []]
             log(f"{len(out['entries'])} vídeos listados")
             targets = pick_targets(out["entries"])
-            log(f"comparando {len(targets)} vídeos (mais e menos vistos)")
+            log(f"comparando os {len(targets)} vídeos mais recentes")
         else:
             targets = [url]
         for t in targets:
@@ -227,11 +228,16 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
     return out, imgs
 
 
+def channel_url(url: str) -> str:
+    """Canal do YouTube sem aba retorna só as abas; força /videos (ou mantém /shorts)."""
+    u = url.rstrip("/")
+    if re.search(r"youtube\.com/(@[^/]+|c/[^/]+|channel/[^/]+|user/[^/]+)$", u):
+        return u + "/videos"
+    return u
+
+
 def pick_targets(entries: list[dict], n: int = 5) -> list[str]:
-    """Os 3 mais vistos + 2 menos vistos (ou os mais recentes se não houver views)."""
-    ok = [e for e in entries if e.get("url")]
-    if not any(e.get("view_count") for e in ok):
-        return [e["url"] for e in ok[:n]]
-    ranked = sorted(ok, key=lambda e: e.get("view_count") or 0, reverse=True)
-    chosen = ranked[:3] + [e for e in ranked[-2:] if e not in ranked[:3]]
-    return [e["url"] for e in chosen[:n]]
+    """Os n vídeos mais recentes (a listagem do canal já vem do mais novo para o mais antigo)."""
+    ok = [e for e in entries if e.get("url") and "/@" not in (e.get("url") or "").split("watch")[0][-1:]]
+    ok = [e for e in entries if e.get("url") and ("watch" in e["url"] or "/shorts/" in e["url"] or "/video/" in e["url"])] or [e for e in entries if e.get("url")]
+    return [e["url"] for e in ok[:n]]

@@ -1,10 +1,9 @@
-// AI tasks shared by the web panel (server functions) and the local agent API.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
 import { channelAnalysisSchema, ideasSchema, postKitSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
-import { WORDS_PER_SECOND, countWords, scriptIsShort } from "@/lib/duration";
+import { WORDS_PER_SECOND, countWords, effectiveTargetSeconds, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
 
 type DB = SupabaseClient<Database>;

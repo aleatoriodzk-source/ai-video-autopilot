@@ -282,8 +282,10 @@ class Runner:
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
             raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
-            done = False
-            if clone:
+            done = raw.exists() and raw.stat().st_size > 1000
+            if done:
+                self.log(job, f"cena {sc['idx'] + 1}: narração já pronta, reaproveitando", step="narration")
+            if clone and not done:
                 try:
                     import voice as vc
                     vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
