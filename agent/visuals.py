@@ -246,6 +246,13 @@ def _scene_secs(sc: dict) -> float:
     return max(3.0, min(12.0, len((sc.get("narration") or "").split()) / 2.5 + 1.0))
 
 
+def proper_names(q: str) -> list[str]:
+    """Nomes próprios da busca (ex.: 'Homelander', 'Peter Parker'), em minúsculas."""
+    import re
+    stop = {"the", "a", "o", "os", "as", "de", "da", "do", "cena", "scene", "movie", "filme", "trailer", "série", "series"}
+    return [w.lower() for w in re.findall(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕ][\wÀ-ú'-]{2,}", q) if w.lower() not in stop]
+
+
 def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
     """Busca no YouTube (trailers/cenas) e baixa só o trecho que a cena precisa."""
     import random
@@ -257,8 +264,13 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
         return None
     need = _scene_secs(sc)
+    names = proper_names(q)
     for e in data.get("entries") or []:
         vid, dur = e.get("id"), e.get("duration")
+        title = (e.get("title") or "").lower()
+        # O personagem citado na cena tem que estar no vídeo: título sem o nome dele é descartado.
+        if names and not any(nm in title for nm in names):
+            continue
         # busca rápida às vezes vem sem duração: não descarta, assume um clipe de ~3 min
         if not vid or vid in used or (dur and (dur < 15 or dur > 3600)):
             continue

@@ -260,10 +260,52 @@ def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, o
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
 
+def subject_center_x(src: Path, dur: float) -> float | None:
+    """Posição horizontal (0-1) dos rostos/personagens no trecho. Usa OpenCV se instalado; senão None."""
+    try:
+        import cv2
+    except Exception:
+        return None
+    cap = cv2.VideoCapture(str(src))
+    casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    xs, wsum = [], 0.0
+    for t in (0.2, 0.5, 0.8):
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, dur * t) * 1000)
+        ok, fr = cap.read()
+        if not ok:
+            continue
+        g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
+        for (x, y, fw, fh) in casc.detectMultiScale(g, 1.15, 5, minSize=(g.shape[1] // 20, g.shape[1] // 20)):
+            a = float(fw * fh)
+            xs.append((x + fw / 2) / g.shape[1] * a)
+            wsum += a
+    cap.release()
+    return sum(xs) / wsum if wsum else None
+
+
+def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None) -> str:
+    """Smart crop: centraliza no personagem; se não achar, mostra o quadro inteiro sobre fundo desfocado."""
+    src_r, dst_r = sw / max(1, sh), w / h
+    if src_r <= dst_r * 1.15:
+        return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+    if cx is not None:
+        sw2 = round(h * src_r)
+        x = int(min(max(cx * sw2 - w / 2, 0), sw2 - w))
+        return f"scale={sw2}:{h},crop={w}:{h}:{x}:0"
+    return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=24:3,eq=brightness=-0.08[bg];"
+            f"[b]scale={w}:-2[fg];[bg][fg]overlay=0:(H-h)/2")
+
+
 def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20) -> None:
-    """Corta/repete um vídeo de banco para a duração da cena, preenchendo o quadro (crop central)."""
+    """Corta/repete o trecho para a duração da cena, mantendo o personagem no quadro (smart crop)."""
     n = max(1, int(round(dur * fps)))
-    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},format=yuv420p,setsar=1"
+    try:
+        st = next(x for x in probe(src)["streams"] if x.get("codec_type") == "video")
+        sw, sh = int(st["width"]), int(st["height"])
+    except Exception:
+        sw, sh = w, h
+    cx = subject_center_x(src, min(dur, duration(src) or dur)) if sw / max(1, sh) > (w / h) * 1.15 else None
+    vf = f"{reframe_filter(sw, sh, w, h, cx)},fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
