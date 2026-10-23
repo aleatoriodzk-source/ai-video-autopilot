@@ -238,6 +238,5 @@ def channel_url(url: str) -> str:
 
 def pick_targets(entries: list[dict], n: int = 5) -> list[str]:
     """Os n vídeos mais recentes (a listagem do canal já vem do mais novo para o mais antigo)."""
-    ok = [e for e in entries if e.get("url") and "/@" not in (e.get("url") or "").split("watch")[0][-1:]]
     ok = [e for e in entries if e.get("url") and ("watch" in e["url"] or "/shorts/" in e["url"] or "/video/" in e["url"])] or [e for e in entries if e.get("url")]
     return [e["url"] for e in ok[:n]]

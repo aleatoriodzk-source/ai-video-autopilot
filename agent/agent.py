@@ -281,7 +281,7 @@ class Runner:
         for n, sc in enumerate(ctx["scenes"]):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
-            raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
+            raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}_{__import__('hashlib').md5((sc['narration'] + str(clone) + edge_voice + str(edge_rate)).encode()).hexdigest()[:8]}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             done = raw.exists() and raw.stat().st_size > 1000
             if done:
                 self.log(job, f"cena {sc['idx'] + 1}: narração já pronta, reaproveitando", step="narration")
