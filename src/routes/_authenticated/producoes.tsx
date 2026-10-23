@@ -9,6 +9,7 @@ import { generateScript } from "@/lib/ai.functions";
 import { SceneEditor } from "@/components/app/SceneEditor";
 import { JobStatus } from "@/components/app/JobStatus";
 import { ScriptView } from "@/components/app/ScriptView";
+import { suggestedSeconds } from "@/lib/duration";
 
 export const Route = createFileRoute("/_authenticated/producoes")({
   head: () => ({
@@ -125,6 +126,17 @@ function Producoes() {
         {scriptMode === "ready" && (
           <textarea value={readyScript} onChange={(e) => setReadyScript(e.target.value)} rows={8} placeholder="Cole aqui o seu roteiro. O sistema não muda nenhuma palavra: só divide em cenas, escolhe os clipes, narra e monta." className={input + " md:col-span-2"} />
         )}
+        {scriptMode === "ready" && readyScript.trim() && (() => {
+          const secs = suggestedSeconds(readyScript, rate);
+          const mins = Math.max(0.25, Math.ceil((secs / 60) * 4) / 4);
+          const words = readyScript.trim().split(/\s+/).length;
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 p-2 text-xs md:col-span-2">
+              <span>{words} palavras · tempo sugerido: ~{secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}min ${secs % 60}s`} {secs <= 90 ? "(ótimo para Shorts/TikTok)" : secs <= 180 ? "(Short longo / Reels)" : "(melhor como vídeo longo)"}</span>
+              <button type="button" className={btn} onClick={() => setMinutes(String(mins))}>Ajustar duração para {String(mins).replace(".", ",")} min</button>
+            </div>
+          );
+        })()}
         <label className="text-xs text-muted-foreground">Tipo de mídia
           <select value={mediaRule} onChange={(e) => setMediaRule(e.target.value)} className={input + " mt-1"}>
             <option value="auto">Automático (segue a referência)</option><option value="video_only">Somente vídeos (ex.: Marvel, filmes, games)</option><option value="mixed">Vídeos e fotos</option>
