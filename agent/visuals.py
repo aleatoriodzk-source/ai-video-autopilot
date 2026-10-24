@@ -25,7 +25,7 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
         return True
     thumb = path.with_name(path.stem + "_chk.jpg")
     try:
-        args = ["ffmpeg", "-y"] + (["-ss", "1"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
+        args = ["ffmpeg", "-y"] + (["-ss", f"{max(1.0, media.duration(path) / 2):.2f}"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
         media.run(args)
         img = "data:image/jpeg;base64," + base64.b64encode(thumb.read_bytes()).decode()
         r = runner.api.call("check_image", job_id=job["id"], image=img, description=sc.get("visual_description") or sc.get("visual_query") or sc["narration"][:200], topic=prod.get("topic") or prod.get("title") or "")
@@ -290,9 +290,52 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     return None
 
 
-def web_images(q: str) -> list[dict]:
-    """Busca de imagens na web (DuckDuckGo): pôsteres, personagens, fotos reais. Sem chave."""
+def _google_cookies() -> dict:
+    """Lê o google.txt (formato Netscape) enviado na aba Contas."""
+    from analyzer import COOKIES
+    f = COOKIES.get("google")
+    out = {}
+    if not f or not Path(f).exists():
+        return out
+    for line in Path(f).read_text(encoding="utf-8", errors="ignore").splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 7 and "google" in parts[0]:
+            out[parts[5]] = parts[6].strip()
+    return out
+
+
+def google_images(q: str) -> list[dict]:
+    """Google Imagens com a sua sessão (cookies). Muito melhor para conteúdo brasileiro (novelas, famosos)."""
     import re
+    ck = _google_cookies()
+    if not ck:
+        return []
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+         "Accept-Language": "pt-BR,pt;q=0.9"}
+    r = requests.get("https://www.google.com/search", params={"q": q, "tbm": "isch", "hl": "pt-BR", "gl": "br", "tbs": "isz:l"}, headers=h, cookies=ck, timeout=30)
+    if r.status_code != 200:
+        return []
+    seen, out = set(), []
+    for u in re.findall(r'\["(https?://[^"\\]+?\.(?:jpg|jpeg|png|webp))",(\d+),(\d+)\]', r.text):
+        url, hh, ww = u[0], int(u[1]), int(u[2])
+        if "gstatic.com" in url or url in seen or ww < 600:
+            continue
+        seen.add(url)
+        out.append({"id": f"web:{url[-80:]}", "url": url.encode().decode("unicode_escape"), "page": None, "text": q})
+        if len(out) >= 20:
+            break
+    return out
+
+
+def web_images(q: str) -> list[dict]:
+    """Busca de imagens na web: Google (se tiver cookies), depois DuckDuckGo e Bing."""
+    import re
+    try:
+        g = google_images(q)
+        if g:
+            return g
+    except Exception:
+        pass
     h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
     r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
     m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
@@ -374,7 +417,13 @@ def pick_visuals(runner, job, ctx) -> None:
     yt_used: set = set()
     ai_used = 0
     topic = prod.get("topic") or prod.get("title") or ""
-    for sc in ctx["scenes"]:
+    total = len(ctx["scenes"])
+    for n_sc, sc in enumerate(ctx["scenes"], 1):
+        print(f"[visuals] cena {n_sc} de {total}")
+        try:
+            runner.update(job, wait_reason=f"Buscando imagens e vídeos: cena {n_sc} de {total}")
+        except Exception:
+            pass
         out = work / f"img_{sc['idx']:03d}.jpg"
         # Limpa mídias de renderizações anteriores (cenas podem ter sido editadas no site).
         for old in (out, work / f"vid_{sc['idx']:03d}.mp4"):
