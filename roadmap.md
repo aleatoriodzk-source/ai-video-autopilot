@@ -45,5 +45,5 @@
 - [x] Legenda Karaokê (palavra falada acende) e Caixa escura
 - [x] Proporção por cena (16:9, 1:1, 3:4, tela cheia) aprendida da referência, sempre com fundo desfocado (vídeos e fotos)
 - [x] TikTok: link curto, sem marca d'água, plano B se o yt-dlp falhar
-- [ ] Gerar ZIP final e trocar arquivos no PC (aguardando o Júlio pedir)
+- [x] Gerar ZIP final (efeitos ligados por padrão, 6 sons reais embutidos, verificação do FFmpeg)
 - [ ] Voz clonada na nuvem (deixada por último)

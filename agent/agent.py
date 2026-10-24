@@ -470,7 +470,7 @@ class Runner:
                 self.log(job, f"filtro de cor ignorado: {err}", "warn", step="render")
         cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
         sfx = None
-        if ((ctx["prod"].get("settings") or {}).get("sfx") or "off") != "on":
+        if ((ctx["prod"].get("settings") or {}).get("sfx") or "on") == "off":
             self.log(job, "sem efeitos sonoros (escolha sua)", step="render")
         else:
           try:
