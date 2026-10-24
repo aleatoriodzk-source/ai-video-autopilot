@@ -9,6 +9,13 @@ import sys
 import unicodedata
 from pathlib import Path
 
+import os
+
+# PYTHONHASHSEED inválido no Windows faz qualquer Python filho (edge-tts, piper, demucs) quebrar ao iniciar.
+_hs = os.environ.get("PYTHONHASHSEED")
+if _hs is not None and not (_hs == "random" or (_hs.isdigit() and int(_hs) <= 4294967295)):
+    os.environ.pop("PYTHONHASHSEED", None)
+
 ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "3:4": (1080, 1440)}
 
 
