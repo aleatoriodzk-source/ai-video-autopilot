@@ -345,7 +345,7 @@ class Runner:
             self.update(job, progress=30 + int(10 * k / total_n), wait_reason=f"Narrando: {k} de {total_n} cenas prontas")
 
         # Edge (internet) aguenta várias cenas ao mesmo tempo; a clonagem usa a placa de vídeo, então vai uma por vez.
-        workers = 1 if clone else int(self.cfg.get("narration_workers") or 4)
+        workers = 1 if (clone and not isinstance(clone, tuple)) else int(self.cfg.get("narration_workers") or 4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
             list(ex.map(narrate, ctx["scenes"]))
         self.update(job, wait_reason=None)
