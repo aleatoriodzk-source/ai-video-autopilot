@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { DnaView } from "@/components/app/DnaView";
 import { channelIdeas } from "@/lib/ai.functions";
+import { VideoOptions, defaultOpts, optsToSettings, type VideoOpts } from "@/components/app/VideoOptions";
 
 export const Route = createFileRoute("/_authenticated/laboratorio")({
   head: () => ({
@@ -38,11 +39,12 @@ function Lab() {
   const [ideas, setIdeas] = useState<Record<string, any[]>>({});
   const [ideasBusy, setIdeasBusy] = useState(false);
   const [audio, setAudio] = useState<Record<string, string>>({});
+  const [opts, setOpts] = useState<VideoOpts>(defaultOpts);
 
-  async function listen(v: any) {
-    const { data, error } = await supabase.storage.from("media").createSignedUrl(v.sample_path, 3600);
-    if (error || !data) { toast.error("Não consegui abrir a amostra"); return; }
-    setAudio((a) => ({ ...a, [v.id]: data.signedUrl }));
+  async function listen(key: string, path: string) {
+    const { data, error } = await supabase.storage.from("media").createSignedUrl(path, 3600);
+    if (error || !data) { toast.error("Não consegui abrir o áudio"); return; }
+    setAudio((a) => ({ ...a, [key]: data.signedUrl }));
   }
 
   async function loadIdeas(id: string) {
@@ -143,7 +145,7 @@ function Lab() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b className="text-sm">{k.title?.replace(/^Lab: /, "")}</b>
                   <div className="flex gap-2">
-                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
+                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); setOpts({ ...defaultOpts, voice: k.voice?.status === "ready" ? `clone:${k.voice.id}` : defaultOpts.voice, music: k.voice?.stats?.music_path ? "kit" : "auto" }); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
                     <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => remove(k.id)}>Apagar</button>
                   </div>
                 </div>
@@ -160,7 +162,8 @@ function Lab() {
                       ))}
                       {ideas[k.id] && <button className="text-xs text-primary" disabled={ideasBusy} onClick={() => loadIdeas(k.id)}>{ideasBusy ? "Gerando…" : "Outras sugestões"}</button>}
                     </div>
-                    <p className="text-xs text-muted-foreground">Usa a voz, o ritmo, a legenda e os filtros deste kit. Duração mínima de 60 segundos.</p>
+                    <VideoOptions value={opts} onChange={setOpts} kitMusic={!!k.voice?.stats?.music_path} />
+                    <p className="text-xs text-muted-foreground">Usa o ritmo, os movimentos de câmera e os filtros deste kit. Duração mínima de 60 segundos.</p>
                     <div className="flex gap-2">
                       <button className={btn} onClick={() => useKit(k)}>Criar vídeo</button>
                       <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => setKitFor(null)}>Cancelar</button>
@@ -170,10 +173,11 @@ function Lab() {
                 <div className="grid gap-2 text-sm md:grid-cols-2">
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Voz isolada e clonada</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
-                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz isolada</button>)}
+                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id, k.voice.sample_path)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz isolada</button>)}
                     {k.voice?.status === "ready" && (st.isolation === "demucs" || /demucs/i.test(String(st.isolation ?? ""))
                       ? <span className="mb-1 inline-block rounded bg-success/15 px-2 py-0.5 text-xs text-success">Isolamento com IA</span>
                       : k.voice?.status === "ready" && <span className="mb-1 inline-block rounded bg-warning/15 px-2 py-0.5 text-xs text-warning">Filtro simples — a música pode vazar. Rode install_voice_clone.bat e disseque de novo.</span>)}
+                    {k.voice?.stats?.music_path && (audio[k.voice.id + "m"] ? <audio controls autoPlay src={audio[k.voice.id + "m"]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id + "m", k.voice.stats.music_path)} className="mb-1 ml-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir música isolada (sem voz)</button>)}
                     {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas · isolamento: {st.isolation}</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
                   </div>
                   <div className="rounded-md border border-border p-3">

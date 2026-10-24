@@ -1,3 +1,4 @@
+import { VideoOptions, defaultOpts, optsToSettings, type VideoOpts } from "@/components/app/VideoOptions";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { channelIdeas, generateScript } from "@/lib/ai.functions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +54,7 @@ function Referencias() {
   const [wish, setWish] = useState("");
   const [thinking, setThinking] = useState<string | null>(null);
   const [format, setFormat] = useState<"auto" | "short" | "long">("auto");
+  const [opts, setOpts] = useState<VideoOpts>(defaultOpts);
   const navigate = useNavigate();
 
   async function suggest(id: string) {
@@ -68,7 +70,7 @@ function Referencias() {
     const { data: u } = await supabase.auth.getUser();
     const auto = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
     const short = format === "short" ? true : format === "long" ? false : auto;
-    const settings = { ...(short ? { target_seconds: 65 } : format === "long" ? { target_seconds: 600 } : {}), style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "on", base_captions: "hide", source_mode: "search" };
+    const settings = { ...(short ? { target_seconds: 65 } : format === "long" ? { target_seconds: 600 } : {}), style: short ? "tiktok" : "youtube", media_rule: "auto", ...optsToSettings(opts), base_captions: "hide", source_mode: "search" };
     const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
     const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
     if (error) throw error;
