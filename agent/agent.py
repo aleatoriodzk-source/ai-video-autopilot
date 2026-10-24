@@ -122,7 +122,7 @@ class Runner:
             return
         d = ROOT / "cookies"
         d.mkdir(exist_ok=True)
-        for plat in ("youtube", "tiktok"):
+        for plat in ("youtube", "tiktok", "google"):
             f = d / f"{plat}.txt"
             if plat in urls:
                 try:
@@ -359,8 +359,22 @@ class Runner:
                 continue
             todo.append((sc, mark, sig))
         workers = int(self.cfg.get("render_threads") or 3)
+        import threading
+        lock, cnt = threading.Lock(), [0]
+        def one(t):
+            self._clip(ctx, t[0], fps, crf)
+            t[1].write_text(t[2])
+            with lock:
+                cnt[0] += 1
+                k = cnt[0]
+            print(f"[scenes] clipe {k} de {len(todo)}")
+            try:
+                self.update(job, wait_reason=f"Montando clipes: {k} de {len(todo)} prontos")
+            except Exception:
+                pass
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            list(ex.map(lambda t: (self._clip(ctx, t[0], fps, crf), t[1].write_text(t[2])), todo))
+            list(ex.map(one, todo))
+        self.update(job, wait_reason=None)
         self.log(job, f"{len(todo)} clipes montados, {reused} reaproveitados", step="scenes")
 
     def _clip(self, ctx, sc, fps, crf):

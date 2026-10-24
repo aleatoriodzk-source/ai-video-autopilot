@@ -37,7 +37,7 @@ function Contas() {
   });
   const results = ((job?.payload as { results?: Result[] } | null)?.results ?? []) as Result[];
 
-  async function uploadCookies(platform: "youtube" | "tiktok", file: File | undefined) {
+  async function uploadCookies(platform: "youtube" | "tiktok" | "google", file: File | undefined) {
     if (!file) return;
     if (file.size > 2_000_000) { toast.error("Arquivo grande demais para um cookies.txt"); return; }
     const text = await file.text();
@@ -48,7 +48,7 @@ function Contas() {
     if (up.error) { toast.error(up.error.message); return; }
     const { error } = await supabase.from("linked_accounts").upsert({ user_id: u.user!.id, platform, cookies_path: path, label: file.name, updated_at: new Date().toISOString() }, { onConflict: "user_id,platform" });
     if (error) { toast.error(error.message); return; }
-    toast.success(`Conta do ${platform === "youtube" ? "YouTube" : "TikTok"} vinculada ao agente`);
+    toast.success(`Conta do ${platform === "youtube" ? "YouTube" : platform === "google" ? "Google" : "TikTok"} vinculada ao agente`);
     qc.invalidateQueries({ queryKey: ["linked"] });
   }
 
@@ -84,11 +84,11 @@ function Contas() {
         <p>YouTube e TikTok não oferecem um botão oficial de "baixar vídeos" para apps, por isso a ligação é pela sua sessão. O arquivo fica guardado só na sua conta e é usado pelo agente no seu PC. Recomendo usar uma conta secundária. Se a sessão vencer, é só enviar de novo.</p>
       </div>
       <div className="mb-6 grid gap-3 md:grid-cols-2">
-        {(["youtube", "tiktok"] as const).map((p) => {
+        {(["youtube", "tiktok", "google"] as const).map((p) => {
           const a = acc(p);
           return (
             <div key={p} className="panel space-y-2 p-4 text-sm">
-              <b>{p === "youtube" ? "YouTube" : "TikTok"}</b>
+              <b>{p === "youtube" ? "YouTube" : p === "google" ? "Google (busca de imagens)" : "TikTok"}</b>
               <p className="text-xs text-muted-foreground">{a ? `Vinculada (${a.label ?? "cookies.txt"}) em ${new Date(a.updated_at).toLocaleString("pt-BR")}` : "Não vinculada"}</p>
               <div className="flex flex-wrap gap-2">
                 <label className={btn + " cursor-pointer"}>
