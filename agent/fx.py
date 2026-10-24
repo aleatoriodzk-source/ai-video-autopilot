@@ -10,7 +10,10 @@ import requests
 
 import media
 
-XFADE = {"fade": "fade", "slideleft": "slideleft", "slideright": "slideright", "zoomin": "zoomin", "circleopen": "circleopen"}
+XFADE = {"fade": "fade", "slideleft": "slideleft", "slideright": "slideright", "zoomin": "zoomin", "circleopen": "circleopen",
+         # tipos medidos na referência (Laboratório)
+         "flash": "fadewhite", "zoom": "zoomin", "whip": "smoothleft", "glitch": "pixelize", "cut": None}
+TRANS_DUR = {"fadewhite": 0.18, "smoothleft": 0.22, "pixelize": 0.2}
 TRANS_S = 0.35
 
 # Efeitos sintetizados (expressões lavfi). Nenhum arquivo externo, nenhuma licença envolvida.
@@ -176,13 +179,13 @@ def transitions(clips: list[Path], durs: list[float], trans: list[str], out: Pat
     inputs, pre, chain = [], [], ""
     for i, c in enumerate(clips):
         inputs += ["-i", str(c)]
-        pad = TRANS_S if i < len(clips) - 1 and kinds[i] else (0.04 if i < len(clips) - 1 else 0)
+        pad = TRANS_DUR.get(kinds[i], TRANS_S) if i < len(clips) - 1 and kinds[i] else (0.04 if i < len(clips) - 1 else 0)
         pre.append(f"[{i}:v]tpad=stop_mode=clone:stop_duration={pad},settb=AVTB,fps={fps}[p{i}]")
     last, offset = "p0", 0.0
     for i in range(1, len(clips)):
         offset += durs[i - 1]
         k = kinds[i - 1] or "fade"
-        d = TRANS_S if kinds[i - 1] else 0.04
+        d = TRANS_DUR.get(kinds[i - 1], TRANS_S) if kinds[i - 1] else 0.04
         chain += f";[{last}][p{i}]xfade=transition={k}:duration={d}:offset={offset:.3f}[x{i}]"
         last = f"x{i}"
     graph = ";".join(pre) + chain
@@ -190,10 +193,47 @@ def transitions(clips: list[Path], durs: list[float], trans: list[str], out: Pat
                "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p", "-an", str(out)])
 
 
-def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, total: float) -> Path | None:
+KIT_KIND = {"whoosh": "whoosh", "impact": "impact", "riser": "riser", "pop": "click", "click": "click", "bass_drop": "boom", "outro": "ding"}
+
+
+def clone_transitions(kit: list[dict], n: int) -> list[str]:
+    """Repete a sequência de transições medida na referência ao longo dos cortes do vídeo novo."""
+    seq = [t.get("kind") or "cut" for t in sorted(kit or [], key=lambda t: float(t.get("at_s") or 0))]
+    if not seq:
+        return ["cut"] * n
+    return [seq[i % len(seq)] for i in range(n)]
+
+
+def kit_hits(kit: list[dict], durs: list[float], ref_s: float | None) -> list[tuple[float, str]]:
+    """Mapa de SFX da referência levado para o vídeo novo: tempo proporcional e, se era no corte, cola no corte mais próximo."""
+    total = sum(durs)
+    ref = float(ref_s or 0) or max([float(k.get("at_s") or 0) for k in kit] + [total])
+    cuts, t = [], 0.0
+    for d in durs[:-1]:
+        t += d
+        cuts.append(t)
+    hits, last = [], -99.0
+    for k in sorted(kit, key=lambda k: float(k.get("at_s") or 0)):
+        kind = KIT_KIND.get(k.get("kind") or "", "whoosh")
+        at = float(k.get("at_s") or 0) * total / ref
+        if k.get("on_cut") and cuts:
+            at = min(cuts, key=lambda c: abs(c - at))
+            if kind == "whoosh":
+                at -= 0.25
+        at = max(0.0, min(total - 0.3, at))
+        if at - last < 0.6:
+            continue
+        hits.append((at, kind))
+        last = at
+    return hits[:40]
+
+
+def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, total: float, kit: list[dict] | None = None, ref_s: float | None = None) -> Path | None:
     """SFX pontual (estilo viral): impacto no gancho e no máximo mais 2 efeitos pedidos pelo roteiro, com 8 s de distância. Nada de whoosh em todo corte."""
     hits, t, last = [], 0.0, -99.0
-    for i, sc in enumerate(scenes):
+    if kit:
+        hits = [(at, make_sfx(k, cache)) for at, k in kit_hits(kit, durs, ref_s)]
+    for i, sc in enumerate(scenes if not hits else []):
         k = sfx_kind(sc.get("sfx") or "")
         if i == 0:
             k = k or "impact"
