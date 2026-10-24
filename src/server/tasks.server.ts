@@ -3,7 +3,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { aiJson as rawAiJson, type AiKeys, type Usage } from "./ai.server";
 import { channelAnalysisSchema, ideasSchema, postKitSchema, scriptSchema, shortAnalysisSchema, type ScriptOut, type StyleProfile } from "./schemas";
 import { evaluateBudget } from "@/lib/costs";
-import { WORDS_PER_SECOND, countWords, effectiveTargetSeconds, scriptIsShort } from "@/lib/duration";
+import { WORDS_PER_SECOND, countWords, effectiveTargetSeconds, isShortAspect, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
 
 type DB = SupabaseClient<Database>;
@@ -82,7 +82,7 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
         : "Analise este canal/perfil a partir dos metadados públicos, transcrições e estatísticas de cortes coletadas pelo agente local. Foram baixados os vídeos mais recentes do canal, com a transcrição completa de cada um. Descubra o nicho REAL pelo que é falado nas transcrições e títulos, nunca pelo nome do canal. Preencha video_comparison com cada vídeo analisado, common_patterns com o que se repete em todos e winning_formula com o que os mais vistos fazem diferente dos menos vistos. Só classifique desempenho se houver visualizações; senão use sem_dados.") +
       "\n\nAlém disso, preencha format_dna como um especialista em formatos virais: descubra nicho e subnicho, público, a promessa do vídeo, o tipo exato de gancho e o molde da primeira frase (com 3 modelos reaproveitáveis com [TEMA]), a estrutura em partes com % do tempo, como a narração é escrita (pessoa, tom, palavras por segundo, tamanho das frases, recursos como perguntas, contrastes, números), técnicas de retenção e loops abertos, edição (cortes por minuto, zoom, transições, proporção de imagens de apoio), legendas, áudio, que tipo de imagem usar e em qual fonte (YouTube para cenas de filmes/clipes, web, Wikimedia, NASA, Pexels, Pixabay, Internet Archive), CTA, padrão de título, o que fazer e o que evitar, e 5 ideias de vídeos novos no mesmo formato. Descreva o FORMATO, nunca copie falas ou conteúdo protegido. Se algo não pode ser medido, diga que é estimativa." +
       "\n\nANÁLISE FORENSE: os dados trazem, por vídeo, 'transcript' (falas com tempo), 'audio' (pausas medidas na voz, sound_hits = impactos/efeitos sonoros) e 'edit' (cortes por minuto em cada terço, cortes e texto dos 3 primeiros segundos, palavras por segundo, impactos que coincidem com cortes). Use esses NÚMEROS reais. Preencha format_dna.replication para que o vídeo novo seja uma cópia exata do FORMATO: media_rule ('video_only' se os quadros mostram clipes/cenas de filme/gameplay em movimento — nichos de filmes, heróis, anime, futebol, games quase sempre são video_only); scene_seconds = média medida entre cortes; hook_anatomy (o que acontece em cada segundo dos 3 primeiros: fala, corte, impacto); voice_pace (palavras/segundo medidas e energia); voice_rate_percent (velocidade para a voz sintética: 0 normal, 10 a 25 se fala rápida, -10 se lenta); pause_style (pausas medidas: quantas, média, onde ficam); sfx_placement (onde caem os impactos: gancho, viradas, cada corte); caption_color pelo destaque visto nos quadros (verde=neon, amarelo=hormozi, vermelho=red, branco=clean); script_skeleton = a sequência de funções de cada frase da transcrição (ex.: 'pergunta chocante', 'fato 1 com número', 'virada', 'CTA'), sem copiar as palavras." +
-      (isShort ? "\n\nCLONAGEM (vídeo curto): preencha scenes com UMA entrada por tomada usando os tempos de corte medidos (motion e transition de cada uma). caption_clone = a legenda vista nos quadros: cor do texto, cor da palavra destacada e do contorno em hex (#RRGGBB), distância do rodapé em % da altura, palavras por bloco, se é caixa alta, peso da fonte, animação e qual tipo de palavra recebe destaque. sfx_map = cada impacto sonoro medido (audio.sound_hits_s) com o tipo provável e se cai num corte. transitions_map = cada corte medido com o tipo de transição (flash se edit.motion.flash_cuts indica, zoom/whip se há movimento brusco, senão cut)." : "") +
+      (isShort ? "\n\nCLONAGEM (vídeo curto): preencha scenes com UMA entrada por tomada usando os tempos de corte medidos (motion e transition de cada uma). caption_clone = a legenda vista nos quadros: cor do texto, cor da palavra destacada e do contorno em hex (#RRGGBB), distância do rodapé em % da altura, palavras por bloco, se é caixa alta, peso da fonte, animação e qual tipo de palavra recebe destaque. sfx_map = cada impacto sonoro medido (audio.sound_hits_s) com o tipo provável e se cai num corte. transitions_map = cada corte medido com o tipo de transição (flash se edit.motion.flash_cuts indica, zoom/whip se há movimento brusco, senão cut). frame_mix = para cada tomada, em ordem, a proporção da imagem PRINCIPAL dentro da tela 9:16 vista nos quadros: '9:16' se ocupa a tela toda, '16:9' se é uma faixa horizontal com fundo desfocado, '1:1' se é quadrada, '3:4' se é um retrato quase cheio." : "") +
         "\n\nDADOS COLETADOS (JSON):\n" +
       JSON.stringify(args.collected).slice(0, 120_000),
     schemaName: isShort ? "short_analysis" : "channel_analysis",
@@ -223,7 +223,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const autoCap = Math.max(4, Math.round(target / 4));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(autoCap, Math.max(4, Math.round(target / refScene))) : null;
   const wps = meas?.words_per_second && meas.words_per_second > 1 && meas.words_per_second < 4.5 ? meas.words_per_second : WORDS_PER_SECOND;
-  const words = Math.round(target * wps);
+  // Fixed rule: shorts never under 60s => at least 165 words, at most 195.
+  const short = isShortAspect(p.aspect);
+  const words = short ? Math.min(195, Math.max(165, Math.round(target * wps))) : Math.round(target * wps);
   const ready = String(ps["ready_script"] ?? "").trim();
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
   const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "video_only" || /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos|cenas de filme|clipes de filme|trailer|gameplay/.test(dnaText)));
@@ -235,7 +237,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       (ready
         ? `O usuário JÁ ESCREVEU o roteiro abaixo. Sua tarefa é só DIVIDIR em cenas e planejar o visual. Copie a narração PALAVRA POR PALAVRA, na mesma ordem, sem resumir, cortar, reescrever ou acrescentar nada (apenas escreva números por extenso e remova emojis/símbolos para a voz). O title deve ser exatamente: "${topic}". Formato ${p.aspect}.\nROTEIRO DO USUÁRIO:\n${ready.slice(0, 40000)}\n`
         : `Escreva um roteiro completo para narração em PT-BR sobre: "${topic}". Mantenha o tema exatamente como o usuário pediu (não troque o ângulo, ex.: 'curiosidades' continua sendo curiosidades).` +
-          `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte. Formato ${p.aspect}.`) +
+          `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte.${short ? " OBRIGATÓRIO: entre 165 e 195 palavras de narração no total (o vídeo nunca pode ter menos de 60 segundos)." : ""} Formato ${p.aspect}.`) +
       (videoOnly ? "\nREGRA DE MÍDIA: este nicho usa SOMENTE VÍDEOS em movimento (cenas de filmes, trailers, gameplay, clipes). Cada visual_query deve descrever uma CENA EM MOVIMENTO do assunto, ex.: 'Thor Ragnarok lightning fight scene', 'Thor hammer Mjolnir summon scene'. Nunca peça foto, pôster ou imagem parada." : "") +
       (sceneCount
         ? `\nO roteiro deve ter EXATAMENTE ${sceneCount} cenas (≈ ${Math.round(words / sceneCount)} palavras de narração por cena).`
@@ -263,7 +265,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   });
   await recordTextUsage(db, userId, s, usage, "roteiro", jobId, productionId);
   // The AI often writes less than asked (e.g. 39s instead of 60s): ask it to extend until it reaches the word target.
-  for (let round = 0; !ready && round < 2 && scriptIsShort(data.scenes, target); round++) {
+  for (let round = 0; !ready && round < 3 && (scriptIsShort(data.scenes, target) || (short && countWords(data.scenes) < 165)); round++) {
     const have = countWords(data.scenes);
     const r = await ai<ScriptOut>({
       system: ETHICS + " Você é um roteirista profissional. Mantém o tom, o gancho e a estrutura, e só acrescenta conteúdo novo, concreto e verdadeiro.",

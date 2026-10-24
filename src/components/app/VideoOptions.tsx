@@ -40,7 +40,7 @@ export function VideoOptions({ value, onChange, kitMusic }: { value: VideoOpts; 
       </label>
       <label className="space-y-1 text-xs text-muted-foreground">Legenda
         <select className={sel} value={value.caption_style} onChange={(e) => set("caption_style", e.target.value)}>
-          <option value="auto">Igual à referência</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="neon">Verde neon (CapCut)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option><option value="none">Sem legenda</option>
+          <option value="auto">Igual à referência</option><option value="karaoke">Karaokê (palavra falada acende)</option><option value="box">Caixa escura</option><option value="hormozi">Amarelo forte (Hormozi)</option><option value="neon">Verde neon (CapCut)</option><option value="red">Vermelho impacto</option><option value="clean">Branco minimalista</option><option value="none">Sem legenda</option>
         </select>
       </label>
       <label className="space-y-1 text-xs text-muted-foreground">Música de fundo
