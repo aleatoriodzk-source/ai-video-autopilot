@@ -396,18 +396,18 @@ class Runner:
         vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
         dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
         out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
+        ps = ctx["prod"].get("settings") or {}
+        mix = [f for f in (ps.get("frame_mix") or []) if f in media.FRAME_RATIOS]
+        frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
         if vid.exists():
-            ps = ctx["prod"].get("settings") or {}
             cut = float(ps.get("cut_seconds") or 0)
-            mix = [f for f in (ps.get("frame_mix") or []) if f in media.FRAME_RATIOS]
-            frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
             media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
         km = (ctx["prod"].get("settings") or {}).get("kit_motion") or {}
         mv = km["main_move"] if km.get("main_move") in media.MOTIONS and (km.get("moving_share") or 0) >= 0.4 else (sc.get("motion") or "zoom_in")
-        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf)
+        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf, frame)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0
