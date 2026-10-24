@@ -1,0 +1,2 @@
+ALTER TABLE public.linked_accounts DROP CONSTRAINT linked_accounts_platform_check;
+ALTER TABLE public.linked_accounts ADD CONSTRAINT linked_accounts_platform_check CHECK (platform = ANY (ARRAY['youtube','tiktok','google']));
