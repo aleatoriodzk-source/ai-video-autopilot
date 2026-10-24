@@ -333,7 +333,26 @@ def white_background(image: Path) -> bool:
         return False
 
 
-def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, out: Path, crf: int = 20) -> None:
+def frame_box(w: int, h: int, frame: str) -> tuple[int, int]:
+    """Tamanho da cena principal (proporção `frame`) dentro da tela vertical."""
+    r = FRAME_RATIOS[frame]
+    fw = w if r >= w / h else int(h * 0.82 * r)
+    fw -= fw % 2
+    fh = int(fw / r)
+    return fw, fh - fh % 2
+
+
+def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, out: Path, crf: int = 20, frame: str | None = None) -> None:
+    if frame in ("16:9", "1:1", "3:4") and h > w:
+        # Foto na proporção da referência: Ken Burns na caixa menor e fundo desfocado da própria foto (sem barra preta).
+        fw, fh = frame_box(w, h, frame)
+        tmp = out.with_name(out.stem + "_fg.mp4")
+        scene_clip(image, dur, fw, fh, fps, motion, tmp, crf)
+        n = max(1, int(round(dur * fps)))
+        run(["ffmpeg", "-y", "-i", str(tmp), "-vf", f"{framed_filter(fw, fh, w, h, frame, None)},format=yuv420p,setsar=1",
+             "-frames:v", str(n), "-r", str(fps), "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
+        tmp.unlink(missing_ok=True)
+        return
     n = max(1, int(round(dur * fps)))
     z, x, y = MOTIONS.get(motion or "zoom_in", MOTIONS["zoom_in"])
     rate = 0.25 / n
@@ -390,10 +409,7 @@ def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None
     """Cena principal na proporção pedida (16:9, 1:1, 3:4), centralizada sobre o próprio vídeo ampliado e desfocado.
     Nunca barra preta: o fundo é sempre o desfoque escurecido."""
     r = FRAME_RATIOS[frame]
-    fw = w if r >= w / h else int(h * 0.82 * r)
-    fw -= fw % 2
-    fh = int(fw / r)
-    fh -= fh % 2
+    fw, fh = frame_box(w, h, frame)
     src_r = sw / max(1, sh)
     if src_r > r:  # corta as laterais, mantendo o personagem
         sw2 = round(fh * src_r)

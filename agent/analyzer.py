@@ -21,11 +21,12 @@ COOKIES: dict = {}
 def _ytdlp(args: list[str]) -> str:
     joined = " ".join(args)
     plat = "tiktok" if "tiktok.com" in joined else "youtube"
+    base = ["--user-agent", UA] if plat == "tiktok" else BASE
     extra = ["--cookies", str(COOKIES[plat])] if COOKIES.get(plat) and Path(COOKIES[plat]).exists() else []
-    p = subprocess.run(["yt-dlp", *BASE, *extra, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(["yt-dlp", *base, *extra, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0 and extra:
         # cookie vencido não pode travar tudo: tenta sem a conta
-        p = subprocess.run(["yt-dlp", *BASE, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        p = subprocess.run(["yt-dlp", *base, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:
         raise RuntimeError("yt-dlp: " + p.stderr[-800:])
     return p.stdout
@@ -59,8 +60,55 @@ def fetch_video(url: str, out: Path, resolve=None, max_h: int = 1080) -> Path:
                 for c in r.iter_content(1 << 20):
                     fh.write(c)
         return out
+    if "tiktok.com" in url:
+        return fetch_tiktok(url, out)
     _ytdlp(["-f", f"bv*[height<={max_h}][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4", "-o", str(out), "--no-playlist", "--force-overwrites", url])
     return out
+
+
+def clean_tiktok_url(url: str) -> str:
+    """Abre links curtos (vm./vt.tiktok.com) e tira ?is_from_webapp=... que confunde o extrator."""
+    u = url.strip()
+    if re.search(r"//(vm|vt)\.tiktok\.com/", u):
+        try:
+            import requests
+            u = requests.head(u, allow_redirects=True, timeout=20, headers={"User-Agent": UA}).url
+        except Exception:
+            pass
+    return u.split("?")[0].split("#")[0]
+
+
+def fetch_tiktok(url: str, out: Path) -> Path:
+    """TikTok sem marca d'água: 1) yt-dlp (com cookies da conta, se vinculada); 2) serviço público tikwm.
+    Se os dois falharem, avisa com o erro real em vez de seguir com vídeo vazio."""
+    u, errs = clean_tiktok_url(url), []
+    try:
+        _ytdlp(["-f", "b[vcodec!=none][acodec!=none]/b", "-o", str(out), "--no-playlist", "--force-overwrites", u])
+        if out.exists() and out.stat().st_size > 50000:
+            return out
+        errs.append("yt-dlp gerou arquivo vazio")
+    except Exception as e:
+        errs.append(str(e)[-300:])
+    try:
+        import requests
+        r = requests.post("https://www.tikwm.com/api/", data={"url": u, "hd": 1}, timeout=40, headers={"User-Agent": UA})
+        d = (r.json() or {}).get("data") or {}
+        link = d.get("hdplay") or d.get("play")
+        if not link:
+            raise RuntimeError(f"tikwm sem vídeo: {str(r.text)[:200]}")
+        if link.startswith("/"):
+            link = "https://www.tikwm.com" + link
+        with requests.get(link, stream=True, timeout=300, headers={"User-Agent": UA}) as v:
+            v.raise_for_status()
+            with open(out, "wb") as fh:
+                for c in v.iter_content(1 << 20):
+                    fh.write(c)
+        if out.stat().st_size > 50000:
+            return out
+        errs.append("tikwm gerou arquivo vazio")
+    except Exception as e:
+        errs.append(str(e)[-300:])
+    raise RuntimeError("Não consegui baixar o TikTok: " + " | ".join(errs) + ". Dica: vincule sua conta do TikTok (cookies) na aba Contas.")
 
 
 def scene_cuts(video: Path, threshold: float = 0.3) -> list[float]:
