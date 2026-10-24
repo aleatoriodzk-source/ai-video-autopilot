@@ -239,7 +239,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       (sceneCount
         ? `\nO roteiro deve ter EXATAMENTE ${sceneCount} cenas (≈ ${Math.round(words / sceneCount)} palavras de narração por cena).`
         : `\nDivida em cenas de ${style?.pacing?.avg_scene_s ?? 4}-${(style?.pacing?.avg_scene_s ?? 4) + 3}s cada.`) +
-      "\nEstrutura: 1) gancho forte nos primeiros 5s (promessa ou pergunta intrigante específica); 2) contexto rápido; 3) desenvolvimento em blocos com mini-ganchos para manter retenção; 4) clímax/revelação; 5) fechamento com CTA natural." +
+      "\nHISTÓRIA ÚNICA E LINEAR (obrigatório): o vídeo inteiro conta UM único fato/caso com nomes reais (pessoas, times, lugares, ano). Proibido pular entre vários casos, seleções, épocas ou personagens diferentes — o espectador nunca pode se perder. Cada cena continua a cena anterior (causa → consequência), e todas as visual_query mostram o MESMO evento/protagonista." + "\nEstrutura: 1) gancho forte nos primeiros 5s (promessa ou pergunta intrigante específica); 2) contexto rápido; 3) desenvolvimento em blocos com mini-ganchos para manter retenção; 4) clímax/revelação; 5) fechamento com CTA natural." +
       (target > 180 ? "\nComo é um vídeo longo, organize em capítulos claros e use transições faladas entre eles." : "") +
       (ps["style"] === "youtube"
         ? "\nESTILO YOUTUBE LONGO (documentário): narrativa envolvente com começo, meio e fim, cenas de 5 a 9 segundos, explicações com exemplos, curiosidade construída aos poucos, loops abertos que só fecham mais adiante, transições suaves (fade), movimentos de câmera lentos."

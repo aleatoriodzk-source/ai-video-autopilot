@@ -217,6 +217,7 @@ function Referencias() {
                     <button key={k} onClick={() => setFormat(k)} className={`rounded-md border px-3 py-1 ${format === k ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}>{l}</button>
                   ))}
                 </div>
+                <VideoOptions value={opts} onChange={setOpts} />
                 {ideas[r.id]?.length ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2 text-xs">
                     <span className="text-muted-foreground">Modo fábrica: marque vários temas e o agente faz todos, um depois do outro.</span>

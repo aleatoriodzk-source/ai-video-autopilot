@@ -40,10 +40,19 @@ def isolate(video: Path, work: Path, log) -> Path:
         if not found:
             raise media.MediaError("Demucs não gerou a faixa de voz")
         shutil.copy(found, out)
+        inst = next((work / "sep").rglob("no_vocals.wav"), None)
+        if inst:
+            media.run(["ffmpeg", "-y", "-i", str(inst), "-ac", "2", "-b:a", "192k", str(work / "music.mp3")])
     else:
         log("Demucs não instalado: usando filtro simples (a música pode vazar). Rode install_voice_clone.bat para isolamento de verdade.")
         media.run(["ffmpeg", "-y", "-i", str(full), "-af", "highpass=f=90,lowpass=f=7500,afftdn=nf=-25,speechnorm=e=6", str(out)])
     return out
+
+
+def instrumental(work: Path) -> Path | None:
+    """Música + efeitos sem a voz (só existe quando o Demucs rodou)."""
+    p = work / "music.mp3"
+    return p if p.exists() else None
 
 
 def best_sample(vocals: Path, work: Path, seconds: float = 15.0) -> Path:
