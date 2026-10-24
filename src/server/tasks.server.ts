@@ -303,15 +303,15 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const R = (report ?? {}) as Record<string, any>;
   const inherit: Record<string, unknown> = {};
   if (p.reference_id) {
-    if (R.caption_clone && (!ps["caption_style"] || ps["caption_style"] === "auto")) { inherit.caption_style = "clone"; inherit.caption_clone = R.caption_clone; }
-    if (R.frame_mix?.length && !ps["frame_mix"]) inherit.frame_mix = R.frame_mix;
-    if (R.sfx_map?.length && !ps["kit_sfx"]) { inherit.kit_sfx = R.sfx_map; inherit.kit_sfx_ref_s = R.videos?.[0]?.duration_s ?? R.measured?.avg_duration_s ?? null; if (!ps["sfx"]) inherit.sfx = "on"; }
-    if (R.transitions_map?.length && !ps["kit_transitions"]) inherit.kit_transitions = R.transitions_map;
-    if (R.videos?.[0]?.edit?.motion && !ps["kit_motion"]) inherit.kit_motion = R.videos[0].edit.motion;
-    if (R.color_grade && !ps["color_grade"]) inherit.color_grade = R.color_grade;
-    if (R.music_mood && (!ps["music_mood"] || ps["music_mood"] === "auto")) inherit.music_mood = R.music_mood;
+    if (R["caption_clone"] && (!ps["caption_style"] || ps["caption_style"] === "auto")) { inherit["caption_style"] = "clone"; inherit["caption_clone"] = R["caption_clone"]; }
+    if (R["frame_mix"]?.length && !ps["frame_mix"]) inherit["frame_mix"] = R["frame_mix"];
+    if (R["sfx_map"]?.length && !ps["kit_sfx"]) { inherit["kit_sfx"] = R["sfx_map"]; inherit["kit_sfx_ref_s"] = R["videos"]?.[0]?.duration_s ?? R["measured"]?.avg_duration_s ?? null; if (!ps["sfx"]) inherit["sfx"] = "on"; }
+    if (R["transitions_map"]?.length && !ps["kit_transitions"]) inherit["kit_transitions"] = R["transitions_map"];
+    if (R["videos"]?.[0]?.edit?.motion && !ps["kit_motion"]) inherit["kit_motion"] = R["videos"][0].edit.motion;
+    if (R["color_grade"] && !ps["color_grade"]) inherit["color_grade"] = R["color_grade"];
+    if (R["music_mood"] && (!ps["music_mood"] || ps["music_mood"] === "auto")) inherit["music_mood"] = R["music_mood"];
   }
-  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, ...inherit, video_only: videoOnly, ...(measured || ps["style"] === "tiktok" ? { cut_seconds: Math.min(6, Math.max(0.8, measured ?? 2.2)) } : {}), ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: inherit.caption_style ? "clone" : ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
+  await db.from("productions").update({ script: data as never, topic, settings: { ...ps, ...inherit, video_only: videoOnly, ...(measured || ps["style"] === "tiktok" ? { cut_seconds: Math.min(6, Math.max(0.8, measured ?? 2.2)) } : {}), ...(rep.voice_rate_percent != null && !ps["voice_rate"] ? { voice_rate: `${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent))) >= 0 ? "+" : ""}${Math.round(Math.max(-20, Math.min(30, rep.voice_rate_percent)))}%` } : {}), caption_resolved: inherit["caption_style"] ? "clone" : ps["caption_style"] && ps["caption_style"] !== "auto" ? ps["caption_style"] : rep.caption_color ? rep.caption_color : /verde|green|neon/.test(dnaText) ? "neon" : /vermelh|\bred\b/.test(dnaText) ? "red" : /amarel|yellow/.test(dnaText) ? "hormozi" : "hormozi" } as never }).eq("id", productionId);
   return data;
 }
 
