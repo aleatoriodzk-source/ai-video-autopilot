@@ -49,7 +49,7 @@ export const testSavedKey = createServerFn({ method: "POST" })
   .inputValidator((i: { provider: string }) => ({ provider: check(i.provider) }))
   .handler(async ({ data, context }) => {
     const { loadKeys } = await import("@/server/tasks.server");
-    const k = (await loadKeys(context.userId))[data.provider] ?? (data.provider === "gemini" ? process.env["GEMINI_API_KEY"] : undefined);
+    const k = ((await loadKeys(context.userId)) as Record<string, string | undefined>)[data.provider] ?? (data.provider === "gemini" ? process.env["GEMINI_API_KEY"] : undefined);
     if (!k) return { ok: false as const, error: "Nenhuma chave salva" };
     const { testProvider } = await import("@/server/ai.server");
     try {
