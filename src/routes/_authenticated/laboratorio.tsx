@@ -129,6 +129,7 @@ function Lab() {
       ...(motion ? { kit_motion: motion } : {}),
       ...(clone && opts.caption_style === "auto" ? { caption_style: "clone", caption_clone: clone } : {}),
       ...(cut ? { cut_seconds: cut } : {}),
+      ...(rep.frame_mix?.length ? { frame_mix: rep.frame_mix } : {}),
       ...(rep.sfx_map?.length ? { kit_sfx: rep.sfx_map } : {}),
     };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });

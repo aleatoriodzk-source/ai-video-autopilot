@@ -366,7 +366,7 @@ class Runner:
             img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
             src = vid if vid.exists() else img
             dur = float(sc.get("duration_s") or 0)
-            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
+            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
             out, mark = ctx["work"] / f"clip_{sc['idx']:03d}.mp4", ctx["work"] / f"clip_{sc['idx']:03d}.sig"
             if out.exists() and mark.exists() and mark.read_text() == sig:
                 reused += 1
@@ -397,8 +397,11 @@ class Runner:
         dur = float(sc.get("duration_s") or media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav"))
         out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
         if vid.exists():
-            cut = float((ctx["prod"].get("settings") or {}).get("cut_seconds") or 0)
-            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut)
+            ps = ctx["prod"].get("settings") or {}
+            cut = float(ps.get("cut_seconds") or 0)
+            mix = [f for f in (ps.get("frame_mix") or []) if f in media.FRAME_RATIOS]
+            frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
+            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
