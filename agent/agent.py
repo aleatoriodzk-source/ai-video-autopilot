@@ -200,10 +200,17 @@ class Runner:
         kind = (bundle.get("analysis") or {}).get("kind", "channel")
         self.update(job, status="waiting_download", step="analyze", progress=10, wait_reason="baixando referência")
         work = Path(self.cfg["work_dir"]) / f"ref_{ref['id']}"
-        collected, frames = collect_reference(ref["urls"], kind, work, lambda m: self.log(job, m, step="analyze"),
+        prog = {"p": 10}
+
+        def step_log(m):
+            self.log(job, m, step="analyze")
+            prog["p"] = min(65, prog["p"] + 8)
+            self.update(job, status="running", progress=prog["p"], wait_reason=f"Dissecando: {m}"[:180])
+
+        collected, frames = collect_reference(ref["urls"], kind, work, step_log,
                                              resolve=lambda path: self.api.call("download_url", path=path)["url"])
         self.api.call("save_collected", job_id=job["id"], collected=collected, title=collected.get("title"))
-        self.update(job, status="waiting_api", progress=70, wait_reason="IA analisando estilo")
+        self.update(job, status="waiting_api", progress=70, wait_reason="IA esqueletando legenda, transições e efeitos")
         self.api.call("ai_analyze", job_id=job["id"], collected=collected, frames=frames)
         self.update(job, status="done", progress=100, wait_reason=None, completed_steps=["analyze"])
 
@@ -412,7 +419,8 @@ class Runner:
             (ctx["work"] / "subs.ass").unlink(missing_ok=True)
             self.log(job, "sem legenda (escolha sua)", step="captions")
             return
-        media.write_ass(cues, ctx["w"], ctx["h"], ctx["work"] / "subs.ass", style=ps.get("caption_resolved") or ps.get("caption_style") or "hormozi")
+        media.write_ass(cues, ctx["w"], ctx["h"], ctx["work"] / "subs.ass", style=ps.get("caption_resolved") or ps.get("caption_style") or "hormozi",
+                        clone=ps.get("caption_clone") if ps.get("caption_style") == "clone" else None)
 
     def step_audio(self, job, ctx):
         files = [ctx["work"] / f"voice_{sc['idx']:03d}.wav" for sc in ctx["scenes"]]

@@ -45,11 +45,21 @@ export async function redoStep(jobId: string, completed: string[], step: StepId)
 
 export async function requestAnalysis(referenceId: string, kind: "channel" | "short") {
   const user_id = await uid();
-  const { data: a, error } = await supabase.from("analyses").insert({ user_id, reference_id: referenceId, kind }).select("id").single();
+  const { data: a, error } = await supabase.from("analyses").insert({ user_id, reference_id: referenceId, kind, status: "pending" }).select("id").single();
   if (error) throw error;
-  await supabase.from("jobs").insert({ user_id, type: "analyze_reference", reference_id: referenceId, analysis_id: a.id });
+  await enqueueJobs([{ user_id, type: "analyze_reference", reference_id: referenceId, analysis_id: a.id }]);
   await supabase.from("reference_sources").update({ status: "queued" }).eq("id", referenceId);
   return a.id;
+}
+
+type JobRow = { user_id: string; type: string; reference_id?: string | null; analysis_id?: string | null; production_id?: string | null; payload?: Record<string, unknown> | null };
+
+/** Inserts jobs with safe defaults (payload {}, queued, progress 0) and retries once, so a task never gets stuck before reaching the PC. */
+export async function enqueueJobs(rows: JobRow[]) {
+  const clean = rows.map((r) => ({ ...r, payload: (r.payload ?? {}) as never, status: "queued", progress: 0, error: null }));
+  let { error } = await supabase.from("jobs").insert(clean);
+  if (error) ({ error } = await supabase.from("jobs").insert(clean));
+  if (error) throw new Error(`Não consegui colocar a tarefa na fila: ${error.message}`);
 }
 
 export function agentOnline(lastSeen: string | null | undefined) {
