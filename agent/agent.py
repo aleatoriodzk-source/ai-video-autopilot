@@ -278,13 +278,15 @@ class Runner:
             else:
                 edge_rate = vc.edge_rate_for((cv.get("stats") or {}).get("wpm"))
                 self.log(job, f"clonagem não instalada no PC (rode install_voice_clone.bat). Usando voz Edge no ritmo da voz '{cv['name']}' ({edge_rate})", "warn", step="narration")
-        for n, sc in enumerate(ctx["scenes"]):
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        total_n, counter, lock = len(ctx["scenes"]), [0], threading.Lock()
+
+        def narrate(sc):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
             raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}_{__import__('hashlib').md5((sc['narration'] + str(clone) + edge_voice + str(edge_rate)).encode()).hexdigest()[:8]}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             done = raw.exists() and raw.stat().st_size > 1000
-            if done:
-                self.log(job, f"cena {sc['idx'] + 1}: narração já pronta, reaproveitando", step="narration")
             if clone and not done:
                 try:
                     import voice as vc
@@ -305,7 +307,17 @@ class Runner:
             timings = media.aligned_timings(media.clean_tts(sc["narration"]), wav)
             self.api.call("update_scene", scene_id=sc["id"], fields={"audio_path": str(wav), "audio_duration_s": round(speech, 3), "duration_s": round(total, 3), "word_timings": timings, "status": "narrated"})
             sc.update(audio_path=str(wav), audio_duration_s=speech, duration_s=total, word_timings=timings)
-            self.update(job, progress=30 + int(10 * (n + 1) / len(ctx["scenes"])))
+            with lock:
+                counter[0] += 1
+                k = counter[0]
+            print(f"  narração: cena {k} de {total_n} pronta", flush=True)
+            self.update(job, progress=30 + int(10 * k / total_n), wait_reason=f"Narrando: {k} de {total_n} cenas prontas")
+
+        # Edge (internet) aguenta várias cenas ao mesmo tempo; a clonagem usa a placa de vídeo, então vai uma por vez.
+        workers = 1 if clone else int(self.cfg.get("narration_workers") or 4)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(narrate, ctx["scenes"]))
+        self.update(job, wait_reason=None)
         self._fit_duration(job, ctx)
 
     def _fit_duration(self, job, ctx):

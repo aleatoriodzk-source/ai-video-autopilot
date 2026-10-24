@@ -52,6 +52,7 @@ function Referencias() {
   const [ideas, setIdeas] = useState<Record<string, { title: string; hook: string; angle: string; why_fits: string; factual: boolean }[]>>({});
   const [wish, setWish] = useState("");
   const [thinking, setThinking] = useState<string | null>(null);
+  const [format, setFormat] = useState<"auto" | "short" | "long">("auto");
   const navigate = useNavigate();
 
   async function suggest(id: string) {
@@ -65,8 +66,9 @@ function Referencias() {
 
   async function makeProduction(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
     const { data: u } = await supabase.auth.getUser();
-    const short = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
-    const settings = { ...(short ? { target_seconds: 65 } : {}), style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "on", base_captions: "hide", source_mode: "search" };
+    const auto = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
+    const short = format === "short" ? true : format === "long" ? false : auto;
+    const settings = { ...(short ? { target_seconds: 65 } : format === "long" ? { target_seconds: 600 } : {}), style: short ? "tiktok" : "youtube", voice: "pt-BR-AntonioNeural", voice_rate: "+5%", music_mood: "auto", caption_style: "auto", media_rule: "auto", sfx: "on", base_captions: "hide", source_mode: "search" };
     const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
     const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
     if (error) throw error;
@@ -206,6 +208,12 @@ function Referencias() {
                 <div className="flex flex-wrap items-center gap-2">
                   <input value={wish} onChange={(e) => setWish(e.target.value)} placeholder="Preferência (opcional), ex.: temas de terror" className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs" />
                   <button disabled={thinking === r.id} onClick={() => suggest(r.id)} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50">{thinking === r.id ? "Pensando…" : ideas[r.id] ? "Sugerir outros temas" : "Sugerir temas no estilo deste canal"}</button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Formato do vídeo:</span>
+                  {([["auto", "Igual ao canal"], ["short", "Curto (~1 min, rápido)"], ["long", "Longo (~10 min)"]] as const).map(([k, l]) => (
+                    <button key={k} onClick={() => setFormat(k)} className={`rounded-md border px-3 py-1 ${format === k ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}>{l}</button>
+                  ))}
                 </div>
                 {ideas[r.id]?.length ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2 text-xs">
