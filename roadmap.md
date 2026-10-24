@@ -39,3 +39,11 @@
 - [x] Escolher voz, velocidade, legenda, música e efeitos ao criar vídeo (Laboratório e Referências)
 - [x] Efeitos sonoros reais (CC0) no lugar do chiado; imagens de fundo branco ficam sobre fundo escuro
 - [x] Roteiro com uma história só, linear e com nomes reais
+
+## Visual e estilo (Out/2026) — ZIP só no final, a pedido do Júlio
+- [x] Roteiro curto: 165-195 palavras (nunca < 60s)
+- [x] Legenda Karaokê (palavra falada acende) e Caixa escura
+- [x] Proporção por cena (16:9, 1:1, 3:4, tela cheia) aprendida da referência, sempre com fundo desfocado (vídeos e fotos)
+- [x] TikTok: link curto, sem marca d'água, plano B se o yt-dlp falhar
+- [ ] Gerar ZIP final e trocar arquivos no PC (aguardando o Júlio pedir)
+- [ ] Voz clonada na nuvem (deixada por último)
