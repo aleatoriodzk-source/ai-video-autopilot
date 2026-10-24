@@ -130,7 +130,8 @@ function Lab() {
       ...(clone && opts.caption_style === "auto" ? { caption_style: "clone", caption_clone: clone } : {}),
       ...(cut ? { cut_seconds: cut } : {}),
       ...(rep.frame_mix?.length ? { frame_mix: rep.frame_mix } : {}),
-      ...(rep.sfx_map?.length ? { kit_sfx: rep.sfx_map } : {}),
+      ...(rep.sfx_map?.length ? { kit_sfx: rep.sfx_map, kit_sfx_ref_s: rep.videos?.[0]?.duration_s ?? rep.avg_duration_s ?? null } : {}),
+      ...(rep.transitions_map?.length ? { kit_transitions: rep.transitions_map } : {}),
     };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
     if (error) { toast.error(error.message); return; }
