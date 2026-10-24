@@ -200,12 +200,32 @@ CAPTION_STYLES = {
 }
 
 
-def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black", style: str = "hormozi") -> None:
-    """Legenda estilo TikTok: zona segura inferior (não cobre rostos), caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida."""
+def _ass_color(hx: str, default: str) -> str:
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", (hx or "").strip())
+    if not m:
+        return default
+    v = m.group(1)
+    return f"&H00{v[4:6]}{v[2:4]}{v[0:2]}".upper()
+
+
+def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black", style: str = "hormozi", clone: dict | None = None) -> None:
+    """Legenda estilo TikTok: zona segura inferior (não cobre rostos), caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida.
+    Com `clone`, usa cores, posição, caixa alta e animação medidas no vídeo de referência."""
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
     vertical = h > w
     fs = int(h * (0.052 if vertical else 0.065))
     align, margin_v = (2, int(h * 0.24)) if vertical else (2, int(h * 0.1))
+    upper, anim = True, "pop"
+    if clone:
+        main = _ass_color(clone.get("text_hex"), main)
+        hi = _ass_color(clone.get("highlight_hex"), hi)
+        outline = _ass_color(clone.get("outline_hex"), outline)
+        bp = float(clone.get("bottom_percent") or 24)
+        margin_v = int(h * min(45, max(8, bp)) / 100)
+        upper = bool(clone.get("uppercase", True))
+        anim = clone.get("animation") or "pop"
+        if clone.get("font_weight") == "regular":
+            font = "Arial"
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -223,13 +243,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for n, c in enumerate(cues):
         if c["end"] <= c["start"]:
             continue
-        words = _esc(c["text"]).upper().split()
+        words = (_esc(c["text"]).upper() if upper else _esc(c["text"])).split()
         if not words:
             continue
         # destaca a palavra mais longa do bloco (geralmente a palavra-chave)
         k = max(range(len(words)), key=lambda i: len(words[i]))
         words[k] = "{\\c" + hi + "&}" + words[k] + "{\\c" + main + "&}"
         pulse = "{\\fad(40,30)\\fscx70\\fscy70\\t(0,90,\\fscx112\\fscy112)\\t(90,160,\\fscx100\\fscy100)}"
+        if anim == "fade":
+            pulse = "{\\fad(120,80)}"
+        elif anim == "static":
+            pulse = ""
         lines.append(f"Dialogue: 0,{_ts(c['start'])},{_ts(c['end'])},Main,,0,0,0,,{pulse}{' '.join(words)}")
     out.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
 
