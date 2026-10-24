@@ -51,6 +51,16 @@ def size_for(aspect: str, resolution: str = "1080p") -> tuple[int, int]:
     return w - w % 2, h - h % 2
 
 
+COLOR_GRADES = {
+    "dark_cinematic": "eq=contrast=1.12:brightness=-0.04:saturation=0.9,vignette=PI/5",
+    "high_contrast": "eq=contrast=1.25:saturation=1.1",
+    "warm": "colorbalance=rs=0.08:gs=0.02:bs=-0.08,eq=saturation=1.05",
+    "cold": "colorbalance=rs=-0.06:bs=0.1,eq=contrast=1.05",
+    "vintage": "curves=preset=vintage,vignette=PI/6",
+    "vivid": "eq=saturation=1.35:contrast=1.08",
+}
+
+
 def run(cmd: list[str], cwd: Path | None = None) -> str:
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:

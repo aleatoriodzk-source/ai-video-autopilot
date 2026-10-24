@@ -459,6 +459,15 @@ class Runner:
         else:
             trans = [sc.get("transition") or "cut" for sc in ctx["scenes"]]
         fx.transitions(clips, durs, trans, ctx["work"] / "video.mp4", ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"])
+        grade = media.COLOR_GRADES.get(kps.get("color_grade") or "none")
+        if grade:
+            try:
+                g = ctx["work"] / "video_graded.mp4"
+                media.run(["ffmpeg", "-y", "-i", str(ctx["work"] / "video.mp4"), "-vf", grade, "-c:v", "libx264", "-preset", "veryfast", "-crf", str(ctx["settings"]["export"]["crf"]), "-pix_fmt", "yuv420p", "-an", str(g)])
+                g.replace(ctx["work"] / "video.mp4")
+                self.log(job, f"filtro de cor clonado da referência: {kps['color_grade']}", step="render")
+            except media.MediaError as err:
+                self.log(job, f"filtro de cor ignorado: {err}", "warn", step="render")
         cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
         sfx = None
         if ((ctx["prod"].get("settings") or {}).get("sfx") or "off") != "on":
