@@ -223,7 +223,7 @@ class Runner:
         work = Path(self.cfg["work_dir"]) / prod["id"]
         work.mkdir(parents=True, exist_ok=True)
         ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
-               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice")}
+               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice"), "elevenlabs_key": bundle.get("elevenlabs_key")}
 
         for i, step in enumerate(STEPS):
             if step in done:
@@ -283,7 +283,21 @@ class Runner:
         clone, cv = None, ctx.get("voice")
         if cv and cv.get("status") == "ready" and cv.get("sample_path"):
             import voice as vc
-            if vc.engine():
+            el_key = ctx.get("elevenlabs_key") or self.cfg.get("elevenlabs_api_key")
+            if el_key:
+                try:
+                    sample = ctx["work"] / "clone_sample.wav"
+                    r = requests.get(self.api.call("download_url", path=cv["sample_path"])["url"], timeout=120)
+                    r.raise_for_status()
+                    sample.write_bytes(r.content)
+                    clone = ("eleven", el_key, vc.eleven_voice(el_key, sample, cv["name"], Path(self.cfg["work_dir"])))
+                    self.log(job, f"narrando com a voz clonada '{cv['name']}' na ElevenLabs (nuvem)", step="narration")
+                except Exception as e:
+                    clone = None
+                    self.log(job, f"ElevenLabs falhou ({e}); usando voz grátis", "warn", step="narration")
+            if clone:
+                pass
+            elif vc.engine():
                 clone = ctx["work"] / "clone_sample.wav"
                 r = requests.get(self.api.call("download_url", path=cv["sample_path"])["url"], timeout=120)
                 r.raise_for_status()
@@ -299,12 +313,15 @@ class Runner:
         def narrate(sc):
             if not sc["narration"].strip():
                 raise RuntimeError(f"cena {sc['idx'] + 1} sem narração")
-            raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}_{__import__('hashlib').md5((sc['narration'] + str(clone) + edge_voice + str(edge_rate)).encode()).hexdigest()[:8]}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
+            raw, wav = ctx["work"] / f"raw_{sc['idx']:03d}_{__import__('hashlib').md5((sc['narration'] + str(clone[2] if isinstance(clone, tuple) else clone) + edge_voice + str(edge_rate)).encode()).hexdigest()[:8]}.wav", ctx["work"] / f"voice_{sc['idx']:03d}.wav"
             done = raw.exists() and raw.stat().st_size > 1000
             if clone and not done:
                 try:
                     import voice as vc
-                    vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
+                    if isinstance(clone, tuple):
+                        vc.eleven_tts(media.clean_tts(sc["narration"]), clone[1], clone[2], raw)
+                    else:
+                        vc.clone_tts(media.clean_tts(sc["narration"]), clone, raw)
                     done = True
                 except Exception as e:
                     self.log(job, f"cena {sc['idx'] + 1}: clonagem falhou ({e}); usando Edge", "warn", step="narration")

@@ -146,3 +146,36 @@ def edge_rate_for(wpm: float | None) -> str:
         return "+0%"
     pct = max(-30, min(50, round((wpm / 150.0 - 1) * 100)))
     return f"{pct:+d}%"
+
+
+# ---------- ElevenLabs (opcional, nuvem, sem placa de vídeo) ----------
+def eleven_voice(key: str, sample: Path, name: str, cache_dir: Path) -> str:
+    """Cria a voz clonada na ElevenLabs uma única vez por amostra e guarda o id em cache."""
+    import hashlib, json, requests
+    h = hashlib.md5(sample.read_bytes()).hexdigest()[:12]
+    cache = cache_dir / "elevenlabs_voices.json"
+    data = json.loads(cache.read_text("utf-8")) if cache.exists() else {}
+    if data.get(h):
+        return data[h]
+    with open(sample, "rb") as fh:
+        r = requests.post("https://api.elevenlabs.io/v1/voices/add", headers={"xi-api-key": key},
+                          data={"name": f"Estudio {name}"[:60]}, files={"files": ("sample.wav", fh, "audio/wav")}, timeout=120)
+    if not r.ok:
+        raise media.MediaError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
+    data[h] = r.json()["voice_id"]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data), "utf-8")
+    return data[h]
+
+
+def eleven_tts(text: str, key: str, voice_id: str, out_wav: Path) -> None:
+    import requests
+    r = requests.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128",
+                      headers={"xi-api-key": key, "Content-Type": "application/json"},
+                      json={"text": text, "model_id": "eleven_multilingual_v2",
+                            "voice_settings": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.3, "use_speaker_boost": True}}, timeout=180)
+    if not r.ok:
+        raise media.MediaError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
+    mp3 = out_wav.with_suffix(".mp3")
+    mp3.write_bytes(r.content)
+    media.run(["ffmpeg", "-y", "-i", str(mp3), "-ac", "1", "-ar", "44100", str(out_wav)])
