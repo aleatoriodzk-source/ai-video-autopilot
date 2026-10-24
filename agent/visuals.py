@@ -321,7 +321,7 @@ def google_images(q: str) -> list[dict]:
         if "gstatic.com" in url or url in seen or ww < 600:
             continue
         seen.add(url)
-        out.append({"id": f"web:{url[-80:]}", "url": url.encode().decode("unicode_escape"), "page": None, "text": q})
+        out.append({"id": f"web:{url[-80:]}", "url": url.replace("\\u003d", "=").replace("\\u0026", "&"), "page": None, "text": q})
         if len(out) >= 20:
             break
     return out
