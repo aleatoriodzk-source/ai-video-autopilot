@@ -25,6 +25,7 @@ const PROVIDERS = [
   { id: "gemini", name: "Gemini (Google)", hint: "Tem plano gratuito. Pegue em aistudio.google.com → Get API key.", ph: "AIza... ou AQ..." },
   { id: "openai", name: "ChatGPT (OpenAI)", hint: "Pago por uso. Pegue em platform.openai.com → API keys.", ph: "sk-..." },
   { id: "anthropic", name: "Claude (Anthropic)", hint: "Pago por uso. Pegue em console.anthropic.com → API Keys.", ph: "sk-ant-..." },
+  { id: "elevenlabs", name: "ElevenLabs (voz clonada, opcional)", hint: "Opcional. Clona a voz na nuvem sem placa de vídeo. Sem chave, usa as vozes grátis. Pegue em elevenlabs.io → API Keys.", ph: "sk_..." },
 ] as const;
 
 const CHOICES = [
@@ -79,7 +80,7 @@ function Config() {
         <p className="text-xs text-muted-foreground">Você também pode escolher outra IA em cada produção.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {PROVIDERS.map((p) => {
           const saved = k?.keys[p.id];
           const platform = p.id === "gemini" && !saved && k?.platformGemini;

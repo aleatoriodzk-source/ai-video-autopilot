@@ -195,7 +195,12 @@ async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usag
 }
 
 /** Small real request to check that a key works. */
-export async function testProvider(p: "gemini" | "openai" | "anthropic", key: string): Promise<void> {
+export async function testProvider(p: "gemini" | "openai" | "anthropic" | "elevenlabs", key: string): Promise<void> {
+  if (p === "elevenlabs") {
+    const r = await fetch("https://api.elevenlabs.io/v1/user", { headers: { "xi-api-key": key } });
+    if (!r.ok) throw new Error(`ElevenLabs respondeu ${r.status}: ${(await r.text()).slice(0, 150)}`);
+    return;
+  }
   const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
   const o: AiOpts = { system: "Responda em JSON.", user: "Responda ok=true.", schemaName: "teste", schema };
   if (p === "gemini") await geminiJson(o, key);
