@@ -177,6 +177,13 @@ class Runner:
             up = self.api.call("upload_url", name=f"voices/{v['id']}.wav")
             with open(sample, "rb") as fh:
                 requests.put(up["signed_url"], data=fh, headers={"Content-Type": "audio/wav", "x-upsert": "true"}, timeout=300).raise_for_status()
+            inst = vc.instrumental(work)
+            if inst:
+                up2 = self.api.call("upload_url", name=f"voices/{v['id']}_music.mp3")
+                with open(inst, "rb") as fh:
+                    requests.put(up2["signed_url"], data=fh, headers={"Content-Type": "audio/mpeg", "x-upsert": "true"}, timeout=300).raise_for_status()
+                stats["music_path"] = up2["path"]
+                self.log(job, "música de fundo isolada (sem voz) salva", step="voice")
             self.api.call("save_voice", voice_id=v["id"], fields={"status": "ready", "sample_path": up["path"], "stats": stats})
             self.log(job, f"voz pronta: {stats}", step="voice")
             self.update(job, status="done", progress=100, wait_reason=None, completed_steps=["voice"])
@@ -388,7 +395,9 @@ class Runner:
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
-        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
+        km = (ctx["prod"].get("settings") or {}).get("kit_motion") or {}
+        mv = km["main_move"] if km.get("main_move") in media.MOTIONS and (km.get("moving_share") or 0) >= 0.4 else (sc.get("motion") or "zoom_in")
+        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0
@@ -434,10 +443,21 @@ class Runner:
         if mood == "auto":
             mood = fx.guess_mood(ctx["prod"].get("topic") or ctx["prod"].get("title") or "", ctx["scenes"])
             self.log(job, f"clima escolhido automaticamente: {mood}", step="render")
+        kit_music = (ctx["prod"].get("settings") or {}).get("music_path")
         music = None if mood == "none" else (pick_music(self.cfg, mood) if any((Path(self.cfg.get("music_dir") or ROOT / "music") / mood).glob("*.*")) else None)
         if mood != "none" and not music:
             m = fx.online_music(mood, cache / "music", lambda t: self.log(job, t, step="render"))
             music = str(m) if m else pick_music(self.cfg, mood)
+        if kit_music:
+            try:
+                dst = ctx["work"] / "kit_music.mp3"
+                if not dst.exists():
+                    r = requests.get(self.api.call("download_url", path=kit_music)["url"], timeout=120)
+                    r.raise_for_status()
+                    dst.write_bytes(r.content)
+                music = str(dst)
+            except Exception as err:
+                self.log(job, f"não consegui baixar a música do kit: {err}", "warn", step="render")
         if music:
             self.log(job, f"música: {Path(music).name}", step="render")
         e = ctx["settings"]["export"]

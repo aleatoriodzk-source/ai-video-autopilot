@@ -15,7 +15,7 @@ TRANS_S = 0.35
 
 # Efeitos sintetizados (expressões lavfi). Nenhum arquivo externo, nenhuma licença envolvida.
 SFX = {
-    "whoosh": "anoisesrc=d=0.6:c=pink:a=0.9,highpass=f=300,lowpass=f=4000,afade=t=in:d=0.25,afade=t=out:st=0.3:d=0.3",
+    "whoosh": "anoisesrc=d=0.5:c=white:a=0.5,bandpass=f=1400:width_type=o:w=1.5,afade=t=in:d=0.22:curve=exp,afade=t=out:st=0.22:d=0.28:curve=exp,volume=0.7",
     "impact": "sine=f=55:d=0.7,volume=2.5,afade=t=out:st=0.05:d=0.65",
     "riser": "anoisesrc=d=1.4:c=white:a=0.5,highpass=f=800,afade=t=in:d=1.3,afade=t=out:st=1.3:d=0.1",
     "click": "sine=f=1800:d=0.05,afade=t=out:d=0.05",
@@ -62,8 +62,42 @@ def guess_mood(topic: str, scenes: list[dict]) -> str:
     return best if scores[best] else "suspense"
 
 
+SFX_QUERY = {"whoosh": "whoosh transition", "impact": "cinematic impact hit", "riser": "riser tension", "click": "click ui", "ding": "ding bell", "boom": "boom explosion"}
+
+
+def online_sfx(kind: str, cache: Path) -> Path | None:
+    """Efeito gravado de verdade (Openverse/Freesound, só CC0) — cacheado no PC. Sem internet, volta para o sintetizado."""
+    out = cache / f"real_{kind}.wav"
+    if out.exists():
+        return out
+    try:
+        r = requests.get("https://api.openverse.org/v1/audio/", params={"q": SFX_QUERY.get(kind, kind), "license": "cc0", "category": "sound_effect", "page_size": 20}, timeout=12)
+        r.raise_for_status()
+        items = [i for i in r.json().get("results", []) if i.get("url") and 0.2 <= (i.get("duration") or 0) / 1000 <= 3]
+        for it in items[:4]:
+            try:
+                d = requests.get(it["url"], timeout=30)
+                d.raise_for_status()
+                raw = cache / f"raw_{kind}{Path(it['url']).suffix[:5] or '.mp3'}"
+                raw.write_bytes(d.content)
+                media.run(["ffmpeg", "-y", "-i", str(raw), "-t", "2.5", "-af", "loudnorm=I=-16,afade=t=out:st=2.2:d=0.3", "-ar", "48000", "-ac", "2", str(out)])
+                (cache / f"real_{kind}.txt").write_text(f"{it.get('title')} — {it.get('creator')} — CC0 — {it.get('foreign_landing_url')}", encoding="utf-8")
+                return out
+            except (requests.RequestException, media.MediaError):
+                continue
+    except requests.RequestException:
+        pass
+    return None
+
+
 def make_sfx(kind: str, cache: Path) -> Path:
     cache.mkdir(parents=True, exist_ok=True)
+    own = next((p for p in (Path(__file__).parent / "sfx").glob(f"{kind}.*")), None) if (Path(__file__).parent / "sfx").exists() else None
+    if own:
+        return own
+    real = online_sfx(kind, cache)
+    if real:
+        return real
     out = cache / f"{kind}.wav"
     if not out.exists():
         media.run(["ffmpeg", "-y", "-f", "lavfi", "-i", SFX[kind], "-ar", "48000", "-ac", "2", str(out)])
@@ -173,7 +207,7 @@ def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, tot
     for n, (at, f) in enumerate(hits, 1):
         inputs += ["-i", str(f)]
         ms = int(at * 1000)
-        parts.append(f"[{n}:a]volume=0.45,adelay={ms}|{ms}[s{n}]")
+        parts.append(f"[{n}:a]volume=0.35,adelay={ms}|{ms}[s{n}]")
     mix = "".join(f"[s{n}]" for n in range(1, len(hits) + 1))
     graph = ";".join(parts) + f";[0:a]{mix}amix=inputs={len(hits) + 1}:duration=first:normalize=0[a]"
     media.run(["ffmpeg", "-y", *inputs, "-filter_complex", graph, "-map", "[a]", "-ar", "48000", str(out)])

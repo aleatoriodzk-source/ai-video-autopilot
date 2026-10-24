@@ -35,3 +35,7 @@
 - [x] Narração reaproveitada se o agente reiniciar
 - [x] Smart crop (personagem centralizado) e personagem bater com a fala
 - [x] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
+- [x] Laboratório: música isolada (sem voz), zoom/pan/flash medidos, kit aplica o movimento
+- [x] Escolher voz, velocidade, legenda, música e efeitos ao criar vídeo (Laboratório e Referências)
+- [x] Efeitos sonoros reais (CC0) no lugar do chiado; imagens de fundo branco ficam sobre fundo escuro
+- [x] Roteiro com uma história só, linear e com nomes reais

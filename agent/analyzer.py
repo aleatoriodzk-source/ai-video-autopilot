@@ -137,6 +137,56 @@ def edit_forensics(dur: float, cuts: list[float], words: list[dict], audio: dict
     }
 
 
+def motion_forensics(video: Path, cuts: list[float], dur: float) -> dict:
+    """Mede em cada tomada se houve zoom de entrada/saída, pan ou câmera parada (OpenCV), e se os cortes usam flash."""
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return {}
+    cap = cv2.VideoCapture(str(video))
+
+    def grab(t):
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t) * 1000)
+        ok, fr = cap.read()
+        return cv2.cvtColor(cv2.resize(fr, (320, int(320 * fr.shape[0] / fr.shape[1]))), cv2.COLOR_BGR2GRAY) if ok else None
+
+    bounds = [0.0] + list(cuts) + [dur]
+    counts = {"zoom_in": 0, "zoom_out": 0, "pan_left": 0, "pan_right": 0, "static": 0}
+    flashes = 0
+    for a, b in list(zip(bounds, bounds[1:]))[:60]:
+        if b - a < 0.5:
+            continue
+        f1, f2 = grab(a + 0.15), grab(b - 0.15)
+        if f1 is None or f2 is None:
+            continue
+        p1 = cv2.goodFeaturesToTrack(f1, 200, 0.01, 8)
+        if p1 is None or len(p1) < 10:
+            continue
+        p2, st, _ = cv2.calcOpticalFlowPyrLK(f1, f2, p1, None)
+        good1, good2 = p1[st.flatten() == 1], p2[st.flatten() == 1]
+        if len(good1) < 8:
+            continue
+        m, _ = cv2.estimateAffinePartial2D(good1, good2)
+        if m is None:
+            continue
+        scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
+        tx = float(m[0, 2]) / f1.shape[1]
+        k = "zoom_in" if scale > 1.04 else "zoom_out" if scale < 0.96 else "pan_left" if tx < -0.05 else "pan_right" if tx > 0.05 else "static"
+        counts[k] += 1
+    for c in cuts[:60]:
+        f = grab(c + 0.03)
+        if f is not None and float(f.mean()) > 225:
+            flashes += 1
+    cap.release()
+    total = sum(counts.values())
+    if not total:
+        return {}
+    moving = {k: v for k, v in counts.items() if k != "static"}
+    return {"shots": counts, "dominant": max(counts, key=counts.get), "moving_share": round(sum(moving.values()) / total, 2),
+            "main_move": max(moving, key=moving.get) if any(moving.values()) else "static", "flash_cuts": flashes}
+
+
 def frames(video: Path, times: list[float], out_dir: Path) -> list[str]:
     res = []
     for i, t in enumerate(times[:10]):
@@ -152,7 +202,7 @@ def _analyze_file(vid: Path, title: str, out: dict, imgs: list[str], work: Path,
     audio = audio_forensics(vid)
     out["videos"].append({"title": title, "duration_s": dur, "view_count": None, "description": "",
                           "scene_cuts_s": cuts, "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": False,
-                          "source": "upload", "audio": audio, "edit": edit_forensics(dur, cuts, [], audio)})
+                          "source": "upload", "audio": audio, "edit": {**edit_forensics(dur, cuts, [], audio), "motion": motion_forensics(vid, cuts, dur)}})
     log(f"áudio: {audio.get('pauses_count', 0)} pausas (média {audio.get('pause_avg_s', 0)}s), {len(audio.get('sound_hits_s') or [])} impactos sonoros")
     log(f"'{title}': {len(cuts)} cortes detectados em {dur:.0f}s")
     if not imgs:
@@ -203,7 +253,7 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
             audio = audio_forensics(vid)
             log(f"transcrição: {len(words)} trechos; áudio: {audio.get('pauses_count', 0)} pausas, {len(audio.get('sound_hits_s') or [])} impactos")
             out["videos"].append({
-                "transcript": words, "audio": audio, "edit": edit_forensics(dur, cuts, words, audio),
+                "transcript": words, "audio": audio, "edit": {**edit_forensics(dur, cuts, words, audio), "motion": motion_forensics(vid, cuts, dur)},
                 "title": meta.get("title"), "duration_s": dur, "view_count": meta.get("view_count"),
                 "description": (meta.get("description") or "")[:1500], "scene_cuts_s": cuts,
                 "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": bool(meta.get("subtitles") or meta.get("automatic_captions")),
