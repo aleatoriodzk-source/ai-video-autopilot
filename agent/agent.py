@@ -435,7 +435,12 @@ class Runner:
         clips = [ctx["work"] / f"clip_{sc['idx']:03d}.mp4" for sc in ctx["scenes"]]
         import fx
         durs = [media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav") for sc in ctx["scenes"]]
-        trans = [sc.get("transition") or "cut" for sc in ctx["scenes"]]
+        kps = ctx["prod"].get("settings") or {}
+        if kps.get("kit_transitions"):
+            trans = fx.clone_transitions(kps["kit_transitions"], len(ctx["scenes"]))
+            self.log(job, f"transições clonadas da referência: {', '.join(sorted(set(trans)))}", step="render")
+        else:
+            trans = [sc.get("transition") or "cut" for sc in ctx["scenes"]]
         fx.transitions(clips, durs, trans, ctx["work"] / "video.mp4", ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"])
         cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
         sfx = None
@@ -443,7 +448,10 @@ class Runner:
             self.log(job, "sem efeitos sonoros (escolha sua)", step="render")
         else:
           try:
-            sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs))
+            kps = ctx["prod"].get("settings") or {}
+            sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs), kps.get("kit_sfx"), kps.get("kit_sfx_ref_s"))
+            if kps.get("kit_sfx"):
+                self.log(job, f"efeitos sonoros clonados da referência ({len(kps['kit_sfx'])} marcas)", step="render")
           except media.MediaError as err:
             self.log(job, f"efeitos sonoros ignorados: {err}", "warn", step="render")
         out_dir = Path(ctx["settings"]["export"].get("output_dir") or self.cfg["output_dir"])
