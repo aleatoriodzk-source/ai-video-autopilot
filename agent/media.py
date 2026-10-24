@@ -225,6 +225,8 @@ CAPTION_STYLES = {
     "hormozi": ("&H00FFFFFF", "&H0000D7FF", "&H00000000"),
     "red": ("&H00FFFFFF", "&H002C2CFF", "&H00000000"),
     "clean": ("&H00FFFFFF", "&H00FFFFFF", "&H00202020"),
+    "karaoke": ("&H00FFFFFF", "&H0000C8FF", "&H00000000"),
+    "box": ("&H00FFFFFF", "&H0000D7FF", "&H00000000"),
 }
 
 
@@ -243,7 +245,10 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
     vertical = h > w
     fs = int(h * (0.052 if vertical else 0.065))
     align, margin_v = (2, int(h * 0.24)) if vertical else (2, int(h * 0.1))
-    upper, anim = True, "pop"
+    upper, anim = True, ("karaoke" if style == "karaoke" else "pop")
+    border, back = 1, "&H96000000"
+    if style == "box":
+        border, back = 3, "&H50000000"
     if clone:
         main = _ass_color(clone.get("text_hex"), main)
         hi = _ass_color(clone.get("highlight_hex"), hi)
@@ -262,7 +267,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{font},{fs},{main},{hi},{outline},&H96000000,1,0,0,0,100,100,1,0,1,{max(4, fs // 9)},3,{align},70,70,{margin_v},1
+Style: Main,{font},{fs},{(hi if anim == "karaoke" else main)},{main},{outline},{back},1,0,0,0,100,100,1,0,{border},{max(4, fs // 9)},3,{align},70,70,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -273,6 +278,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             continue
         words = (_esc(c["text"]).upper() if upper else _esc(c["text"])).split()
         if not words:
+            continue
+        if anim == "karaoke":
+            # Karaokê: cada palavra acende na cor de destaque no momento em que é falada (\\kf em centésimos).
+            span = max(1, int(round((c["end"] - c["start"]) * 100)))
+            tot = sum(len(x) + 2 for x in words)
+            parts, used = [], 0
+            for i, wd in enumerate(words):
+                d = span - used if i == len(words) - 1 else max(8, int(span * (len(wd) + 2) / tot))
+                used += d
+                parts.append("{\\kf" + str(d) + "}" + wd)
+            pop = "{\\fad(30,30)\\fscx85\\fscy85\\t(0,80,\\fscx105\\fscy105)\\t(80,140,\\fscx100\\fscy100)}"
+            lines.append(f"Dialogue: 0,{_ts(c['start'])},{_ts(c['end'])},Main,,0,0,0,,{pop}{' '.join(parts)}")
             continue
         # destaca a palavra mais longa do bloco (geralmente a palavra-chave)
         k = max(range(len(words)), key=lambda i: len(words[i]))
@@ -366,8 +383,34 @@ def subject_center_x(src: Path, dur: float) -> float | None:
             pass
 
 
-def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None) -> str:
-    """Smart crop: centraliza no personagem; se não achar, mostra o quadro inteiro sobre fundo desfocado."""
+FRAME_RATIOS = {"16:9": 16 / 9, "1:1": 1.0, "3:4": 3 / 4, "9:16": 9 / 16}
+
+
+def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None) -> str:
+    """Cena principal na proporção pedida (16:9, 1:1, 3:4), centralizada sobre o próprio vídeo ampliado e desfocado.
+    Nunca barra preta: o fundo é sempre o desfoque escurecido."""
+    r = FRAME_RATIOS[frame]
+    fw = w if r >= w / h else int(h * 0.82 * r)
+    fw -= fw % 2
+    fh = int(fw / r)
+    fh -= fh % 2
+    src_r = sw / max(1, sh)
+    if src_r > r:  # corta as laterais, mantendo o personagem
+        sw2 = round(fh * src_r)
+        sw2 += sw2 % 2
+        x = int(min(max((cx if cx is not None else 0.5) * sw2 - fw / 2, 0), sw2 - fw))
+        fg = f"scale={sw2}:{fh},crop={fw}:{fh}:{x}:0"
+    else:
+        fg = f"scale={fw}:-2,crop={fw}:{fh}"
+    return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=28:3,eq=brightness=-0.12[bg];"
+            f"[b]{fg}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+
+
+def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None, frame: str | None = None) -> str:
+    """Smart crop: centraliza no personagem; se não achar, mostra o quadro inteiro sobre fundo desfocado.
+    Com `frame` (16:9, 1:1, 3:4), aplica a proporção aprendida da referência para aquela cena."""
+    if frame in ("16:9", "1:1", "3:4") and h > w:
+        return framed_filter(sw, sh, w, h, frame, cx)
     src_r, dst_r = sw / max(1, sh), w / h
     if src_r <= dst_r * 1.15:
         return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
@@ -379,7 +422,7 @@ def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None) -> str:
             f"[b]scale={w}:-2[fg];[bg][fg]overlay=0:(H-h)/2")
 
 
-def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20, cut_s: float = 0) -> None:
+def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20, cut_s: float = 0, frame: str | None = None) -> None:
     """Corta/repete o trecho para a duração da cena, mantendo o personagem no quadro (smart crop).
     Com cut_s, faz cortes secos dentro da cena (pedaços de pontos diferentes do trecho) no ritmo da referência."""
     total = duration(src) or dur
@@ -389,16 +432,16 @@ def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: 
         for i in range(k):
             part = out.with_name(f"{out.stem}_p{i}.mp4")
             off = (total - each) * i / max(1, k - 1)
-            _video_part(src, off, each, w, h, fps, part, crf, total)
+            _video_part(src, off, each, w, h, fps, part, crf, total, frame)
             parts.append(part)
         concat(parts, out, out.parent, audio=False)
         for p in parts:
             p.unlink(missing_ok=True)
         return
-    _video_part(src, 0, dur, w, h, fps, out, crf, total)
+    _video_part(src, 0, dur, w, h, fps, out, crf, total, frame)
 
 
-def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float) -> None:
+def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float, frame: str | None = None) -> None:
     n = max(1, int(round(dur * fps)))
     try:
         st = next(x for x in probe(src)["streams"] if x.get("codec_type") == "video")
@@ -406,7 +449,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
     except Exception:
         sw, sh = w, h
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{reframe_filter(sw, sh, w, h, cx)},fps={fps},format=yuv420p,setsar=1"
+    vf = f"{reframe_filter(sw, sh, w, h, cx, frame)},fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
