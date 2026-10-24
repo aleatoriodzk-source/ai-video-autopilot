@@ -395,7 +395,9 @@ class Runner:
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
-        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, sc.get("motion") or "zoom_in", out, crf)
+        km = (ctx["prod"].get("settings") or {}).get("kit_motion") or {}
+        mv = km["main_move"] if km.get("main_move") in media.MOTIONS and (km.get("moving_share") or 0) >= 0.4 else (sc.get("motion") or "zoom_in")
+        media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf)
 
     def step_captions(self, job, ctx):
         cues, t = [], 0.0

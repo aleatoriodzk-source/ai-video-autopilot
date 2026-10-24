@@ -249,12 +249,33 @@ MOTIONS = {
 }
 
 
+def white_background(image: Path) -> bool:
+    """True quando a imagem é recorte/produto com fundo branco (bordas quase brancas)."""
+    try:
+        import cv2
+        import numpy as np
+        im = cv2.imread(str(image))
+        if im is None:
+            return False
+        b = max(4, min(im.shape[:2]) // 20)
+        edges = np.concatenate([im[:b].reshape(-1, 3), im[-b:].reshape(-1, 3), im[:, :b].reshape(-1, 3), im[:, -b:].reshape(-1, 3)])
+        return float((edges.min(axis=1) > 225).mean()) > 0.6
+    except Exception:
+        return False
+
+
 def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, out: Path, crf: int = 20) -> None:
     n = max(1, int(round(dur * fps)))
     z, x, y = MOTIONS.get(motion or "zoom_in", MOTIONS["zoom_in"])
     rate = 0.25 / n
     z, x, y = (s.format(r=f"{rate:.6f}", n=n) for s in (z, x, y))
-    vf = (f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+    if white_background(image):
+        # Nada de tela branca: o branco vira escuro e a figura fica centralizada sobre fundo cinematográfico.
+        base = (f"scale={int(w * 1.7)}:{int(h * 1.7)}:force_original_aspect_ratio=decrease,"
+                f"colorkey=0xFFFFFF:0.12:0.08,pad={w * 2}:{h * 2}:(ow-iw)/2:(oh-ih)/2:color=0x0d0e12,format=yuv420p,vignette,")
+    else:
+        base = f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+    vf = (base +
           f"zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={w}x{h}:fps={fps},format=yuv420p")
     run(["ffmpeg", "-y", "-i", str(image), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
