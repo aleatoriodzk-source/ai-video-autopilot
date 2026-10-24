@@ -335,25 +335,35 @@ def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, o
 
 def subject_center_x(src: Path, dur: float) -> float | None:
     """Posição horizontal (0-1) dos rostos/personagens no trecho. Usa OpenCV se instalado; senão None."""
+    # Qualquer falha do OpenCV (instalação incompleta, sem detector de rosto, vídeo ilegível)
+    # NUNCA trava o vídeo: devolve None e o corte usa o quadro inteiro com fundo desfocado.
+    cap = None
     try:
         import cv2
+        casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        if casc.empty():
+            return None
+        cap = cv2.VideoCapture(str(src))
+        xs, wsum = [], 0.0
+        for t in (0.2, 0.5, 0.8):
+            cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, dur * t) * 1000)
+            ok, fr = cap.read()
+            if not ok:
+                continue
+            g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
+            for (x, y, fw, fh) in casc.detectMultiScale(g, 1.15, 5, minSize=(g.shape[1] // 20, g.shape[1] // 20)):
+                a = float(fw * fh)
+                xs.append((x + fw / 2) / g.shape[1] * a)
+                wsum += a
+        return sum(xs) / wsum if wsum else None
     except Exception:
         return None
-    cap = cv2.VideoCapture(str(src))
-    casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    xs, wsum = [], 0.0
-    for t in (0.2, 0.5, 0.8):
-        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, dur * t) * 1000)
-        ok, fr = cap.read()
-        if not ok:
-            continue
-        g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
-        for (x, y, fw, fh) in casc.detectMultiScale(g, 1.15, 5, minSize=(g.shape[1] // 20, g.shape[1] // 20)):
-            a = float(fw * fh)
-            xs.append((x + fw / 2) / g.shape[1] * a)
-            wsum += a
-    cap.release()
-    return sum(xs) / wsum if wsum else None
+    finally:
+        try:
+            if cap is not None:
+                cap.release()
+        except Exception:
+            pass
 
 
 def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None) -> str:
