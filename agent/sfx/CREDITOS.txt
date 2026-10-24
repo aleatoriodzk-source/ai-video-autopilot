@@ -1,3 +1,6 @@
 whoosh: Deep Whoosh #1 — Kinoton — CC0 — https://freesound.org/people/Kinoton/sounds/351256
 impact: Cinematic Impact — Rizzard — CC0 — https://freesound.org/people/Rizzard/sounds/559387
 riser: Riser — Rizzard — CC0 — https://freesound.org/people/Rizzard/sounds/561207
+click: Mouse click sounds — Masgame — CC0 — https://freesound.org/people/Masgame/sounds/347544
+ding: bell ding 1.wav — 5ro4 — CC0 — https://freesound.org/people/5ro4/sounds/611113
+boom: Musket Explosion — Willlewis — CC0 — https://freesound.org/people/Willlewis/sounds/244345
