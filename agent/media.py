@@ -12,9 +12,30 @@ from pathlib import Path
 import os
 
 # PYTHONHASHSEED inválido no Windows faz qualquer Python filho (edge-tts, piper, demucs) quebrar ao iniciar.
-_hs = os.environ.get("PYTHONHASHSEED")
-if _hs is not None and not (_hs == "random" or (_hs.isdigit() and int(_hs) <= 4294967295)):
-    os.environ.pop("PYTHONHASHSEED", None)
+# Força um valor válido e passa um ambiente explícito (env=) a TODO subprocesso, porque no Windows
+# o filho pode herdar o bloco de ambiente do sistema em vez do os.environ.
+os.environ["PYTHONHASHSEED"] = "random"
+
+
+def safe_env() -> dict:
+    return dict(os.environ, PYTHONHASHSEED="random", PYTHONIOENCODING="utf-8")
+
+
+_orig_run, _orig_popen_init = subprocess.run, subprocess.Popen.__init__
+
+
+def _run_safe(*a, **k):
+    k["env"] = dict(k.get("env") or os.environ, PYTHONHASHSEED="random")
+    return _orig_run(*a, **k)
+
+
+def _popen_safe(self, *a, **k):
+    k["env"] = dict(k.get("env") or os.environ, PYTHONHASHSEED="random")
+    _orig_popen_init(self, *a, **k)
+
+
+subprocess.run = _run_safe
+subprocess.Popen.__init__ = _popen_safe
 
 ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "3:4": (1080, 1440)}
 
