@@ -138,6 +138,14 @@ def edit_forensics(dur: float, cuts: list[float], words: list[dict], audio: dict
 
 
 def motion_forensics(video: Path, cuts: list[float], dur: float) -> dict:
+    """Nunca trava a análise: qualquer falha do OpenCV devolve {}."""
+    try:
+        return _motion_forensics(video, cuts, dur)
+    except Exception:
+        return {}
+
+
+def _motion_forensics(video: Path, cuts: list[float], dur: float) -> dict:
     """Mede em cada tomada se houve zoom de entrada/saída, pan ou câmera parada (OpenCV), e se os cortes usam flash."""
     try:
         import cv2
