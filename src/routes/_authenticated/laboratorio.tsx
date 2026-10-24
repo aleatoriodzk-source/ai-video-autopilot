@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { DnaView } from "@/components/app/DnaView";
 import { channelIdeas } from "@/lib/ai.functions";
+import { enqueueJobs } from "@/lib/jobs";
+import { LabSkeleton, JobProgress } from "@/components/app/LabSkeleton";
 import { VideoOptions, defaultOpts, optsToSettings, type VideoOpts } from "@/components/app/VideoOptions";
 
 export const Route = createFileRoute("/_authenticated/laboratorio")({
@@ -57,16 +59,18 @@ function Lab() {
 
   const { data } = useQuery({
     queryKey: ["lab"],
-    refetchInterval: 8000,
+    refetchInterval: 3000,
     queryFn: async () => {
       const { data: refs } = await supabase.from("reference_sources").select("id,title,status,created_at").eq("notes", "lab").order("created_at", { ascending: false });
       const ids = (refs ?? []).map((r) => r.id);
       if (!ids.length) return [];
-      const [{ data: an }, { data: vs }] = await Promise.all([
+      const [{ data: an }, { data: vs }, { data: jb }] = await Promise.all([
         supabase.from("analyses").select("id,reference_id,status,report,error,created_at").in("reference_id", ids).order("created_at", { ascending: false }),
         supabase.from("voices").select("id,reference_id,status,stats,error,sample_path").in("reference_id", ids),
+        supabase.from("jobs").select("id,reference_id,type,status,progress,wait_reason,error,created_at").in("reference_id", ids).in("type", ["analyze_reference", "extract_voice"]).order("created_at", { ascending: false }),
       ]);
-      return (refs ?? []).map((r) => ({ ...r, analysis: (an ?? []).find((a) => a.reference_id === r.id), voice: (vs ?? []).find((v) => v.reference_id === r.id) }));
+      const job = (rid: string, t: string) => (jb ?? []).find((j) => j.reference_id === rid && j.type === t);
+      return (refs ?? []).map((r) => ({ ...r, analysis: (an ?? []).find((a) => a.reference_id === r.id), voice: (vs ?? []).find((v) => v.reference_id === r.id), jobA: job(r.id, "analyze_reference"), jobV: job(r.id, "extract_voice") }));
     },
   });
 
@@ -86,15 +90,22 @@ function Lab() {
       const platform = /tiktok/.test(url) ? "tiktok" : /youtu/.test(url) ? "youtube" : "other";
       const { data: r, error } = await supabase.from("reference_sources").insert({ user_id: uid, urls: [url], platform, kind: "video", title: `Lab: ${label}`.slice(0, 90), notes: "lab", status: "queued" }).select("id").single();
       if (error) throw error;
-      const { data: a, error: e1 } = await supabase.from("analyses").insert({ user_id: uid, reference_id: r.id, kind: "short" }).select("id").single();
-      if (e1) throw e1;
-      const { data: v, error: e2 } = await supabase.from("voices").insert({ user_id: uid, name: `Lab: ${label}`.slice(0, 60), reference_id: r.id }).select("id").single();
-      if (e2) throw e2;
-      const { error: e3 } = await supabase.from("jobs").insert([
-        { user_id: uid, type: "analyze_reference", reference_id: r.id, analysis_id: a.id },
-        { user_id: uid, type: "extract_voice", reference_id: r.id, payload: { voice_id: v.id } },
-      ]);
-      if (e3) throw e3;
+      try {
+        const { data: a, error: e1 } = await supabase.from("analyses").insert({ user_id: uid, reference_id: r.id, kind: "short", status: "pending" }).select("id").single();
+        if (e1) throw e1;
+        const { data: v, error: e2 } = await supabase.from("voices").insert({ user_id: uid, name: `Lab: ${label}`.slice(0, 60), reference_id: r.id, status: "queued" }).select("id").single();
+        if (e2) throw e2;
+        await enqueueJobs([
+          { user_id: uid, type: "analyze_reference", reference_id: r.id, analysis_id: a.id, payload: {} },
+          { user_id: uid, type: "extract_voice", reference_id: r.id, payload: { voice_id: v.id } },
+        ]);
+      } catch (err) {
+        // nada fica pela metade: desfaz o cadastro para você reenviar
+        await supabase.from("voices").delete().eq("reference_id", r.id);
+        await supabase.from("analyses").delete().eq("reference_id", r.id);
+        await supabase.from("reference_sources").delete().eq("id", r.id);
+        throw err;
+      }
       toast.success("Enviado para dissecação — o agente local vai processar");
       setName(""); setLink(""); setFile(null);
       qc.invalidateQueries({ queryKey: ["lab"] });
@@ -108,8 +119,18 @@ function Lab() {
   async function useKit(k: any) {
     if (!topic.trim()) { toast.error("Escreva o tema do vídeo"); return; }
     const uid = (await supabase.auth.getUser()).data.user!.id;
-    const motion = k.analysis?.report?.videos?.[0]?.edit?.motion;
-    const settings: any = { target_seconds: 65, style: "tiktok", ...optsToSettings(opts, k.voice?.stats?.music_path), lab_kit: k.id, ...(motion ? { kit_motion: motion } : {}) };
+    const rep = k.analysis?.report ?? {};
+    const motion = rep.videos?.[0]?.edit?.motion;
+    const base = optsToSettings(opts, k.voice?.stats?.music_path);
+    const clone = rep.caption_clone;
+    const cut = rep.format_dna?.replication?.scene_seconds;
+    const settings: any = {
+      target_seconds: 65, style: "tiktok", ...base, lab_kit: k.id,
+      ...(motion ? { kit_motion: motion } : {}),
+      ...(clone && opts.caption_style === "auto" ? { caption_style: "clone", caption_clone: clone } : {}),
+      ...(cut ? { cut_seconds: cut } : {}),
+      ...(rep.sfx_map?.length ? { kit_sfx: rep.sfx_map } : {}),
+    };
     const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
     if (error) { toast.error(error.message); return; }
     toast.success("Produção criada com o kit do laboratório");
@@ -185,10 +206,12 @@ function Lab() {
                     <p className="text-muted-foreground">{k.analysis?.error ?? (dna ? `${dna.niche ?? ""} — pronto` : "aguardando o agente local")}</p>
                   </div>
                 </div>
+                <JobProgress label="Dissecação do vídeo" job={k.jobA} />
+                <JobProgress label="Voz e música" job={k.jobV} />
                 {k.analysis?.report && (
                   <>
-                    <button className="text-sm text-primary" onClick={() => setOpen(open === k.id ? null : k.id)}>{open === k.id ? "Fechar camadas" : "Ver todas as camadas"}</button>
-                    {open === k.id && <DnaView report={k.analysis.report} />}
+                    <button className="text-sm text-primary" onClick={() => setOpen(open === k.id ? null : k.id)}>{open === k.id ? "Fechar camadas" : "Ver esqueleto completo"}</button>
+                    {open === k.id && <div className="space-y-4"><LabSkeleton report={k.analysis.report} /><DnaView report={k.analysis.report} /></div>}
                   </>
                 )}
               </div>
