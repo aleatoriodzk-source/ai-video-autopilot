@@ -67,11 +67,11 @@ export const Route = createFileRoute("/api/public/agent")({
               if (!job) return json({ job: null });
               const { data: locked } = await db.from("jobs").update({ status: "running", locked_by: agent.id, locked_at: now, wait_reason: null }).eq("id", job.id).eq("status", "queued").select("*").maybeSingle();
               if (!locked) return json({ job: null });
-              return json({ job: locked, ...(await bundle(db, locked)) });
+              return json({ job: locked, ...(await bundle(db, locked, userId)) });
             }
             case "get_job": {
               const job = await ownJob(body.job_id);
-              return json({ job, ...(await bundle(db, job)) });
+              return json({ job, ...(await bundle(db, job, userId)) });
             }
             case "update_job": {
               const job = await ownJob(body.job_id);
@@ -212,7 +212,7 @@ export const Route = createFileRoute("/api/public/agent")({
   },
 });
 
-async function bundle(db: any, job: { production_id: string | null; reference_id: string | null; analysis_id: string | null }) {
+async function bundle(db: any, job: { production_id: string | null; reference_id: string | null; analysis_id: string | null }, userId?: string) {
   const out: any = {};
   if (job.production_id) {
     const { data: p } = await db.from("productions").select("*, style_profiles(*)").eq("id", job.production_id).single();
@@ -245,6 +245,11 @@ async function bundle(db: any, job: { production_id: string | null; reference_id
   if (job.analysis_id) {
     const { data: a } = await db.from("analyses").select("id,kind,status").eq("id", job.analysis_id).single();
     out.analysis = a;
+  }
+  // Chave opcional da ElevenLabs: só vai para o agente do próprio dono quando há voz clonada.
+  if (out.voice && userId) {
+    const { data: k } = await db.from("user_api_keys").select("api_key").eq("user_id", userId).eq("provider", "elevenlabs").maybeSingle();
+    if (k?.api_key) out.elevenlabs_key = k.api_key;
   }
   return out;
 }

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const PROVIDERS = ["gemini", "openai", "anthropic"] as const;
+const PROVIDERS = ["gemini", "openai", "anthropic", "elevenlabs"] as const;
 type P = (typeof PROVIDERS)[number];
 const check = (p: string): P => {
   if (!PROVIDERS.includes(p as P)) throw new Error("Provedor inválido");
@@ -14,7 +14,7 @@ export const listKeys = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data } = await supabaseAdmin.from("user_api_keys").select("provider,api_key,updated_at").eq("user_id", context.userId);
-    const out: Record<string, { last4: string; updated_at: string } | null> = { gemini: null, openai: null, anthropic: null };
+    const out: Record<string, { last4: string; updated_at: string } | null> = { gemini: null, openai: null, anthropic: null, elevenlabs: null };
     for (const r of data ?? []) out[r.provider] = { last4: r.api_key.slice(-4), updated_at: r.updated_at };
     return { keys: out, platformGemini: !!process.env["GEMINI_API_KEY"] };
   });
@@ -49,7 +49,7 @@ export const testSavedKey = createServerFn({ method: "POST" })
   .inputValidator((i: { provider: string }) => ({ provider: check(i.provider) }))
   .handler(async ({ data, context }) => {
     const { loadKeys } = await import("@/server/tasks.server");
-    const k = (await loadKeys(context.userId))[data.provider] ?? (data.provider === "gemini" ? process.env["GEMINI_API_KEY"] : undefined);
+    const k = ((await loadKeys(context.userId)) as Record<string, string | undefined>)[data.provider] ?? (data.provider === "gemini" ? process.env["GEMINI_API_KEY"] : undefined);
     if (!k) return { ok: false as const, error: "Nenhuma chave salva" };
     const { testProvider } = await import("@/server/ai.server");
     try {
