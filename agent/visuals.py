@@ -552,7 +552,7 @@ def pick_visuals(runner, job, ctx) -> None:
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
         q0 = sc.get("visual_query") or sc["narration"][:60]
-        if is_pop(q0, topic):
+        if is_pop(q0, topic) or (prod.get("settings") or {}).get("image_only"):
             # Cultura pop / filmes / famosos: bancos de estoque não têm isso — vai direto no YouTube e na web.
             chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
         for src in ([] if chosen else s["visuals"]["prefer"]):
