@@ -223,9 +223,9 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const autoCap = Math.max(4, Math.round(target / 4));
   const sceneCount = ps["scene_count"] ? Math.min(300, Math.max(2, Number(ps["scene_count"]))) : refScene ? Math.min(autoCap, Math.max(4, Math.round(target / refScene))) : null;
   const wps = meas?.words_per_second && meas.words_per_second > 1 && meas.words_per_second < 4.5 ? meas.words_per_second : WORDS_PER_SECOND;
-  // Fixed rule: shorts never under 60s => at least 165 words, at most 195.
+  // Fixed rule: shorts never under 60s => at least 200 words, at most 230 (fast voices + tight cuts).
   const short = isShortAspect(p.aspect);
-  const words = short ? Math.min(195, Math.max(165, Math.round(target * wps))) : Math.round(target * wps);
+  const words = short ? Math.min(230, Math.max(200, Math.round(target * wps))) : Math.round(target * wps);
   const ready = String(ps["ready_script"] ?? "").trim();
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
   const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "video_only" || /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos|cenas de filme|clipes de filme|trailer|gameplay/.test(dnaText)));
@@ -237,7 +237,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       (ready
         ? `O usuário JÁ ESCREVEU o roteiro abaixo. Sua tarefa é só DIVIDIR em cenas e planejar o visual. Copie a narração PALAVRA POR PALAVRA, na mesma ordem, sem resumir, cortar, reescrever ou acrescentar nada (apenas escreva números por extenso e remova emojis/símbolos para a voz). O title deve ser exatamente: "${topic}". Formato ${p.aspect}.\nROTEIRO DO USUÁRIO:\n${ready.slice(0, 40000)}\n`
         : `Escreva um roteiro completo para narração em PT-BR sobre: "${topic}". Mantenha o tema exatamente como o usuário pediu (não troque o ângulo, ex.: 'curiosidades' continua sendo curiosidades).` +
-          `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte.${short ? " OBRIGATÓRIO: entre 165 e 195 palavras de narração no total (o vídeo nunca pode ter menos de 60 segundos)." : ""} Formato ${p.aspect}.`) +
+          `\nDuração alvo: ${Math.round(target / 60 * 10) / 10} min (~${target}s), com aproximadamente ${words} palavras no total. Respeite essa extensão — não encurte.${short ? " OBRIGATÓRIO: entre 200 e 230 palavras de narração no total (o vídeo nunca pode ter menos de 60 segundos)." : ""} Formato ${p.aspect}.`) +
       (videoOnly ? "\nREGRA DE MÍDIA: este nicho usa SOMENTE VÍDEOS em movimento (cenas de filmes, trailers, gameplay, clipes). Cada visual_query deve descrever uma CENA EM MOVIMENTO do assunto, ex.: 'Thor Ragnarok lightning fight scene', 'Thor hammer Mjolnir summon scene'. Nunca peça foto, pôster ou imagem parada." : "") +
       (sceneCount
         ? `\nO roteiro deve ter EXATAMENTE ${sceneCount} cenas (≈ ${Math.round(words / sceneCount)} palavras de narração por cena).`
@@ -265,7 +265,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   });
   await recordTextUsage(db, userId, s, usage, "roteiro", jobId, productionId);
   // The AI often writes less than asked (e.g. 39s instead of 60s): ask it to extend until it reaches the word target.
-  for (let round = 0; !ready && round < 3 && (scriptIsShort(data.scenes, target) || (short && countWords(data.scenes) < 165)); round++) {
+  for (let round = 0; !ready && round < 3 && (scriptIsShort(data.scenes, target) || (short && countWords(data.scenes) < 200)); round++) {
     const have = countWords(data.scenes);
     const r = await ai<ScriptOut>({
       system: ETHICS + " Você é um roteirista profissional. Mantém o tom, o gancho e a estrutura, e só acrescenta conteúdo novo, concreto e verdadeiro.",
