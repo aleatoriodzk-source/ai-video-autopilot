@@ -111,6 +111,24 @@ def fetch_tiktok(url: str, out: Path) -> Path:
     raise RuntimeError("Não consegui baixar o TikTok: " + " | ".join(errs) + ". Dica: vincule sua conta do TikTok (cookies) na aba Contas.")
 
 
+def tiktok_profile(url: str, first_err=None) -> dict:
+    """Lista os vídeos de um perfil do TikTok pelo serviço público tikwm quando o yt-dlp é bloqueado."""
+    import requests
+    m = re.search(r"tiktok\.com/@([\w.\-]+)", url)
+    if not m:
+        raise RuntimeError(f"link de perfil do TikTok inválido: {url}")
+    user = m.group(1)
+    r = requests.post("https://www.tikwm.com/api/user/posts", data={"unique_id": user, "count": 30, "cursor": 0},
+                      timeout=40, headers={"User-Agent": UA})
+    vids = ((r.json() or {}).get("data") or {}).get("videos") or []
+    if not vids:
+        raise RuntimeError(f"Não consegui listar o perfil @{user} do TikTok ({str(first_err)[-150:]} | {r.text[:150]}). "
+                           "Cole o link de um vídeo do perfil em vez do perfil.")
+    return {"title": f"@{user}", "uploader": user, "entries": [
+        {"title": v.get("title"), "duration": v.get("duration"), "view_count": v.get("play_count"),
+         "url": f"https://www.tiktok.com/@{user}/video/{v.get('video_id')}"} for v in vids]}
+
+
 def scene_cuts(video: Path, threshold: float = 0.3) -> list[float]:
     p = subprocess.run(["ffmpeg", "-i", str(video), "-vf", f"select='gt(scene,{threshold})',showinfo", "-f", "null", "-"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -290,7 +308,13 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
             continue
         if kind == "channel":
             url = channel_url(url)
-            meta = json.loads(_ytdlp(["-J", "--flat-playlist", "--playlist-end", "30", url]))
+            try:
+                meta = json.loads(_ytdlp(["-J", "--flat-playlist", "--playlist-end", "30", url]))
+            except Exception as err:
+                if "tiktok.com" not in url:
+                    raise
+                log("TikTok bloqueou a lista do perfil; usando caminho alternativo")
+                meta = tiktok_profile(url, err)
             out["title"] = meta.get("title") or meta.get("uploader")
             out["entries"] = [{k: e.get(k) for k in ("title", "duration", "view_count", "url")} for e in meta.get("entries") or []]
             log(f"{len(out['entries'])} vídeos listados")
@@ -300,8 +324,16 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
             targets = [url]
         for t in targets:
             vid = work / f"v{len(out['videos'])}.mp4"
-            meta = json.loads(_ytdlp(["-J", "--no-playlist", t]))
-            _ytdlp(["-f", "mp4[height<=720]/best[height<=720]/best", "-o", str(vid), "--no-playlist", "--force-overwrites", t])
+            try:
+                meta = json.loads(_ytdlp(["-J", "--no-playlist", t]))
+            except Exception:
+                if "tiktok.com" not in t:
+                    raise
+                meta = {"title": None}
+            if "tiktok.com" in t:
+                fetch_tiktok(t, vid)
+            else:
+                _ytdlp(["-f", "mp4[height<=720]/best[height<=720]/best", "-o", str(vid), "--no-playlist", "--force-overwrites", t])
             dur = media.duration(vid)
             cuts = scene_cuts(vid)
             out["title"] = out.get("title") or meta.get("title")
