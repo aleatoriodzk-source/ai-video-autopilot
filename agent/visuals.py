@@ -429,20 +429,26 @@ def web_images(q: str) -> list[dict]:
                    for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
             if res:
                 return res
-    # Plano B: Bing Imagens.
+    # Plano B: Bing Imagens (sem acentos e encurtando a busca se vier vazia).
     import html as _h
-    r = requests.get("https://www.bing.com/images/async", params={"q": q, "first": 0, "count": 35, "qft": "+filterui:imagesize-large"}, headers=h, timeout=30)
-    out = []
-    for raw in re.findall(r'm="(\{.*?\})"', r.text):
-        try:
-            d = json.loads(_h.unescape(raw))
-        except Exception:
-            continue
-        if d.get("murl"):
-            out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
-    if not out:
-        raise RuntimeError("busca de imagens na web indisponível agora")
-    return out[:20]
+    import unicodedata
+    clean = "".join(c for c in unicodedata.normalize("NFD", q) if unicodedata.category(c) != "Mn")
+    words = clean.split()
+    tries = [clean] + [" ".join(words[:n]) for n in (4, 3, 2) if len(words) > n]
+    for tq in dict.fromkeys(tries):
+        r = requests.get("https://www.bing.com/images/async", params={"q": tq, "first": 0, "count": 35, "setlang": "pt-br", "cc": "BR"},
+                         headers={**h, "Accept-Language": "pt-BR,pt;q=0.9"}, timeout=30)
+        out = []
+        for raw in re.findall(r'm="(\{.*?\})"', r.text):
+            try:
+                d = json.loads(_h.unescape(raw))
+            except Exception:
+                continue
+            if d.get("murl"):
+                out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
+        if out:
+            return out[:20]
+    raise RuntimeError("busca de imagens na web indisponível agora")
 
 
 def scene_frame(sc: dict, prod: dict) -> str:
@@ -465,9 +471,8 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     video_only = not image_only and (bool(ps.get("video_only")) or is_pop(q, prod.get("topic") or ""))
     sources = []
     # Igual à referência: canal de fotos não busca vídeo; referência do YouTube nunca busca TikTok.
-    if image_only:
-        pass
-    elif runner.cfg.get("tiktok_clips", True) and ps.get("ref_platform") != "youtube":
+    # TikTok só quando a referência é comprovadamente do TikTok.
+    if not image_only and runner.cfg.get("tiktok_clips", True) and ps.get("ref_platform") == "tiktok":
         sources.append(("tiktok", tiktok_clip))
     if not image_only and runner.cfg.get("youtube_clips", True):
         sources.append(("youtube", youtube_clip))

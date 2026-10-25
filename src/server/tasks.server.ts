@@ -231,7 +231,7 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const dnaText = JSON.stringify(dnaOf(report) ?? "").toLowerCase();
   const videoOnly = ps["media_rule"] === "video_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "video_only" || /(somente|apenas|só) (v[ií]deos|clipes)|video_only|sem fotos|cenas de filme|clipes de filme|trailer|gameplay/.test(dnaText)));
   // Canal de fotos (Ken Burns, arquivo, jornais): segue a referência e não busca vídeo/TikTok.
-  const imageOnly = !videoOnly && (ps["media_rule"] === "image_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "image_only" || /ken ?burns|fotos? de arquivo|imagens? de arquivo|(somente|apenas|só|maioria|majoritariamente) (de )?(fotos|imagens)|imagens est[áa]ticas|fotos est[áa]ticas|recortes de jornal/.test(dnaText))));
+  const imageOnly = !videoOnly && (ps["media_rule"] === "image_only" || ps["media_rule"] === "images_only" || (ps["media_rule"] !== "mixed" && (rep.media_rule === "image_only" || rep.media_rule === "images_only" || /ken ?burns|fotos? de arquivo|imagens? de arquivo|(somente|apenas|só|maioria|majoritariamente) (de )?(fotos|imagens)|imagens est[áa]ticas|fotos est[áa]ticas|recortes de jornal/.test(dnaText))));
   const { data: refRow } = p.reference_id ? await db.from("reference_sources").select("platform,urls").eq("id", p.reference_id).maybeSingle() : { data: null };
   const refPlatform = refRow ? (refRow.platform === "tiktok" || /tiktok/.test(refRow.urls?.[0] ?? "") ? "tiktok" : refRow.platform === "youtube" || /youtu/.test(refRow.urls?.[0] ?? "") ? "youtube" : "other") : null;
   let { data, usage } = await ai<ScriptOut>({
