@@ -120,7 +120,10 @@ def tiktok_profile(url: str, first_err=None) -> dict:
     user = m.group(1)
     r = requests.post("https://www.tikwm.com/api/user/posts", data={"unique_id": user, "count": 30, "cursor": 0},
                       timeout=40, headers={"User-Agent": UA})
-    vids = ((r.json() or {}).get("data") or {}).get("videos") or []
+    try:
+        vids = ((r.json() or {}).get("data") or {}).get("videos") or []
+    except ValueError:
+        vids = []
     if not vids:
         raise RuntimeError(f"Não consegui listar o perfil @{user} do TikTok ({str(first_err)[-150:]} | {r.text[:150]}). "
                            "Cole o link de um vídeo do perfil em vez do perfil.")
