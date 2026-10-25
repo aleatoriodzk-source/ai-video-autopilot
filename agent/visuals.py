@@ -290,6 +290,46 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     return None
 
 
+def tiktok_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
+    """Busca vídeos verticais no TikTok (tikwm, sem marca d'água) e corta só o trecho da cena."""
+    import random
+    need = _scene_secs(sc)
+    try:
+        r = requests.post("https://www.tikwm.com/api/feed/search", timeout=30,
+                          headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36"},
+                          data={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
+        vids = ((r.json() or {}).get("data") or {}).get("videos") or []
+    except Exception as e:
+        runner.log(job, f"TikTok busca: {str(e)[:150]}", "warn", "visuals")
+        return None
+    names = proper_names(q)
+    raw = out.with_name(out.stem + "_tt.mp4")
+    for v in vids:
+        vid, dur = str(v.get("video_id") or v.get("id") or ""), float(v.get("duration") or 0)
+        title = (v.get("title") or "").lower()
+        if not vid or vid in used or dur < 4 or (names and not any(nm in title for nm in names)):
+            continue
+        url = v.get("hdplay") or v.get("play")
+        if not url:
+            continue
+        if url.startswith("/"):
+            url = "https://www.tikwm.com" + url
+        try:
+            _download(url, raw)
+            start = round(random.uniform(0, max(0.0, dur - need - 0.5)), 1) if dur > need + 1 else 0.0
+            media.run(["ffmpeg", "-y", "-ss", f"{start}", "-i", str(raw), "-t", f"{need:.2f}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out)])
+        except Exception as ex:
+            runner.log(job, f"TikTok download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            continue
+        finally:
+            raw.unlink(missing_ok=True)
+        if out.exists() and out.stat().st_size > 20000:
+            used.add(vid)
+            author = (v.get("author") or {}).get("unique_id") or ""
+            return {"id": f"tt:{vid}:{start}", "page": f"https://www.tiktok.com/@{author}/video/{vid}", "title": v.get("title") or "", "channel": f"@{author}"}
+    return None
+
+
 def _google_cookies() -> dict:
     """Lê o google.txt (formato Netscape) enviado na aba Contas."""
     from analyzer import COOKIES
@@ -366,18 +406,28 @@ def web_images(q: str) -> list[dict]:
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     """Mídia real do assunto: trecho do YouTube primeiro, depois imagem da web."""
     video_only = bool((prod.get("settings") or {}).get("video_only")) or is_pop(q, prod.get("topic") or "")
+    vertical = (prod.get("settings") or {}).get("format", "short") != "long"
+    sources = []
+    if runner.cfg.get("tiktok_clips", True):
+        sources.append(("tiktok", tiktok_clip))
     if runner.cfg.get("youtube_clips", True):
-        vout = work / f"vid_{sc['idx']:03d}.mp4"
-        for _ in range(3 if video_only else 2):
-            c = youtube_clip(runner, job, q, sc, vout, yt_used)
+        sources.append(("youtube", youtube_clip))
+    # Vídeo vertical: TikTok primeiro, mas alterna com YouTube cena a cena para variar o material.
+    if not vertical or (sc.get("idx", 0) % 3 == 2):
+        sources.reverse()
+    vout = work / f"vid_{sc['idx']:03d}.mp4"
+    for name, fn in sources:
+        for _ in range(2 if video_only else 1):
+            c = fn(runner, job, q, sc, vout, yt_used)
             if not c:
                 break
             if not vision_ok(runner, job, vout, sc, prod):
                 continue
-            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube", "source_url": c["page"],
-                                  "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar", "attribution": f"{c['channel']} — {c['title']}"[:200], "local_path": str(vout), "description": q})["id"]
+            lic = "Trecho curto do TikTok — uso transformativo/comentário; verifique antes de monetizar" if name == "tiktok" else "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar"
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": name, "source_url": c["page"],
+                                  "license": lic, "attribution": f"{c['channel']} — {c['title']}"[:200], "local_path": str(vout), "description": q})["id"]
             return {"id": aid, "key": c["id"]}
-        vout.unlink(missing_ok=True)
+    vout.unlink(missing_ok=True)
     if video_only and (sc.get("_vo_try") or 0) < 1:
         # Nicho só de vídeos: tenta mais uma vez com uma busca mais ampla antes de aceitar foto.
         sc["_vo_try"] = 1
