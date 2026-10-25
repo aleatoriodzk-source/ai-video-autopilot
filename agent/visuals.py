@@ -403,17 +403,29 @@ def web_images(q: str) -> list[dict]:
     return out[:20]
 
 
+def scene_frame(sc: dict, prod: dict) -> str:
+    """Proporção da cena segundo o DNA (frame_mix); sem DNA alterna vertical/horizontal."""
+    ps = prod.get("settings") or {}
+    if ps.get("format", "short") == "long":
+        return "16:9"
+    mix = [f for f in (ps.get("frame_mix") or []) if f in ("9:16", "16:9", "1:1", "3:4")]
+    if sc.get("frame"):
+        return sc["frame"]
+    if mix:
+        return mix[sc.get("idx", 0) % len(mix)]
+    return ["9:16", "16:9", "9:16", "1:1"][sc.get("idx", 0) % 4]
+
+
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
-    """Mídia real do assunto: trecho do YouTube primeiro, depois imagem da web."""
+    """Mídia real do assunto: TikTok/YouTube conforme a proporção da cena, depois imagem da web."""
     video_only = bool((prod.get("settings") or {}).get("video_only")) or is_pop(q, prod.get("topic") or "")
-    vertical = (prod.get("settings") or {}).get("format", "short") != "long"
     sources = []
     if runner.cfg.get("tiktok_clips", True):
         sources.append(("tiktok", tiktok_clip))
     if runner.cfg.get("youtube_clips", True):
         sources.append(("youtube", youtube_clip))
-    # Vídeo vertical: TikTok primeiro, mas alterna com YouTube cena a cena para variar o material.
-    if not vertical or (sc.get("idx", 0) % 3 == 2):
+    # Cena 9:16 → TikTok/Shorts primeiro (vertical nativo); 16:9, 1:1, 3:4 → YouTube HD primeiro. A outra é plano B.
+    if scene_frame(sc, prod) != "9:16":
         sources.reverse()
     vout = work / f"vid_{sc['idx']:03d}.mp4"
     for name, fn in sources:
