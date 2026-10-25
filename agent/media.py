@@ -253,7 +253,7 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
     Com `clone`, usa cores, posição, caixa alta e animação medidas no vídeo de referência."""
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
     vertical = h > w
-    fs = int(h * (0.052 if vertical else 0.065))
+    fs = int(h * (0.068 if vertical else 0.075))
     align, margin_v = (2, int(h * 0.24)) if vertical else (2, int(h * 0.1))
     upper, anim = True, ("karaoke" if style == "karaoke" else "pop")
     border, back = 1, "&H96000000"
@@ -277,7 +277,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{font},{fs},{(hi if anim == "karaoke" else main)},{main},{outline},{back},1,0,0,0,100,100,1,0,{border},{max(4, fs // 9)},3,{align},70,70,{margin_v},1
+Style: Main,{font},{fs},{(hi if anim == "karaoke" else main)},{main},{outline},{back},1,0,0,0,100,100,1,0,{border},{max(6, fs // 7)},4,{align},60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -346,10 +346,13 @@ def white_background(image: Path) -> bool:
 def frame_box(w: int, h: int, frame: str) -> tuple[int, int]:
     """Tamanho da cena principal (proporção `frame`) dentro da tela vertical."""
     r = FRAME_RATIOS[frame]
-    fw = w if r >= w / h else int(h * 0.82 * r)
-    fw -= fw % 2
-    fh = int(fw / r)
-    return fw, fh - fh % 2
+    if r >= 1:
+        # Horizontais/quadradas ocupam a largura toda e pelo menos 50% da altura (corta as laterais, foco no personagem).
+        fw, fh = w, max(int(w / r), int(h * 0.5))
+    else:
+        fw = int(h * 0.82 * r)
+        fh = int(fw / r)
+    return fw - fw % 2, fh - fh % 2
 
 
 def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, out: Path, crf: int = 20, frame: str | None = None) -> None:
@@ -418,8 +421,8 @@ FRAME_RATIOS = {"16:9": 16 / 9, "1:1": 1.0, "3:4": 3 / 4, "9:16": 9 / 16}
 def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None) -> str:
     """Cena principal na proporção pedida (16:9, 1:1, 3:4), centralizada sobre o próprio vídeo ampliado e desfocado.
     Nunca barra preta: o fundo é sempre o desfoque escurecido."""
-    r = FRAME_RATIOS[frame]
     fw, fh = frame_box(w, h, frame)
+    r = fw / fh
     src_r = sw / max(1, sh)
     if src_r > r:  # corta as laterais, mantendo o personagem
         sw2 = round(fh * src_r)
