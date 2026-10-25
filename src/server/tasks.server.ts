@@ -287,6 +287,14 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
     if (countWords(r.data.scenes) > have) data = r.data;
     usage = r.usage;
   }
+  // Nunca deixa a última cena repetir o gancho da primeira (erro comum do "loop infinito").
+  if (data.scenes.length > 2) {
+    const words = (t: string) => new Set(t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{3,}/g) ?? []);
+    const a = words(data.scenes[0].narration), last = data.scenes[data.scenes.length - 1];
+    const b = words(last.narration);
+    const common = [...b].filter((w) => a.has(w)).length;
+    if (b.size && common / b.size > 0.5) data.scenes.pop();
+  }
   await db.from("scenes").delete().eq("production_id", productionId);
   const rows = data.scenes.map((sc, idx) => ({
     user_id: userId,
