@@ -77,6 +77,12 @@ export const channelAnalysisSchema = obj({
   common_patterns: arr(str),
   winning_formula: str,
   limitations: arr(str),
+  caption_clone: obj({ text_hex: str, highlight_hex: str, outline_hex: str, bottom_percent: num, words_per_block: num, uppercase: bool, font_weight: enm("black", "bold", "regular"), animation: enm("pop", "karaoke", "fade", "static"), highlight_rule: str }),
+  sfx_map: arr(obj({ at_s: num, kind: enm("whoosh", "impact", "riser", "pop", "click", "bass_drop", "outro"), on_cut: bool })),
+  transitions_map: arr(obj({ at_s: num, kind: enm("cut", "flash", "zoom", "whip", "fade", "glitch") })),
+  frame_mix: arr(enm("9:16", "16:9", "1:1", "3:4")),
+  color_grade: enm("none", "dark_cinematic", "high_contrast", "warm", "cold", "vintage", "vivid"),
+  music_mood: enm("suspense", "epico", "calmo", "alegre", "triste", "none"),
   format_dna: formatDnaSchema,
   style_profile: styleProfileSchema,
 });
