@@ -47,3 +47,7 @@
 - [x] TikTok: link curto, sem marca d'água, plano B se o yt-dlp falhar
 - [x] Gerar ZIP final (efeitos ligados por padrão, 6 sons reais embutidos, verificação do FFmpeg)
 - [ ] Voz clonada na nuvem (deixada por último)
+- [x] Canal de fotos usa só fotos (sem TikTok/vídeo); referência do YouTube nunca busca TikTok
+- [x] Laboratório sem isolar voz/música; não inicia sozinho
+- [x] Escolher a voz no cartão da produção antes de iniciar
+- [x] Corte automático de tarjas pretas de cinema
