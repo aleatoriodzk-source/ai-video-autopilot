@@ -434,8 +434,12 @@ def web_images(q: str) -> list[dict]:
     import unicodedata
     clean = "".join(c for c in unicodedata.normalize("NFD", q) if unicodedata.category(c) != "Mn")
     words = clean.split()
-    tries = [clean] + [" ".join(words[:n]) for n in (4, 3, 2) if len(words) > n]
-    for tq in dict.fromkeys(tries):
+    import time
+    core = [w for w in words if w.lower() not in ("foto", "fotos", "antiga", "imagem", "real", "de", "da", "do")]
+    tries = [clean, " ".join(core)] + [" ".join(core[:n]) for n in (3, 2) if len(core) > n]
+    for i, tq in enumerate([t for t in dict.fromkeys(tries) if t] * 2):
+        if i:
+            time.sleep(1.0)
         r = requests.get("https://www.bing.com/images/async", params={"q": tq, "first": 0, "count": 35, "setlang": "pt-br", "cc": "BR"},
                          headers={**h, "Accept-Language": "pt-BR,pt;q=0.9"}, timeout=30)
         out = []
