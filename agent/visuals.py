@@ -613,7 +613,8 @@ def pick_visuals(runner, job, ctx) -> None:
                 chosen = _pixabay(runner, job, pxb, q, orientation, w, h, work, sc, prod, recent, window)
             if src == "pexels" and not chosen and not is_pop(q0, topic):
                 chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
-            if src == "pexels" and not chosen:
+            if src == "pexels" and not chosen and not is_pop(q0, topic):
+                # Openverse/Flickr traz bichos e fotos amadoras: nunca para filmes, séries, novelas ou famosos.
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _open_pick(runner, job, q, work, sc, prod, recent, window, open_order(q, prod.get("topic") or ""))
             elif src == "ai_image" and s["ai"]["allow_ai_images"]:
