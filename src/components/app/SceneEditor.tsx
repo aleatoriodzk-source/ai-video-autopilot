@@ -204,7 +204,18 @@ export function SceneEditor({ productionId }: { productionId: string }) {
           {pick && <LibraryPicker onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
         </div>
       </div>
-      <CaptionPreview text={cur.caption || cur.narration} />
+      <div className="flex flex-wrap items-start gap-3">
+        <PhonePreview assetId={cur.asset_id} text={cur.caption || cur.narration} />
+        <div className="min-w-0 flex-1 space-y-2 text-xs text-muted-foreground">
+          <div className="font-medium text-foreground">Prévia da cena {sel + 1} no celular</div>
+          <p>Assim a cena aparece no vídeo final: mídia por cima do fundo desfocado e a legenda destacando a palavra falada.</p>
+          <p>{cur.asset_id ? "Mídia definida para esta cena." : "Mídia automática: o agente vai buscar no TikTok, YouTube e bancos de imagem ao renderizar. Para escolher você mesmo, use os botões acima."}</p>
+          <div className="flex flex-wrap gap-2">
+            <button className={btn} disabled={sel === 0} onClick={() => setSel(sel - 1)}>← Cena anterior</button>
+            <button className={btn} disabled={sel === draft.length - 1} onClick={() => setSel(sel + 1)}>Próxima cena →</button>
+          </div>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Pedido para a IA (opcional), ex.: mais suspense" className={field + " min-w-0 flex-1"} />
@@ -300,8 +311,37 @@ function SceneMedia({ assetId }: { assetId: string | null }) {
   );
 }
 
+/** Prévia vertical 9:16: mídia sobre fundo desfocado + legenda animada. */
+function PhonePreview({ assetId, text }: { assetId: string | null; text: string }) {
+  const { data } = useQuery({
+    queryKey: ["asset-preview", assetId],
+    enabled: !!assetId,
+    queryFn: async () => {
+      const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
+      if (!a) return null;
+      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, url };
+    },
+  });
+  const url = assetId ? data?.url : null;
+  const isVid = data?.kind === "video";
+  return (
+    <div className="relative aspect-[9/16] w-40 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+      {url ? (
+        <>
+          {isVid ? <video src={url} muted autoPlay loop playsInline className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" /> : <img src={url} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" />}
+          {isVid ? <video src={url} muted autoPlay loop playsInline className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2 object-contain" /> : <img src={url} alt="" className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2 object-contain" />}
+        </>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center p-2 text-center text-[10px] text-muted-foreground">Mídia automática</div>
+      )}
+      <div className="absolute inset-x-1 bottom-[22%]"><CaptionPreview text={text} compact /></div>
+    </div>
+  );
+}
+
 /** Prévia de como a legenda aparece palavra por palavra (estilo CapCut). */
-function CaptionPreview({ text }: { text: string }) {
+function CaptionPreview({ text, compact }: { text: string; compact?: boolean }) {
   const words = text.split(/\s+/).filter(Boolean);
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -312,6 +352,11 @@ function CaptionPreview({ text }: { text: string }) {
   }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!words.length) return null;
   const start = Math.floor(i / 3) * 3;
+  if (compact) return (
+    <div className="text-center text-sm font-black uppercase leading-tight text-background [text-shadow:0_0_3px_hsl(0_0%_0%),0_0_3px_hsl(0_0%_0%)]">
+      {words.slice(start, start + 3).map((w, k) => <span key={k} className={start + k === i ? "text-primary" : ""}>{w} </span>)}
+    </div>
+  );
   return (
     <div className="rounded-md bg-foreground/90 p-3 text-center">
       <div className="text-[10px] uppercase tracking-wide text-background/60">Prévia da legenda palavra por palavra</div>
