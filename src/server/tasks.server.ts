@@ -341,7 +341,7 @@ export async function runRewriteScene(db: DB, userId: string, sceneId: string, i
 }
 
 /** Vision check: does this image really show what the scene needs? Cheap call, low detail thumbnail. */
-export async function runCheckImage(db: DB, userId: string, jobId: string, productionId: string | null, image: string, description: string, topic: string) {
+export async function runCheckImage(db: DB, userId: string, jobId: string, productionId: string | null, image: string, description: string, topic: string, characters = "") {
   const s = await guardBudget(db, userId, jobId, null);
   let override: unknown;
   if (productionId) {
@@ -350,9 +350,12 @@ export async function runCheckImage(db: DB, userId: string, jobId: string, produ
   }
   const ai = makeAi(userId, s, override);
   const schema = { type: "object", properties: { match: { type: "boolean" }, reason: { type: "string" } }, required: ["match", "reason"], additionalProperties: false };
+  const strict = characters.trim()
+    ? ` REGRA ESTRITA DE PERSONAGEM: a cena exige ver "${characters}". Aprove SOMENTE se esse personagem/pessoa específico estiver visível e reconhecível na imagem (rosto, traje ou visual característico). Ser do mesmo filme, série ou franquia NÃO basta: se aparece outro personagem (ex.: Thor no lugar de Loki), só cenário, logotipo ou multidão sem ele, REPROVE. Aqui, na dúvida, reprove.`
+    : " Reprove SOMENTE se for algo sem relação (outro bicho, paisagem aleatória, botão de inscreva-se, tela preta, marca d'água grande). Na dúvida, aprove.";
   const { data, usage } = await ai<{ match: boolean; reason: string }>({
-    system: "Você confere se uma imagem serve para uma cena de vídeo. Só reprova o que é claramente de OUTRO assunto. Detalhes (ângulo, quantidade, cor, se é à mão ou máquina, silhueta, carimbo) NUNCA reprovam.",
-    user: `Tema do vídeo: "${topic}". A cena fala de: "${description}". A imagem anexada combina com o tema/assunto geral (mesmo personagem, filme, franquia, pessoa, objeto ou época, ou algo que ilustre bem a ideia)? Reprove SOMENTE se for algo sem relação (outro bicho, paisagem aleatória, botão de inscreva-se, tela preta, marca d'água grande). Na dúvida, aprove. Responda match e um motivo curto em português.`,
+    system: "Você confere se uma imagem serve para uma cena de vídeo. Detalhes (ângulo, quantidade, cor, se é à mão ou máquina, silhueta, carimbo) NUNCA reprovam. Mas quando a cena cita um personagem ou pessoa pelo nome, ele precisa estar na imagem.",
+    user: `Tema do vídeo: "${topic}". A cena fala de: "${description}". A imagem anexada mostra o que a cena descreve?${strict} Responda match e um motivo curto em português.`,
     schemaName: "image_check",
     schema,
     images: [image],

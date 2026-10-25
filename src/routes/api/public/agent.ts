@@ -144,8 +144,8 @@ export const Route = createFileRoute("/api/public/agent")({
             }
             case "check_image": {
               const job = await ownJob(body.job_id);
-              const { image, description, topic } = z.object({ image: z.string().startsWith("data:image/").max(400_000), description: z.string().max(1000), topic: z.string().max(500) }).parse(body);
-              return json(await tasks.runCheckImage(db, userId, job.id, job.production_id, image, description, topic));
+              const { image, description, topic, characters } = z.object({ image: z.string().startsWith("data:image/").max(400_000), description: z.string().max(1000), topic: z.string().max(500), characters: z.string().max(300).optional() }).parse(body);
+              return json(await tasks.runCheckImage(db, userId, job.id, job.production_id, image, description, topic, characters ?? ""));
             }
             case "update_scene": {
               const id = uuid.parse(body.scene_id);
