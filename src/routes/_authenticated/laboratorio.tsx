@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { DnaView } from "@/components/app/DnaView";
-import { channelIdeas } from "@/lib/ai.functions";
-import { enqueueJobs } from "@/lib/jobs";
+import { channelIdeas, generateScript } from "@/lib/ai.functions";
+import { enqueueJobs, startProduction } from "@/lib/jobs";
 import { LabSkeleton, JobProgress } from "@/components/app/LabSkeleton";
 import { VideoOptions, defaultOpts, optsToSettings, type VideoOpts } from "@/components/app/VideoOptions";
 
@@ -121,7 +121,7 @@ function Lab() {
     const uid = (await supabase.auth.getUser()).data.user!.id;
     const rep = k.analysis?.report ?? {};
     const motion = rep.videos?.[0]?.edit?.motion;
-    const base = optsToSettings(opts, k.voice?.stats?.music_path);
+    const base = optsToSettings(opts, undefined);
     const clone = rep.caption_clone;
     const cut = rep.format_dna?.replication?.scene_seconds;
     const settings: any = {
@@ -133,10 +133,21 @@ function Lab() {
       ...(rep.sfx_map?.length ? { kit_sfx: rep.sfx_map, kit_sfx_ref_s: rep.videos?.[0]?.duration_s ?? rep.avg_duration_s ?? null } : {}),
       ...(rep.transitions_map?.length ? { kit_transitions: rep.transitions_map } : {}),
     };
-    const { error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Produção criada com o kit do laboratório");
-    nav({ to: "/producoes" });
+    setBusy(true);
+    try {
+      const { data: p, error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: "9:16", mode: "auto", reference_id: k.id, settings }).select("id").single();
+      if (error) throw error;
+      toast.info("Escrevendo o roteiro com o DNA do kit…");
+      const r = await generateScript({ data: { productionId: p.id, topic: topic.trim() } });
+      if (!r.ok) throw new Error(`Produção criada, mas o roteiro falhou: ${r.error}`);
+      await startProduction(p.id, { needsAnalysis: false, analysisId: k.analysis?.id ?? null, referenceId: k.id });
+      toast.success("Roteiro pronto — o agente do PC já vai montar o vídeo");
+      nav({ to: "/producoes" });
+    } catch (e: any) {
+      toast.error(e.message ?? "Falhou");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
@@ -148,7 +159,7 @@ function Lab() {
 
   return (
     <div>
-      <PageHeader title="Laboratório" subtitle="Envie 1 vídeo viral. O laboratório desmonta tudo: isola e clona a voz, mede a legenda, os cortes, os filtros, a música e os efeitos. Fica separado do resto — só entra numa produção quando você escolher." />
+      <PageHeader title="Laboratório" subtitle="Envie 1 vídeo viral. O laboratório desmonta tudo: mede o ritmo da fala, a legenda, os cortes, as proporções, os filtros, o clima da música e os efeitos. Fica separado do resto — só entra numa produção quando você escolher." />
       <div className="panel mb-6 space-y-3 p-4">
         <input className={input} placeholder="Nome do kit (ex.: Curiosidades estilo X)" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={input} placeholder="Link do TikTok/YouTube (ou envie o arquivo abaixo)" value={link} onChange={(e) => setLink(e.target.value)} disabled={!!file} />
@@ -168,7 +179,7 @@ function Lab() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b className="text-sm">{k.title?.replace(/^Lab: /, "")}</b>
                   <div className="flex gap-2">
-                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); setOpts({ ...defaultOpts, voice: k.voice?.status === "ready" ? `clone:${k.voice.id}` : defaultOpts.voice, music: k.voice?.stats?.music_path ? "kit" : "auto" }); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
+                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); setOpts({ ...defaultOpts, voice: k.voice?.status === "ready" ? `clone:${k.voice.id}` : defaultOpts.voice, music: "auto" }); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
                     <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => remove(k.id)}>Apagar</button>
                   </div>
                 </div>
@@ -185,23 +196,19 @@ function Lab() {
                       ))}
                       {ideas[k.id] && <button className="text-xs text-primary" disabled={ideasBusy} onClick={() => loadIdeas(k.id)}>{ideasBusy ? "Gerando…" : "Outras sugestões"}</button>}
                     </div>
-                    <VideoOptions value={opts} onChange={setOpts} kitMusic={!!k.voice?.stats?.music_path} />
+                    <VideoOptions value={opts} onChange={setOpts} kitMusic={false} />
                     <p className="text-xs text-muted-foreground">Usa o ritmo, os movimentos de câmera e os filtros deste kit. Duração mínima de 60 segundos.</p>
                     <div className="flex gap-2">
-                      <button className={btn} onClick={() => useKit(k)}>Criar vídeo</button>
+                      <button className={btn} disabled={busy} onClick={() => useKit(k)}>{busy ? "Gerando roteiro…" : "Criar vídeo"}</button>
                       <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => setKitFor(null)}>Cancelar</button>
                     </div>
                   </div>
                 )}
                 <div className="grid gap-2 text-sm md:grid-cols-2">
                   <div className="rounded-md border border-border p-3">
-                    <div className="mb-1 flex items-center justify-between"><span className="font-medium">Voz isolada e clonada</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
-                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id, k.voice.sample_path)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz isolada</button>)}
-                    {k.voice?.status === "ready" && (st.isolation === "demucs" || /demucs/i.test(String(st.isolation ?? ""))
-                      ? <span className="mb-1 inline-block rounded bg-success/15 px-2 py-0.5 text-xs text-success">Isolamento com IA</span>
-                      : k.voice?.status === "ready" && <span className="mb-1 inline-block rounded bg-warning/15 px-2 py-0.5 text-xs text-warning">Filtro simples — a música pode vazar. Rode install_voice_clone.bat e disseque de novo.</span>)}
-                    {k.voice?.stats?.music_path && (audio[k.voice.id + "m"] ? <audio controls autoPlay src={audio[k.voice.id + "m"]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id + "m", k.voice.stats.music_path)} className="mb-1 ml-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir música isolada (sem voz)</button>)}
-                    {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas · isolamento: {st.isolation}</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
+                    <div className="mb-1 flex items-center justify-between"><span className="font-medium">Ritmo da narração</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
+                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id, k.voice.sample_path)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz da referência</button>)}
+                    {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
                   </div>
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Legenda, cortes, filtros e som</span>{k.analysis && <StatusBadge status={k.analysis.status} />}</div>

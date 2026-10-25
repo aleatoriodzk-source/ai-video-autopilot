@@ -107,6 +107,22 @@ function Producoes() {
     }, "Roteiro gerado");
   }
 
+  async function remove(id: string) {
+    if (!window.confirm("Excluir esta produção? Isso apaga roteiro, cenas e histórico dela.")) return;
+    await run(id, async () => {
+      const { data: js } = await supabase.from("jobs").select("id").eq("production_id", id);
+      const jids = (js ?? []).map((j) => j.id);
+      if (jids.length) { await supabase.from("activity_logs").delete().in("job_id", jids); await supabase.from("usage_records").delete().in("job_id", jids); }
+      await supabase.from("activity_logs").delete().eq("production_id", id);
+      await supabase.from("usage_records").delete().eq("production_id", id);
+      await supabase.from("jobs").delete().eq("production_id", id);
+      await supabase.from("scenes").delete().eq("production_id", id);
+      await supabase.from("assets").delete().eq("production_id", id);
+      const { error } = await supabase.from("productions").delete().eq("id", id);
+      if (error) throw error;
+    }, "Produção excluída");
+  }
+
   async function control(id: string, status: "paused" | "queued" | "cancelled") {
     await run(id, async () => {
       const j = await activeJob(id);
@@ -247,6 +263,7 @@ function Producoes() {
                   <button disabled={b} className={btn} onClick={() => control(p.id, "paused")}>Pausar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "queued")}>Retomar</button>
                   <button disabled={b} className={btn} onClick={() => control(p.id, "cancelled")}>Cancelar</button>
+                  <button disabled={b} className={btn + " text-destructive"} onClick={() => remove(p.id)}>Excluir</button>
                   {s ? <button className={btn + (view === p.id ? " bg-accent" : "")} onClick={() => setView(view === p.id ? null : p.id)}>{view === p.id ? "Fechar roteiro" : "Ler roteiro"}</button> : null}
                   {s ? <button disabled={b} className={btn} onClick={() => run(p.id, async () => { const r = await postKit({ data: { productionId: p.id } }); if (!r.ok) throw new Error(r.error); setKit(p.id); }, "Kit de postagem pronto")}>{b ? "Gerando…" : (p.settings as Record<string, unknown> | null)?.["post_kit"] ? "Refazer kit de postagem" : "Kit de postagem"}</button> : null}
                   {(p.settings as Record<string, unknown> | null)?.["post_kit"] ? <button className={btn + (kit === p.id ? " bg-accent" : "")} onClick={() => setKit(kit === p.id ? null : p.id)}>{kit === p.id ? "Fechar kit" : "Ver kit"}</button> : null}

@@ -253,8 +253,8 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
     Com `clone`, usa cores, posição, caixa alta e animação medidas no vídeo de referência."""
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
     vertical = h > w
-    fs = int(h * (0.068 if vertical else 0.075))
-    align, margin_v = (2, int(h * 0.24)) if vertical else (2, int(h * 0.1))
+    fs = int(h * (0.046 if vertical else 0.06))  # menor: não cobre a cena
+    align, margin_v = (2, int(h * 0.20)) if vertical else (2, int(h * 0.08))
     upper, anim = True, ("karaoke" if style == "karaoke" else "pop")
     border, back = 1, "&H96000000"
     if style == "box":
@@ -264,7 +264,7 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
         hi = _ass_color(clone.get("highlight_hex"), hi)
         outline = _ass_color(clone.get("outline_hex"), outline)
         bp = float(clone.get("bottom_percent") or 24)
-        margin_v = int(h * min(45, max(8, bp)) / 100)
+        margin_v = int(h * min(30, max(12, bp)) / 100)
         upper = bool(clone.get("uppercase", True))
         anim = clone.get("animation") or "pop"
         if clone.get("font_weight") == "regular":
@@ -277,7 +277,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{font},{fs},{(hi if anim == "karaoke" else main)},{main},{outline},{back},1,0,0,0,100,100,1,0,{border},{max(6, fs // 7)},4,{align},60,60,{margin_v},1
+Style: Main,{font},{fs},{(hi if anim == "karaoke" else main)},{main},{outline},{back},1,0,0,0,100,100,1,0,{border},{max(4, fs // 9)},2,{align},60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

@@ -415,6 +415,8 @@ class Runner:
         out = ctx["work"] / f"clip_{sc['idx']:03d}.mp4"
         ps = ctx["prod"].get("settings") or {}
         mix = [f for f in (ps.get("frame_mix") or []) if f in media.FRAME_RATIOS]
+        if not mix and ctx["h"] > ctx["w"]:
+            mix = ["9:16", "16:9", "9:16", "1:1"]  # sem DNA de proporções: alterna para não ficar monótono
         frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
         if vid.exists():
             cut = float(ps.get("cut_seconds") or 0)
