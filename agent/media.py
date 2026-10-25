@@ -470,6 +470,23 @@ def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: 
     _video_part(src, 0, dur, w, h, fps, out, crf, total, frame)
 
 
+def detect_black_bars(src: Path, start: float, sw: int, sh: int):
+    """Tarjas pretas de cinema já gravadas no vídeo: mede com cropdetect e devolve (w, h, x, y) para cortar."""
+    try:
+        p = subprocess.run(["ffmpeg", "-ss", f"{max(0.0, start):.2f}", "-i", str(src), "-t", "3", "-vf", "cropdetect=24:2:0", "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=40)
+        found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", p.stderr)
+        if not found:
+            return None
+        cw, ch, x, y = map(int, found[-1])
+        # só corta se tirar pelo menos 4% da altura ou largura (tarja de verdade) e sobrar imagem útil
+        if ch < sh * 0.4 or cw < sw * 0.4 or (sh - ch < sh * 0.04 and sw - cw < sw * 0.04):
+            return None
+        return cw - cw % 2, ch - ch % 2, x, y
+    except Exception:
+        return None
+
+
 def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float, frame: str | None = None) -> None:
     n = max(1, int(round(dur * fps)))
     try:
@@ -477,8 +494,14 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         sw, sh = int(st["width"]), int(st["height"])
     except Exception:
         sw, sh = w, h
+    crop = detect_black_bars(src, start, sw, sh)
+    pre = ""
+    if crop:
+        cw, ch, cxo, cyo = crop
+        pre = f"crop={cw}:{ch}:{cxo}:{cyo},"
+        sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{reframe_filter(sw, sh, w, h, cx, frame)},fps={fps},format=yuv420p,setsar=1"
+    vf = f"{pre}{reframe_filter(sw, sh, w, h, cx, frame)},fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 

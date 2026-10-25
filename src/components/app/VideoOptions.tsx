@@ -55,3 +55,26 @@ export function VideoOptions({ value, onChange, kitMusic }: { value: VideoOpts; 
     </div>
   );
 }
+
+/** Troca a voz de uma produção já criada (antes de iniciar ou refazer). */
+export function VoicePicker({ productionId, settings, onSaved }: { productionId: string; settings: Record<string, unknown> | null; onSaved?: () => void }) {
+  const { data: clones } = useQuery({
+    queryKey: ["ready-voices"],
+    queryFn: async () => (await supabase.from("voices").select("id,name").eq("status", "ready").order("created_at", { ascending: false })).data ?? [],
+  });
+  const cur = settings?.["voice_id"] ? `clone:${settings["voice_id"]}` : String(settings?.["voice"] ?? defaultOpts.voice);
+  async function save(v: string) {
+    const next: Record<string, unknown> = { ...(settings ?? {}) };
+    if (v.startsWith("clone:")) { next["voice_id"] = v.slice(6); delete next["voice"]; } else { next["voice"] = v; delete next["voice_id"]; }
+    await supabase.from("productions").update({ settings: next as never }).eq("id", productionId);
+    onSaved?.();
+  }
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">Voz da narração
+      <select className={sel + " w-auto"} value={cur} onChange={(e) => save(e.target.value)}>
+        {(clones ?? []).length > 0 && <optgroup label="Vozes clonadas">{clones!.map((c) => <option key={c.id} value={`clone:${c.id}`}>{c.name}</option>)}</optgroup>}
+        <optgroup label="Vozes prontas">{EDGE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
+      </select>
+    </label>
+  );
+}

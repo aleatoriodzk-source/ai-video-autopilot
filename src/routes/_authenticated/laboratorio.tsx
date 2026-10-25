@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 import { DnaView } from "@/components/app/DnaView";
 import { channelIdeas, generateScript } from "@/lib/ai.functions";
-import { enqueueJobs, startProduction } from "@/lib/jobs";
+import { enqueueJobs } from "@/lib/jobs";
 import { LabSkeleton, JobProgress } from "@/components/app/LabSkeleton";
 import { VideoOptions, defaultOpts, optsToSettings, type VideoOpts } from "@/components/app/VideoOptions";
 
@@ -93,11 +93,8 @@ function Lab() {
       try {
         const { data: a, error: e1 } = await supabase.from("analyses").insert({ user_id: uid, reference_id: r.id, kind: "short", status: "pending" }).select("id").single();
         if (e1) throw e1;
-        const { data: v, error: e2 } = await supabase.from("voices").insert({ user_id: uid, name: `Lab: ${label}`.slice(0, 60), reference_id: r.id, status: "queued" }).select("id").single();
-        if (e2) throw e2;
         await enqueueJobs([
           { user_id: uid, type: "analyze_reference", reference_id: r.id, analysis_id: a.id, payload: {} },
-          { user_id: uid, type: "extract_voice", reference_id: r.id, payload: { voice_id: v.id } },
         ]);
       } catch (err) {
         // nada fica pela metade: desfaz o cadastro para você reenviar
@@ -140,8 +137,7 @@ function Lab() {
       toast.info("Escrevendo o roteiro com o DNA do kit…");
       const r = await generateScript({ data: { productionId: p.id, topic: topic.trim() } });
       if (!r.ok) throw new Error(`Produção criada, mas o roteiro falhou: ${r.error}`);
-      await startProduction(p.id, { needsAnalysis: false, analysisId: k.analysis?.id ?? null, referenceId: k.id });
-      toast.success("Roteiro pronto — o agente do PC já vai montar o vídeo");
+      toast.success("Roteiro pronto — confira a voz na aba Produções e clique em Iniciar automação");
       nav({ to: "/producoes" });
     } catch (e: any) {
       toast.error(e.message ?? "Falhou");
@@ -179,7 +175,7 @@ function Lab() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b className="text-sm">{k.title?.replace(/^Lab: /, "")}</b>
                   <div className="flex gap-2">
-                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); setOpts({ ...defaultOpts, voice: k.voice?.status === "ready" ? `clone:${k.voice.id}` : defaultOpts.voice, music: "auto" }); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
+                    <button className={btn} disabled={k.analysis?.status !== "done"} onClick={() => { const o = kitFor === k.id ? null : k.id; setKitFor(o); setTopic(""); setOpts({ ...defaultOpts, music: "auto" }); if (o && !ideas[o]) loadIdeas(o); }}>Usar num vídeo novo</button>
                     <button className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => remove(k.id)}>Apagar</button>
                   </div>
                 </div>
@@ -204,19 +200,13 @@ function Lab() {
                     </div>
                   </div>
                 )}
-                <div className="grid gap-2 text-sm md:grid-cols-2">
-                  <div className="rounded-md border border-border p-3">
-                    <div className="mb-1 flex items-center justify-between"><span className="font-medium">Ritmo da narração</span>{k.voice && <StatusBadge status={k.voice.status === "ready" ? "done" : k.voice.status} />}</div>
-                    {k.voice?.status === "ready" && k.voice.sample_path && (audio[k.voice.id] ? <audio controls autoPlay src={audio[k.voice.id]} className="mb-1 w-full" /> : <button onClick={() => listen(k.voice.id, k.voice.sample_path)} className="mb-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">▶ Ouvir voz da referência</button>)}
-                    {k.voice?.status === "ready" ? <p className="text-muted-foreground">{st.wpm ? `${st.wpm} palavras/min · ` : ""}{st.pauses_count ?? 0} pausas</p> : <p className="text-muted-foreground">{k.voice?.error ?? "aguardando o agente local"}</p>}
-                  </div>
+                <div className="grid gap-2 text-sm">
                   <div className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between"><span className="font-medium">Legenda, cortes, filtros e som</span>{k.analysis && <StatusBadge status={k.analysis.status} />}</div>
                     <p className="text-muted-foreground">{k.analysis?.error ?? (dna ? `${dna.niche ?? ""} — pronto` : "aguardando o agente local")}</p>
                   </div>
                 </div>
                 <JobProgress label="Dissecação do vídeo" job={k.jobA} />
-                <JobProgress label="Voz e música" job={k.jobV} />
                 {k.analysis?.report && (
                   <>
                     <button className="text-sm text-primary" onClick={() => setOpen(open === k.id ? null : k.id)}>{open === k.id ? "Fechar camadas" : "Ver esqueleto completo"}</button>

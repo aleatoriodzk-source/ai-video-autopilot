@@ -460,11 +460,16 @@ def scene_frame(sc: dict, prod: dict) -> str:
 
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     """Mídia real do assunto: TikTok/YouTube conforme a proporção da cena, depois imagem da web."""
-    video_only = bool((prod.get("settings") or {}).get("video_only")) or is_pop(q, prod.get("topic") or "")
+    ps = prod.get("settings") or {}
+    image_only = bool(ps.get("image_only"))
+    video_only = not image_only and (bool(ps.get("video_only")) or is_pop(q, prod.get("topic") or ""))
     sources = []
-    if runner.cfg.get("tiktok_clips", True):
+    # Igual à referência: canal de fotos não busca vídeo; referência do YouTube nunca busca TikTok.
+    if image_only:
+        pass
+    elif runner.cfg.get("tiktok_clips", True) and ps.get("ref_platform") != "youtube":
         sources.append(("tiktok", tiktok_clip))
-    if runner.cfg.get("youtube_clips", True):
+    if not image_only and runner.cfg.get("youtube_clips", True):
         sources.append(("youtube", youtube_clip))
     # Cena 9:16 → TikTok/Shorts primeiro (vertical nativo); 16:9, 1:1, 3:4 → YouTube HD primeiro. A outra é plano B.
     if scene_frame(sc, prod) != "9:16":
