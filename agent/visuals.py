@@ -429,20 +429,30 @@ def web_images(q: str) -> list[dict]:
                    for x in r.json().get("results", [])[:20] if (x.get("width") or 0) >= 600]
             if res:
                 return res
-    # Plano B: Bing Imagens.
+    # Plano B: Bing Imagens (sem acentos e encurtando a busca se vier vazia).
     import html as _h
-    r = requests.get("https://www.bing.com/images/async", params={"q": q, "first": 0, "count": 35, "qft": "+filterui:imagesize-large"}, headers=h, timeout=30)
-    out = []
-    for raw in re.findall(r'm="(\{.*?\})"', r.text):
-        try:
-            d = json.loads(_h.unescape(raw))
-        except Exception:
-            continue
-        if d.get("murl"):
-            out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
-    if not out:
-        raise RuntimeError("busca de imagens na web indisponível agora")
-    return out[:20]
+    import unicodedata
+    clean = "".join(c for c in unicodedata.normalize("NFD", q) if unicodedata.category(c) != "Mn")
+    words = clean.split()
+    import time
+    core = [w for w in words if w.lower() not in ("foto", "fotos", "antiga", "imagem", "real", "de", "da", "do")]
+    tries = [clean, " ".join(core)] + [" ".join(core[:n]) for n in (3, 2) if len(core) > n]
+    for i, tq in enumerate([t for t in dict.fromkeys(tries) if t] * 2):
+        if i:
+            time.sleep(1.0)
+        r = requests.get("https://www.bing.com/images/async", params={"q": tq, "first": 0, "count": 35, "setlang": "pt-br", "cc": "BR"},
+                         headers={**h, "Accept-Language": "pt-BR,pt;q=0.9"}, timeout=30)
+        out = []
+        for raw in re.findall(r'm="(\{.*?\})"', r.text):
+            try:
+                d = json.loads(_h.unescape(raw))
+            except Exception:
+                continue
+            if d.get("murl"):
+                out.append({"id": f"web:{d['murl'][-80:]}", "url": d["murl"], "page": d.get("purl"), "text": d.get("t", "")})
+        if out:
+            return out[:20]
+    raise RuntimeError("busca de imagens na web indisponível agora")
 
 
 def scene_frame(sc: dict, prod: dict) -> str:
@@ -465,9 +475,8 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     video_only = not image_only and (bool(ps.get("video_only")) or is_pop(q, prod.get("topic") or ""))
     sources = []
     # Igual à referência: canal de fotos não busca vídeo; referência do YouTube nunca busca TikTok.
-    if image_only:
-        pass
-    elif runner.cfg.get("tiktok_clips", True) and ps.get("ref_platform") != "youtube":
+    # TikTok só quando a referência é comprovadamente do TikTok.
+    if not image_only and runner.cfg.get("tiktok_clips", True) and ps.get("ref_platform") == "tiktok":
         sources.append(("tiktok", tiktok_clip))
     if not image_only and runner.cfg.get("youtube_clips", True):
         sources.append(("youtube", youtube_clip))
@@ -547,7 +556,7 @@ def pick_visuals(runner, job, ctx) -> None:
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
         q0 = sc.get("visual_query") or sc["narration"][:60]
-        if is_pop(q0, topic):
+        if is_pop(q0, topic) or (prod.get("settings") or {}).get("image_only"):
             # Cultura pop / filmes / famosos: bancos de estoque não têm isso — vai direto no YouTube e na web.
             chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
         for src in ([] if chosen else s["visuals"]["prefer"]):
