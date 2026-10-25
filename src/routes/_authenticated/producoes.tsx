@@ -1,3 +1,4 @@
+import { VoicePicker } from "@/components/app/VideoOptions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -269,6 +270,7 @@ function Producoes() {
                   {(p.settings as Record<string, unknown> | null)?.["post_kit"] ? <button className={btn + (kit === p.id ? " bg-accent" : "")} onClick={() => setKit(kit === p.id ? null : p.id)}>{kit === p.id ? "Fechar kit" : "Ver kit"}</button> : null}
                   {s ? <button className={btn + (open === p.id ? " bg-accent" : "")} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Fechar cenas" : "Ver e editar cenas"}</button> : null}
                 </div>
+                {!["queued", "running", "rendering"].includes(p.status) ? <VoicePicker productionId={p.id} settings={p.settings as Record<string, unknown> | null} onSaved={() => qc.invalidateQueries()} /> : null}
                 {view === p.id && s ? <ScriptView productionId={p.id} script={s} targetSeconds={Number((p.settings as Record<string, unknown> | null)?.["target_seconds"] ?? 0)} /> : null}
                 {kit === p.id && (p.settings as Record<string, unknown> | null)?.["post_kit"] ? <PostKit kit={(p.settings as Record<string, unknown>)["post_kit"] as Kit} /> : null}
                 {open === p.id ? <SceneEditor productionId={p.id} /> : null}
