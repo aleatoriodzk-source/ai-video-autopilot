@@ -21,7 +21,7 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
     if not runner.cfg.get("check_images", True):
         return True
     sc["_checks"] = sc.get("_checks", 0) + 1
-    if sc["_checks"] > 4:  # limite de conferências por cena (economiza IA)
+    if sc["_checks"] > (8 if proper_names(sc.get("visual_query") or "") else 4):  # limite por cena (economiza IA); com personagem citado insiste mais
         return True
     thumb = path.with_name(path.stem + "_chk.jpg")
     try:
