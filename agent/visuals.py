@@ -28,7 +28,10 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
         args = ["ffmpeg", "-y"] + (["-ss", f"{max(1.0, media.duration(path) / 2):.2f}"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
         media.run(args)
         img = "data:image/jpeg;base64," + base64.b64encode(thumb.read_bytes()).decode()
-        r = runner.api.call("check_image", job_id=job["id"], image=img, description=sc.get("visual_description") or sc.get("visual_query") or sc["narration"][:200], topic=prod.get("topic") or prod.get("title") or "")
+        q = sc.get("visual_query") or ""
+        desc = f"{sc.get('visual_description') or q} | narração: {(sc.get('narration') or '')[:200]}"
+        r = runner.api.call("check_image", job_id=job["id"], image=img, description=desc, topic=prod.get("topic") or prod.get("title") or "",
+                            characters=", ".join(dict.fromkeys(proper_names(q))))
     except Exception as e:
         runner.log(job, f"conferência de imagem indisponível ({str(e)[:120]}); usando a mídia mesmo assim", "warn", "visuals")
         return True
@@ -254,28 +257,40 @@ def proper_names(q: str) -> list[str]:
 
 
 def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
-    """Busca no YouTube (trailers/cenas) e baixa só o trecho que a cena precisa."""
+    """Busca no YouTube priorizando Shorts/clipes curtos (o personagem fica em cena o tempo todo) e baixa só o trecho da cena."""
     import random
-    import subprocess
     from analyzer import _ytdlp
-    try:
-        data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"]))
-    except Exception as e:
-        runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
+    entries = []
+    for search in (f"ytsearch8:{q} #shorts", f"ytsearch8:{q}"):
+        try:
+            data = json.loads(_ytdlp(["--flat-playlist", "-J", search]))
+            entries += data.get("entries") or []
+        except Exception as e:
+            runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
+    if not entries:
         return None
+    # Clipes curtos primeiro: em vídeos longos um corte cai quase sempre no momento errado.
+    entries.sort(key=lambda e: (e.get("duration") or 180) > 90)
     need = _scene_secs(sc)
     names = proper_names(q)
-    for e in data.get("entries") or []:
+    for e in entries:
         vid, dur = e.get("id"), e.get("duration")
         title = (e.get("title") or "").lower()
         # O personagem citado na cena tem que estar no vídeo: título sem o nome dele é descartado.
         if names and not any(nm in title for nm in names):
             continue
         # busca rápida às vezes vem sem duração: não descarta, assume um clipe de ~3 min
-        if not vid or vid in used or (dur and (dur < 15 or dur > 3600)):
+        if not vid or vid in used or (dur and (dur < 5 or dur > 1200)):
             continue
         dur = float(dur or 180)
-        start = round(random.uniform(dur * 0.12, max(dur * 0.12, dur * 0.75 - need)), 1)
+        if dur <= need + 1:
+            start = 0.0
+        elif dur <= 90:
+            # Short: o personagem aparece logo; pega um trecho nos primeiros 2/3.
+            start = round(random.uniform(0.5, max(0.5, min(dur * 0.66, dur - need - 0.5))), 1)
+        else:
+            # Vídeo longo: evita a abertura e créditos e fica no miolo, onde a cena citada costuma estar.
+            start = round(random.uniform(dur * 0.2, max(dur * 0.2, dur * 0.6 - need)), 1)
         out.unlink(missing_ok=True)
         try:
             _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
@@ -290,15 +305,42 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     return None
 
 
+def _tikwm_search(q: str) -> list[dict]:
+    """tikwm limita a ~1 pedido/segundo e responde texto (não JSON) quando bloqueia: espera e tenta de novo."""
+    import time
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+         "Accept": "application/json", "Referer": "https://www.tikwm.com/"}
+    last = ""
+    for attempt in range(4):
+        if attempt:
+            time.sleep(1.5 * attempt)
+        try:
+            if attempt % 2 == 0:
+                r = requests.post("https://www.tikwm.com/api/feed/search", timeout=30, headers=h,
+                                  data={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
+            else:
+                r = requests.get("https://www.tikwm.com/api/feed/search", timeout=30, headers=h,
+                                 params={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
+            txt = (r.text or "").strip()
+            if not txt.startswith("{"):
+                last = f"HTTP {r.status_code}: resposta não-JSON ({txt[:60]!r})"
+                continue
+            d = r.json()
+            vids = (d.get("data") or {}).get("videos") or []
+            if vids:
+                return vids
+            last = d.get("msg") or "sem resultados"
+        except Exception as e:
+            last = str(e)
+    raise RuntimeError(last)
+
+
 def tiktok_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
     """Busca vídeos verticais no TikTok (tikwm, sem marca d'água) e corta só o trecho da cena."""
     import random
     need = _scene_secs(sc)
     try:
-        r = requests.post("https://www.tikwm.com/api/feed/search", timeout=30,
-                          headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36"},
-                          data={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
-        vids = ((r.json() or {}).get("data") or {}).get("videos") or []
+        vids = _tikwm_search(q)
     except Exception as e:
         runner.log(job, f"TikTok busca: {str(e)[:150]}", "warn", "visuals")
         return None
