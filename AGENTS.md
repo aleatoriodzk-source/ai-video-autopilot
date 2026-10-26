@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 - Server function files (*.functions.ts) live in src/lib, never src/server — src/server is blocked from the browser bundle.
 - Structured style profiles (v2) live in src/lib/style-profile.ts and are stored inside the existing style_profiles.profile JSON under `structured`, keeping legacy fields; always read via readStyleProfile — avoids destructive migrations.
+- Renderer style (agent/style_apply.py) resolves params with precedence: cost/safety lock > explicit user (edited scenes, sfx off, manual caption, settings.user_overrides) > v2 profile traits (measured high/medium; inferred only medium+, flagged) > legacy DNA > defaults; without a v2 profile the legacy path runs unchanged — keeps old productions working.
