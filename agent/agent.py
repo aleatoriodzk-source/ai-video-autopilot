@@ -383,7 +383,7 @@ class Runner:
             img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
             src = vid if vid.exists() else img
             dur = float(sc.get("duration_s") or 0)
-            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
+            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(self._scene_plan(ctx, sc) or {}).get('motion', {}).get('value')}|{self._plan(ctx)['cut_seconds']['value'] if self._plan(ctx)['profile_used'] else ''}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
             out, mark = ctx["work"] / f"clip_{sc['idx']:03d}.mp4", ctx["work"] / f"clip_{sc['idx']:03d}.sig"
             if out.exists() and mark.exists() and mark.read_text() == sig:
                 reused += 1
@@ -408,6 +408,21 @@ class Runner:
         self.update(job, wait_reason=None)
         self.log(job, f"{len(todo)} clipes montados, {reused} reaproveitados", step="scenes")
 
+    def _plan(self, ctx):
+        """Plano de estilo v2 (Fase 3). Sem perfil v2, profile_used=False e o caminho antigo segue intacto."""
+        from style_apply import resolve_plan, structured_of
+        key = tuple((sc.get("idx"), sc.get("status"), sc.get("motion"), sc.get("transition")) for sc in ctx["scenes"])
+        if ctx.get("_plan_key") != key:
+            ctx["plan"] = resolve_plan(structured_of(ctx["prod"].get("style_profiles")), ctx["prod"].get("settings") or {}, ctx["scenes"])
+            ctx["_plan_key"] = key
+        return ctx["plan"]
+
+    def _scene_plan(self, ctx, sc):
+        plan = self._plan(ctx)
+        if not plan["profile_used"]:
+            return None
+        return next((x for x in plan["scenes"] if x["idx"] == sc.get("idx")), None)
+
     def _clip(self, ctx, sc, fps, crf):
         img = Path(ctx["work"] / f"img_{sc['idx']:03d}.jpg")
         vid = Path(ctx["work"] / f"vid_{sc['idx']:03d}.mp4")
@@ -420,12 +435,17 @@ class Runner:
         frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
         if vid.exists():
             cut = float(ps.get("cut_seconds") or 0)
+            if self._plan(ctx)["profile_used"]:
+                cut = float(self._plan(ctx)["cut_seconds"]["value"] or 0)
             media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
         km = (ctx["prod"].get("settings") or {}).get("kit_motion") or {}
         mv = km["main_move"] if km.get("main_move") in media.MOTIONS and (km.get("moving_share") or 0) >= 0.4 else (sc.get("motion") or "zoom_in")
+        sp = self._scene_plan(ctx, sc)
+        if sp:
+            mv = sp["motion"]["value"]
         media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf, frame)
 
     def step_captions(self, job, ctx):
@@ -437,6 +457,16 @@ class Runner:
             cues += media.aligned_timings(media.clean_tts(sc["narration"]), wav, start=t)
             t += total
         ps = ctx["prod"].get("settings") or {}
+        plan = self._plan(ctx)
+        if plan["profile_used"]:
+            cap = plan["caption"]["value"]
+            if cap.get("style") == "none":
+                (ctx["work"] / "subs.ass").unlink(missing_ok=True)
+                self.log(job, "sem legenda (escolha sua)", step="captions")
+                return
+            media.write_ass(cues, ctx["w"], ctx["h"], ctx["work"] / "subs.ass", style=cap.get("style") if cap.get("style") != "clone" else "hormozi", clone=cap.get("clone"))
+            self.log(job, f"legenda: {cap.get('style')} ({plan['caption']['source']}/{plan['caption']['basis']}) {plan['caption']['note']}", step="captions")
+            return
         if ps.get("caption_style") == "none":
             (ctx["work"] / "subs.ass").unlink(missing_ok=True)
             self.log(job, "sem legenda (escolha sua)", step="captions")
@@ -455,7 +485,14 @@ class Runner:
         import fx
         durs = [media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav") for sc in ctx["scenes"]]
         kps = ctx["prod"].get("settings") or {}
-        if kps.get("kit_transitions"):
+        plan = self._plan(ctx)
+        if plan["profile_used"]:
+            self.log(job, __import__("style_apply").summary(plan), step="render")
+            for lim in plan["limitations"]:
+                self.log(job, f"limitação: {lim}", step="render")
+        if plan["profile_used"]:
+            trans = [x["transition"]["value"] for x in plan["scenes"]]
+        elif kps.get("kit_transitions"):
             trans = fx.clone_transitions(kps["kit_transitions"], len(ctx["scenes"]))
             self.log(job, f"transições clonadas da referência: {', '.join(sorted(set(trans)))}", step="render")
         else:
@@ -477,7 +514,11 @@ class Runner:
         else:
           try:
             kps = ctx["prod"].get("settings") or {}
-            sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs), kps.get("kit_sfx"), kps.get("kit_sfx_ref_s"))
+            kit, ref_s = kps.get("kit_sfx"), kps.get("kit_sfx_ref_s")
+            if plan["profile_used"]:
+                sv = plan["sfx"]["value"]
+                kit, ref_s = (sv.get("kit"), sv.get("ref_s")) if sv["mode"] == "kit" else (None, None)
+            sfx = fx.sfx_track(ctx["scenes"], durs, cache / "sfx", ctx["work"] / "sfx.wav", sum(durs), kit, ref_s)
             if kps.get("kit_sfx"):
                 self.log(job, f"efeitos sonoros clonados da referência ({len(kps['kit_sfx'])} marcas)", step="render")
           except media.MediaError as err:
