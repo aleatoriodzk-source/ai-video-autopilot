@@ -101,7 +101,7 @@ export function trait<T>(value: T | null, basis: Basis = value == null ? "not_an
 const na = <T,>(): Trait<T> => trait<T>(null, "not_analyzed", "none");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dados JSON desconhecidos, validados campo a campo
-type Obj = Record<string, any> & { [k: string]: any };
+type Obj = any;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const numOr = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const strOr = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
