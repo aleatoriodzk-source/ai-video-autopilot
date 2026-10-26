@@ -9,3 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 - Server function files (*.functions.ts) live in src/lib, never src/server — src/server is blocked from the browser bundle.
+- Structured style profiles (v2) live in src/lib/style-profile.ts and are stored inside the existing style_profiles.profile JSON under `structured`, keeping legacy fields; always read via readStyleProfile — avoids destructive migrations.
