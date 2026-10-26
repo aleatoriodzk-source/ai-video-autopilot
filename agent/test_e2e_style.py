@@ -159,39 +159,33 @@ def _env_db(x, win=2400):
 
 
 def test_sfx_audible_in_final_mix(e2e):
-    """Whoosh é gradual (sem pico brusco), então não se procura salto de volume. Método: janelas de 50 ms com FFT do
-    MP4 final, removendo as frequências da voz-tom conhecida (fundamental e harmônicos ±40 Hz). A energia restante
-    (o que não é voz) é comparada entre as janelas onde sfx.wav tem som e o resto do vídeo; também se mede a
-    relação SFX/voz na mesma janela."""
+    """Whoosh é gradual (sem pico brusco), então não se procura salto de volume. Método diferencial: a mesma
+    media.final_mix roda de novo sobre os mesmos arquivos sem a faixa de SFX (controle). Resíduo = final − controle
+    = contribuição dos SFX + ruído do AAC. Mede, em janelas de 50 ms, o resíduo nas marcas planejadas (sfx.wav)
+    contra o resíduo fora delas e contra a voz no mesmo instante."""
     import numpy as np
-    sfx = e2e["work"] / "sfx.wav"
+    w = e2e["work"]
+    sfx = w / "sfx.wav"
     assert sfx.exists(), "faixa de SFX não foi gerada"
-    plan = _env_db(_pcm(sfx))
-    x = _pcm(e2e["final"])
-    win, sr = 2400, 48000
-    n = min(len(plan), len(x) // win)
-    freqs = np.fft.rfftfreq(win, 1 / sr)
-    rest, voice = np.zeros(n), np.zeros(n)
-    for k in range(n):
-        f0 = 300 + 40 * min(N - 1, int(k * 0.05 // VOICE_S))
-        spec = np.abs(np.fft.rfft(x[k * win:(k + 1) * win] * np.hanning(win))) ** 2
-        near = np.zeros_like(freqs, dtype=bool)
-        for h in range(1, 40):
-            near |= np.abs(freqs - h * f0) < 40
-        rest[k], voice[k] = 10 * np.log10(spec[~near].sum() + 1e-12), 10 * np.log10(spec[near].sum() + 1e-12)
-    on = plan[:n] > plan[:n].max() - 20
+    media.final_mix(w / "video.mp4", w / "voice.wav", "subs.ass", w / "control.mp4", w, None, -18, -14, 23, None)
+    x, c = _pcm(e2e["final"]), _pcm(w / "control.mp4")
+    n = min(len(x), len(c))
+    res, voice, plan = _env_db(x[:n] - c[:n]), _env_db(c[:n]), _env_db(_pcm(sfx))
+    m = min(len(res), len(plan))
+    res, voice, plan = res[:m], voice[:m], plan[:m]
+    on = plan > plan.max() - 20
     assert on.any()
-    base = np.median(rest[~on])
+    base = np.median(res[~on])
     marks = []
     for k in np.flatnonzero(np.diff(np.r_[0, on.astype(int)]) == 1):
-        j = k + (int(np.argmin(on[k:])) or n - k)
-        m = k + int(np.argmax(rest[k:j]))
-        marks.append({"t": round(k * 0.05, 2), "dur_s": round((j - k) * 0.05, 2), "rise_db": round(float(rest[m] - base), 1),
-                      "sfx_vs_voice_db": round(float(rest[m] - voice[m]), 1)})
-    print("\nSFX_AUDIO " + json.dumps({"method": "FFT 50ms sem harmônicos da voz", "marks": marks}))
-    # presença objetiva: >= 10 dB acima do fundo não-voz; audibilidade relativa: no máximo 20 dB abaixo da voz
-    assert marks and all(m["rise_db"] >= 10 for m in marks), ("SFX não presente no MP4", marks)
-    assert all(m["sfx_vs_voice_db"] > -20 for m in marks), ("SFX presente, mas muito abaixo da voz", marks)
+        j = k + (int(np.argmin(on[k:])) or m - k)
+        p = k + int(np.argmax(res[k:j]))
+        marks.append({"t": float(round(k * 0.05, 2)), "dur_s": float(round((j - k) * 0.05, 2)), "sfx_db": round(float(res[p]), 1),
+                      "rise_db": round(float(res[p] - base), 1), "sfx_vs_voice_db": round(float(res[p] - voice[p]), 1)})
+    print("\nSFX_AUDIO " + json.dumps({"method": "diferencial final−controle, janelas 50 ms", "residual_floor_db": round(float(base), 1), "marks": marks}))
+    # presença objetiva: >= 10 dB acima do resíduo de codificação; audível relativo: no máximo 20 dB abaixo da voz
+    assert marks and all(mk["rise_db"] >= 10 for mk in marks), ("SFX não presente no MP4", marks)
+    assert all(mk["sfx_vs_voice_db"] > -20 for mk in marks), ("SFX presente, mas muito abaixo da voz", marks)
 
 
 def _frame(path, t):
@@ -243,8 +237,8 @@ def test_captions_visible_positioned_legible(e2e):
         cols = np.flatnonzero(mask[y0:y1 + 1].sum(0) > 0)
         reg = f1[y0:y1 + 1, cols.min():cols.max() + 1]
         lum = reg.mean(2)
-        bright, dark = (lum > 200).mean(), (lum < 50).mean()
-        crop = Image.fromarray(np.where(lum > 180, 0, 255).astype(np.uint8)).resize((reg.shape[1] * 2, reg.shape[0] * 2))
+        bright, dark = (reg.max(2) > 190).mean(), (lum < 50).mean()  # texto branco ou amarelo de destaque
+        crop = Image.fromarray(np.where(reg.max(2) > 190, 0, 255).astype(np.uint8)).resize((reg.shape[1] * 2, reg.shape[0] * 2))
         ocr = pytesseract.image_to_string(crop, config="--psm 7").upper()
         hit = any(w in ocr for w in text.upper().split() if len(w) > 3)
         ok_ocr += hit
