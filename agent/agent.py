@@ -589,11 +589,50 @@ class Runner:
         if imgs and len(set(imgs)) < len(imgs) * 0.6:
             rep["issues"].append("imagens repetidas em excesso")
         rep["scenes"] = len(ctx["scenes"])
+        if rep["ok"]:
+            try:
+                rep["audit"] = self._audit_and_repair(job, ctx)
+                final = ctx.get("final") or final
+            except Exception as err:  # auditoria nunca derruba um vídeo válido
+                rep["audit_error"] = str(err)[:300]
+                self.log(job, f"auditoria não concluída: {err}", "warn", "validate")
         self.api.call("save_production", production_id=ctx["prod"]["id"], fields={"validation": rep, "status": "done" if rep["ok"] else "needs_attention"})
         self.log(job, "validação OK" if rep["ok"] else "problemas: " + "; ".join(rep["issues"]), "info" if rep["ok"] else "warn", "validate")
         if not rep["ok"]:
             # Nunca marcar como concluído sem um MP4 válido confirmado.
             raise media.MediaError("vídeo final reprovado na validação: " + "; ".join(rep["issues"]))
+
+    def _audit_and_repair(self, job, ctx, max_attempts: int = 2):
+        """Fase 4: mede o MP4 final, compara com a referência/plano e re-renderiza SÓ as cenas com defeito
+        (o cache de clipes reaproveita as demais). No máximo max_attempts; o resultado de cada tentativa é registrado."""
+        import audit as au
+        import forensics
+        from style_apply import structured_of
+        ref = structured_of(ctx["prod"].get("style_profiles"))
+        durs = [media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav") for sc in ctx["scenes"]]
+        words = sum(len((sc.get("narration") or "").split()) for sc in ctx["scenes"])
+        repairs = []
+        for attempt in range(max_attempts + 1):
+            final = Path(ctx["final"])
+            out = forensics.analyze(final)
+            rep = au.audit(ref, out, self._plan(ctx), durs, ctx.get("split_log"), au.black_intervals(final), words)
+            if not rep["failing_scenes"] or attempt == max_attempts:
+                break
+            bad = rep["failing_scenes"]
+            self.log(job, f"auditoria: cena(s) {', '.join(str(i + 1) for i in bad)} com defeito — re-renderizando só elas (tentativa {attempt + 1})", "warn", "validate")
+            for i in bad:
+                (ctx["work"] / f"clip_{i:03d}.sig").unlink(missing_ok=True)
+                (ctx["work"] / f"clip_{i:03d}.mp4").unlink(missing_ok=True)
+            self.step_scenes(job, ctx)
+            self.step_render(job, ctx)
+            repairs.append({"attempt": attempt + 1, "scenes": bad})
+        rep["repairs"] = repairs
+        if repairs:
+            rep["repair_result"] = "resolvido" if not rep["failing_scenes"] else "persistente"
+        s = rep["summary"]
+        self.log(job, f"aderência técnica: {s['pass']} dentro, {s['deviation']} fora, {s['not_verified']} não verificadas"
+                 + (f"; cenas ainda com defeito: {[i + 1 for i in rep['failing_scenes']]}" if rep["failing_scenes"] else ""), step="validate")
+        return rep
 
 
 def cleanup(cfg: dict) -> None:
