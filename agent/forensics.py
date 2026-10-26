@@ -186,8 +186,9 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
             p2, st, _ = cv2.calcOpticalFlowPyrLK(g1, g2, p1, None)
             ok = st.flatten() == 1
             if ok.sum() >= 8:
-                m, _ = cv2.estimateAffinePartial2D(p1[ok], p2[ok])
-                if m is not None:
+                m, inl = cv2.estimateAffinePartial2D(p1[ok], p2[ok])
+                # Exige consenso: ruído/grão gera pontos sem movimento coerente.
+                if m is not None and inl is not None and int(inl.sum()) >= 15 and inl.mean() >= 0.6:
                     scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
                     tx = float(m[0, 2]) / g1.shape[1]
                     zr, pr = (scale - 1) / gap, tx / gap  # por segundo
@@ -314,7 +315,7 @@ def analyze(video: Path, words: list[dict] | None = None) -> dict:
             "cuts_per_min": T(st["cuts_per_min"], evidence=ev_cut),
             "cuts_per_min_by_third": T(st["by_third"], evidence=["cortes contados em cada terço da duração"]),
             "avg_shot_s": T(st["mean"], evidence=ev_cut),
-            "words_per_second": T(round(n_words / speech, 2), evidence=[f"{n_words} palavras da transcrição / {speech:.1f}s com som"]) if n_words and speech else T(None),
+            "words_per_second": T(round(n_words / dur, 2), evidence=[f"{n_words} palavras da transcrição / {dur:.1f}s de duração total"]) if n_words and dur else T(None),
             "sound_hits_on_cuts_ratio": T(round(on_cut / len(hits), 2), evidence=[f"{on_cut}/{len(hits)} picos a ±0,25s de um corte"]) if hits else T(None),
         },
         "visual": {
