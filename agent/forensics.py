@@ -171,7 +171,12 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
             if len(pix):
                 text_colors.append(pix.mean(axis=0))
         # Movimento: transformação afim entre início e fim do plano.
-        g1, g2 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY), cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
+        # Par curto (0,3s) no meio do plano: deslocamento pequeno o bastante para o fluxo óptico seguir.
+        gap = min(0.3, L * 0.5)
+        fa, fb = grab(a + L / 2 - gap / 2), grab(a + L / 2 + gap / 2)
+        if fa is None or fb is None:
+            fa, fb, gap = f1, f2, L
+        g1, g2 = cv2.cvtColor(fa, cv2.COLOR_BGR2GRAY), cv2.cvtColor(fb, cv2.COLOR_BGR2GRAY)
         kind, scale, tx = "unknown", None, None
         mask = np.full(g1.shape, 255, np.uint8)
         if best is not None and best_score > 0.012:  # ignora legenda/overlay fixo, que puxaria para 'parado'
@@ -185,9 +190,10 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
                 if m is not None:
                     scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
                     tx = float(m[0, 2]) / g1.shape[1]
-                    kind = "zoom_in" if scale > 1.03 else "zoom_out" if scale < 0.97 else "pan_left" if tx < -0.04 else "pan_right" if tx > 0.04 else "static"
+                    zr, pr = (scale - 1) / gap, tx / gap  # por segundo
+                    kind = "zoom_in" if zr > 0.03 else "zoom_out" if zr < -0.03 else "pan_left" if pr < -0.04 else "pan_right" if pr > 0.04 else "static"
         motions.append({"start_s": a, "end_s": b, "kind": kind,
-                        "zoom_per_s": round((scale - 1) / max(L, 0.1), 4) if scale else None, "pan_per_s": round(tx / max(L, 0.1), 4) if tx is not None else None})
+                        "zoom_per_s": round((scale - 1) / gap, 4) if scale else None, "pan_per_s": round(tx / gap, 4) if tx is not None else None})
     trans = []
     for c in cuts[:400]:
         before, at, after = grab(c - 0.25), grab(c + 0.02), grab(c + 0.3)
@@ -220,7 +226,7 @@ def analyze(video: Path, words: list[dict] | None = None) -> dict:
     aud = audio_timeline(video, dur) if info["has_audio"] else {"measured": False, "hits": [], "silences": [], "sound_spans": []}
     vis = visual_pass(video, st["shots"], cuts)
     limits = [{"feature": "retenção de audiência", "reason": "no_data", "note": "O arquivo mostra ritmo de edição, não quanto o público assistiu."},
-              {"feature": "quadros contínuos", "reason": "sampling_insufficient", "note": "Análise visual por amostragem (3 quadros por plano + vizinhos dos cortes), não quadro a quadro."},
+              {"feature": "quadros contínuos", "reason": "sampling_insufficient", "note": "Análise visual por amostragem (5 quadros por plano + vizinhos dos cortes), não quadro a quadro."},
               {"feature": "música vs. voz", "reason": "no_data", "note": "Separar trilha musical da locução exige separação de fontes; não feito."},
               {"feature": "fonte da legenda", "reason": "no_data", "note": "Família tipográfica não é reconhecida localmente."},
               {"feature": "transições suaves", "reason": "sampling_insufficient", "note": "Dissolves/fades lentos podem não disparar o detector de cortes."}]
