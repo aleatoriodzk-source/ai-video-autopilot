@@ -170,7 +170,12 @@ def test_sfx_audible_in_final_mix(e2e):
     media.final_mix(w / "video.mp4", w / "voice.wav", "subs.ass", w / "control.mp4", w, None, -18, -14, 23, None)
     x, c = _pcm(e2e["final"]), _pcm(w / "control.mp4")
     n = min(len(x), len(c))
-    res, voice, plan = _env_db(x[:n] - c[:n]), _env_db(c[:n]), _env_db(_pcm(sfx))
+    win = 2400  # resíduo espectral (|F|²−|C|², só a parte positiva): imune a pequenos deslocamentos de fase do AAC
+    k_n = n // win
+    F = np.abs(np.fft.rfft(x[:k_n * win].reshape(k_n, win) * np.hanning(win), axis=1)) ** 2
+    C = np.abs(np.fft.rfft(c[:k_n * win].reshape(k_n, win) * np.hanning(win), axis=1)) ** 2
+    res = 10 * np.log10(np.clip(F - C, 0, None).sum(1) + 1e-6)
+    voice, plan = 10 * np.log10(C.sum(1) + 1e-6), _env_db(_pcm(sfx))
     m = min(len(res), len(plan))
     res, voice, plan = res[:m], voice[:m], plan[:m]
     on = plan > plan.max() - 20
@@ -182,7 +187,7 @@ def test_sfx_audible_in_final_mix(e2e):
         p = k + int(np.argmax(res[k:j]))
         marks.append({"t": float(round(k * 0.05, 2)), "dur_s": float(round((j - k) * 0.05, 2)), "sfx_db": round(float(res[p]), 1),
                       "rise_db": round(float(res[p] - base), 1), "sfx_vs_voice_db": round(float(res[p] - voice[p]), 1)})
-    print("\nSFX_AUDIO " + json.dumps({"method": "diferencial final−controle, janelas 50 ms", "residual_floor_db": round(float(base), 1), "marks": marks}))
+    print("\nSFX_AUDIO " + json.dumps({"method": "diferencial espectral final−controle, janelas 50 ms", "residual_floor_db": round(float(base), 1), "marks": marks}))
     # presença objetiva: >= 10 dB acima do resíduo de codificação; audível relativo: no máximo 20 dB abaixo da voz
     assert marks and all(mk["rise_db"] >= 10 for mk in marks), ("SFX não presente no MP4", marks)
     assert all(mk["sfx_vs_voice_db"] > -20 for mk in marks), ("SFX presente, mas muito abaixo da voz", marks)
