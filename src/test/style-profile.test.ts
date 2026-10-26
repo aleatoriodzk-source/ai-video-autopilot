@@ -44,7 +44,7 @@ describe("perfil v2", () => {
     p.metrics.cuts_per_min = trait(31.5, "measured", "high", ["ffmpeg scene>0.3"]);
     p.metrics.cuts_per_min_by_third = trait<[number, number, number]>([40, 28, 25], "measured");
     p.timeline.push({ start_s: 0, end_s: 1.8, kind: "shot", data: { aspect: "9:16" }, basis: "measured" });
-    p.scene_rules.push({ ...emptyProfile().scene_rules[0], index: 0, duration_s: trait(1.8, "measured"), aspect: trait("9:16", "measured"), motion: trait("zoom_in", "inferred", "medium"), transition_in: trait("cut", "measured"), caption_style: trait<string>(null), sfx: trait("whoosh", "inferred"), media_kind: trait("image", "inferred") });
+    p.scene_rules.push({ index: 0, duration_s: trait(1.8, "measured"), aspect: trait("9:16", "measured"), motion: trait("zoom_in", "inferred", "medium"), transition_in: trait("cut", "measured"), caption_style: trait<string>(null), sfx: trait("whoosh", "inferred"), media_kind: trait("image", "inferred") });
     p.limitations.push({ feature: "efeito 3D", reason: "unsupported_effect", note: "aproximado por 2D" });
     const back = readStyleProfile(JSON.parse(JSON.stringify(p)));
     expect(back).toEqual(p);
