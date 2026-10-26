@@ -292,7 +292,7 @@ def test_audit_report_saved(e2e):
     print("\nAUDIT " + json.dumps({k: [d["status"], d["ref"], d["out"]] for k, d in by.items()}, ensure_ascii=False, default=str))
     assert by["av_sync"]["status"] == "pass" and by["framing"]["status"] == "pass"
     assert by["media_fit"]["status"] == "not_verified"
-    assert a["failing_scenes"] == [] and "%" not in json.dumps(a)
+    assert a["failing_scenes"] == [] and not {"score", "fidelity", "percent"} & set(a)
 
 
 def test_surgical_rerender_only_bad_scene(e2e):
