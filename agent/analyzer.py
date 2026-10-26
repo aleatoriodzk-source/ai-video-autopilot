@@ -7,7 +7,18 @@ import re
 import subprocess
 from pathlib import Path
 
+import forensics
 import media
+
+
+def structured(vid: Path, words=None, log=None) -> dict | None:
+    """Perfil v2 medido localmente; falha nunca derruba a análise antiga."""
+    try:
+        return forensics.analyze(vid, words)
+    except Exception as e:
+        if log:
+            log(f"forense v2 indisponível: {str(e)[:200]}")
+        return None
 
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
@@ -279,7 +290,8 @@ def _analyze_file(vid: Path, title: str, out: dict, imgs: list[str], work: Path,
     audio = audio_forensics(vid)
     out["videos"].append({"title": title, "duration_s": dur, "view_count": None, "description": "",
                           "scene_cuts_s": cuts, "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": False,
-                          "source": "upload", "audio": audio, "edit": {**edit_forensics(dur, cuts, [], audio), "motion": motion_forensics(vid, cuts, dur)}})
+                          "source": "upload", "audio": audio, "edit": {**edit_forensics(dur, cuts, [], audio), "motion": motion_forensics(vid, cuts, dur)},
+                          "structured": structured(vid, None, log)})
     log(f"áudio: {audio.get('pauses_count', 0)} pausas (média {audio.get('pause_avg_s', 0)}s), {len(audio.get('sound_hits_s') or [])} impactos sonoros")
     log(f"'{title}': {len(cuts)} cortes detectados em {dur:.0f}s")
     if not imgs:
@@ -348,6 +360,7 @@ def collect_reference(urls: list[str], kind: str, work: Path, log, resolve=None)
                 "title": meta.get("title"), "duration_s": dur, "view_count": meta.get("view_count"),
                 "description": (meta.get("description") or "")[:1500], "scene_cuts_s": cuts,
                 "avg_scene_s": round(dur / (len(cuts) + 1), 2), "subtitles_available": bool(meta.get("subtitles") or meta.get("automatic_captions")),
+                "structured": structured(vid, words, log),
             })
             log(f"'{meta.get('title')}': {len(cuts)} cortes detectados em {dur:.0f}s")
             per = 10 if len(targets) == 1 else 3
