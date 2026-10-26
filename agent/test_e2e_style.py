@@ -60,7 +60,7 @@ def e2e(tmp_path_factory):
     for i in range(N):
         _ff("-f", "lavfi", "-i", f"sine=frequency={300 + 40 * i}:duration={VOICE_S}", "-ar", "48000", "-ac", "1", str(work / f"voice_{i:03d}.wav"))
         if i in VIDEO_SCENES:
-            _ff("-f", "lavfi", "-i", f"testsrc2=s=1280x720:r=30:d=8", "-pix_fmt", "yuv420p", str(work / f"vid_{i:03d}.mp4"))
+            _ff("-f", "lavfi", "-i", f"testsrc2=s=1280x720:r=30:d=8,hue=H=t*0.8", "-pix_fmt", "yuv420p", str(work / f"vid_{i:03d}.mp4"))
         else:
             _ff("-f", "lavfi", "-i", f"mandelbrot=s=1080x1920", "-frames:v", "1", str(work / f"img_{i:03d}.jpg"))
     api = FakeApi(d / "out")
@@ -146,13 +146,14 @@ def _env_db(x, win=2400):
 
 
 def test_sfx_audible_in_final_mix(e2e):
-    """Whoosh é gradual (sem pico brusco): mede energia em agudos (>3 kHz, onde a voz-tom de teste não tem conteúdo)
+    """Whoosh é gradual (sem pico brusco): mede energia acima de 1 kHz (a voz-tom de teste fica em 300–500 Hz; a
+    faixa sfx.wav medida tem pico -22 dBFS acima de 1 kHz e só -30 dBFS acima de 3 kHz, então 3 kHz subestima)
     em janelas de 50 ms. Onde a faixa sfx.wav planejada tem som, o MP4 final deve ter agudos bem acima da base."""
     import numpy as np
     sfx = e2e["work"] / "sfx.wav"
     assert sfx.exists(), "faixa de SFX não foi gerada"
     plan = _env_db(_pcm(sfx))
-    final = _env_db(_pcm(e2e["final"], hp=3000))
+    final = _env_db(_pcm(e2e["final"], hp=1000))
     n = min(len(plan), len(final))
     plan, final = plan[:n], final[:n]
     on = plan > plan.max() - 20
@@ -162,13 +163,14 @@ def test_sfx_audible_in_final_mix(e2e):
     for k in np.flatnonzero(np.diff(np.r_[0, on.astype(int)]) == 1):
         seg = final[k: k + int(on[k:].argmin() or n - k)]
         marks.append({"t": round(k * 0.05, 2), "peak_db": round(float(seg.max()), 1), "rise_db": round(float(seg.max() - base), 1)})
+        marks[-1]["t"] = float(marks[-1]["t"])
     print("\nSFX_AUDIO " + json.dumps({"base_hf_db": round(float(base), 1), "marks": marks}))
     assert marks and all(m["rise_db"] >= 12 and m["peak_db"] > -45 for m in marks), marks
 
 
 def _frame(path, t):
     import numpy as np
-    r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True, check=True)
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ss", f"{t:.3f}", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True, check=True)
     return np.frombuffer(r.stdout, dtype=np.uint8).reshape(1280, 720, 3).astype(int)
 
 
