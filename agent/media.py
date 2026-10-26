@@ -451,23 +451,58 @@ def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None, frame: st
             f"[b]scale={w}:-2[fg];[bg][fg]overlay=0:(H-h)/2")
 
 
-def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20, cut_s: float = 0, frame: str | None = None) -> None:
+MIN_PIECE_S = 0.8
+
+
+def split_plan(dur: float, cut_s: float, total: float) -> tuple[list[float], str]:
+    """Planos de uma cena de vídeo: pedaços de cut_s e um pedaço final com o resto (>= MIN_PIECE_S; senão o resto
+    se junta ao anterior). Só a imagem é dividida — a narração da cena e sua duração não mudam.
+    Devolve (durações, motivo)."""
+    if not cut_s or cut_s <= 0:
+        return [dur], "sem duração-alvo de plano"
+    if dur < cut_s + MIN_PIECE_S:
+        return [dur], f"cena de {dur:.2f}s menor que alvo {cut_s:.2f}s + mínimo {MIN_PIECE_S}s"
+    if total and total < 2 * MIN_PIECE_S:
+        return [dur], f"fonte de {total:.2f}s curta demais para planos distintos"
+    pieces, left = [], dur
+    while left >= cut_s + MIN_PIECE_S:
+        pieces.append(cut_s)
+        left -= cut_s
+    if left >= MIN_PIECE_S:
+        pieces.append(left)
+    else:
+        pieces[-1] += left
+    s = sum(pieces[:-1])
+    pieces[-1] = round(dur - s, 4)  # soma exata = duração da narração
+    return pieces, f"{len(pieces)} planos (alvo {cut_s:.2f}s)"
+
+
+def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: int = 20, cut_s: float = 0, frame: str | None = None) -> tuple[list[float], str]:
     """Corta/repete o trecho para a duração da cena, mantendo o personagem no quadro (smart crop).
     Com cut_s, faz cortes secos dentro da cena (pedaços de pontos diferentes do trecho) no ritmo da referência."""
     total = duration(src) or dur
-    k = int(dur // cut_s) if cut_s and dur >= cut_s * 1.5 and total >= dur else 1
-    if k > 1:
-        parts, each = [], dur / k
-        for i in range(k):
+    pieces, why = split_plan(dur, cut_s, total)
+    if len(pieces) > 1:
+        # quadros inteiros por pedaço, somando exatamente os quadros da cena (sem deriva de sincronia)
+        n_total = max(1, int(round(dur * fps)))
+        frames, acc = [], 0
+        for i, p in enumerate(pieces):
+            n = n_total - acc if i == len(pieces) - 1 else int(round(p * fps))
+            frames.append(n)
+            acc += n
+        parts, k = [], len(pieces)
+        for i, n in enumerate(frames):
             part = out.with_name(f"{out.stem}_p{i}.mp4")
-            off = (total - each) * i / max(1, k - 1)
+            each = n / fps
+            off = max(0.0, (total - each)) * i / max(1, k - 1)
             _video_part(src, off, each, w, h, fps, part, crf, total, frame)
             parts.append(part)
         concat(parts, out, out.parent, audio=False)
         for p in parts:
             p.unlink(missing_ok=True)
-        return
+        return [n / fps for n in frames], why
     _video_part(src, 0, dur, w, h, fps, out, crf, total, frame)
+    return pieces, why
 
 
 def detect_black_bars(src: Path, start: float, sw: int, sh: int):
@@ -531,9 +566,18 @@ def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdi
         inputs += ["-i", str(sfx)]
         mix.append(f"[{n}:a]")
     af += f";{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0[a]" if len(mix) > 1 else ";[vo]anull[a]"
-    run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
+    # Áudio em passada separada: no FFmpeg 8, loudnorm no mesmo grafo que o vídeo perdia ~3 s de áudio
+    # (buraco nos timestamps AAC, medido no MP4 final). Mixar para WAV e depois juntar não perde nada.
+    mixed = workdir / f"{Path(out.name).stem}_mix.wav"
+    a_in = inputs[2:]  # voz, música (opcional) e SFX, sem o vídeo
+    af_a = af.replace("[1:a]", "[0:a]", 1)
+    for k in range(2, n + 1):
+        af_a = af_a.replace(f"[{k}:a]", f"[{k - 1}:a]")
+    run(["ffmpeg", "-y", *a_in, "-filter_complex", af_a, "-map", "[a]", "-ar", "48000", "-c:a", "pcm_s16le", str(mixed)])
+    run(["ffmpeg", "-y", "-i", str(video), "-i", str(mixed), "-filter_complex", vf, "-map", "[v]", "-map", "1:a",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out.name], cwd=workdir)
+    mixed.unlink(missing_ok=True)
 
 
 def validate(out: Path, expected_s: float, w: int, h: int) -> dict:

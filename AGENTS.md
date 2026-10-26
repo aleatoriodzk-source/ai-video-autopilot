@@ -13,3 +13,5 @@
 - Renderer style (agent/style_apply.py) resolves params with precedence: cost/safety lock > explicit user (edited scenes, sfx off, manual caption, settings.user_overrides) > v2 profile traits (measured high/medium; inferred only medium+, flagged) > legacy DNA > defaults; without a v2 profile the legacy path runs unchanged — keeps old productions working.
 - Production→style linking goes through src/lib/style-link.ts resolveStyleLink: only same user + same reference (via analyses) + v2 present, exactly one candidate, else no link; the agent bundle persists style_id only for never-rendered productions — prevents cross-user/cross-reference leaks and leaves old productions untouched.
 - Every agent file imported at runtime must also be in public/downloads/agente-estudio-windows.zip (root entries) — the Windows agent runs from that zip.
+- media.final_mix mixes audio to WAV in its own FFmpeg pass, then muxes with video — loudnorm in the same graph as video dropped ~3 s of audio (FFmpeg 8).
+- Renderer checks must measure the final MP4 (shots, decoded audio, burned captions), not the plan or the ASS file — receiving a parameter is not proof it was applied.

@@ -386,11 +386,12 @@ class Runner:
         import hashlib
         fps, crf = ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"]
         todo, reused = [], 0
+        ctx["job"] = job
         for sc in ctx["scenes"]:
             img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
             src = vid if vid.exists() else img
             dur = float(sc.get("duration_s") or 0)
-            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(self._scene_plan(ctx, sc) or {}).get('motion', {}).get('value')}|{self._plan(ctx)['cut_seconds']['value'] if self._plan(ctx)['profile_used'] else ''}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
+            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(self._scene_plan(ctx, sc) or {}).get('motion', {}).get('value')}|{self._plan(ctx)['cut_seconds']['value'] if self._plan(ctx)['profile_used'] else ''}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}|split2".encode()).hexdigest()
             out, mark = ctx["work"] / f"clip_{sc['idx']:03d}.mp4", ctx["work"] / f"clip_{sc['idx']:03d}.sig"
             if out.exists() and mark.exists() and mark.read_text() == sig:
                 reused += 1
@@ -444,7 +445,10 @@ class Runner:
             cut = float(ps.get("cut_seconds") or 0)
             if self._plan(ctx)["profile_used"]:
                 cut = float(self._plan(ctx)["cut_seconds"]["value"] or 0)
-            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
+            pieces, why = media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
+            ctx.setdefault("split_log", {})[sc["idx"]] = {"pieces": [round(p, 3) for p in pieces], "reason": why}
+            if cut:
+                self.log(ctx.get("job") or {}, f"cena {sc['idx'] + 1}: {why} → {[round(p, 2) for p in pieces]}", step="render")
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
