@@ -67,6 +67,7 @@ def test_zoom_detected_only_in_zoom_shot(ref):
     motions = {r["index"]: r["motion"]["value"] for r in ref["scene_rules"]}
     assert motions[1] == "zoom_in"
     assert motions[0] == "static"
+    assert motions[2] is None  # ruído sem movimento coerente: não analisado, não chutado
 
 
 def test_sound_hits_on_cuts(ref):
