@@ -5,6 +5,7 @@ import { channelAnalysisSchema, ideasSchema, postKitSchema, scriptSchema, shortA
 import { evaluateBudget } from "@/lib/costs";
 import { WORDS_PER_SECOND, countWords, effectiveTargetSeconds, isShortAspect, scriptIsShort } from "@/lib/duration";
 import { mergeSettings, type AppSettings } from "@/lib/settings";
+import { pickStructured, profileToSave } from "@/lib/style-link";
 
 type DB = SupabaseClient<Database>;
 
@@ -95,13 +96,15 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
   if (measured) (data as Record<string, unknown>)["measured"] = measured;
   await db.from("analyses").update({ status: "done", report: data as never, error: null }).eq("id", an.id);
   const ref = an.reference_sources as { title: string | null; urls: string[] } | null;
+  // GAP 1: perfil forense v2 medido pelo agente vai junto do legado (withStructured), sem perder campos antigos.
+  const structured = pickStructured(args.collected, { referenceId: an.reference_id, analysisId: an.id });
   const { data: style } = await db
     .from("style_profiles")
     .insert({
       user_id: userId,
       analysis_id: an.id,
       name: `Estilo — ${ref?.title ?? ref?.urls?.[0] ?? "referência"}`,
-      profile: data.style_profile as never,
+      profile: profileToSave(data.style_profile, structured) as never,
       edit_template: (isShort ? { scenes: (data as unknown as { scenes: unknown }).scenes } : {}) as never,
     })
     .select("id")
