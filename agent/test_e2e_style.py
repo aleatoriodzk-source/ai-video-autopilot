@@ -60,7 +60,9 @@ def e2e(tmp_path_factory):
     for i in range(N):
         _ff("-f", "lavfi", "-i", f"sine=frequency={300 + 40 * i}:duration={VOICE_S}", "-ar", "48000", "-ac", "1", str(work / f"voice_{i:03d}.wav"))
         if i in VIDEO_SCENES:
-            _ff("-f", "lavfi", "-i", f"testsrc2=s=1280x720:r=30:d=8,hue=H=t*0.8", "-pix_fmt", "yuv420p", str(work / f"vid_{i:03d}.mp4"))
+            # 0–4 s e 4–8 s com conteúdo estruturalmente diferente: um corte interno precisa ser visível ao detector
+            _ff("-f", "lavfi", "-i", "testsrc2=s=1280x720:r=30:d=4", "-f", "lavfi", "-i", "mandelbrot=s=1280x720:r=30,trim=duration=4",
+                "-filter_complex", "[0:v]setsar=1[a];[1:v]setsar=1,format=yuv420p[b];[a][b]concat=n=2:v=1[v]", "-map", "[v]", "-pix_fmt", "yuv420p", str(work / f"vid_{i:03d}.mp4"))
         else:
             _ff("-f", "lavfi", "-i", f"mandelbrot=s=1080x1920", "-frames:v", "1", str(work / f"img_{i:03d}.jpg"))
     api = FakeApi(d / "out")
@@ -146,26 +148,39 @@ def _env_db(x, win=2400):
 
 
 def test_sfx_audible_in_final_mix(e2e):
-    """Whoosh é gradual (sem pico brusco): mede energia acima de 1 kHz (a voz-tom de teste fica em 300–500 Hz; a
-    faixa sfx.wav medida tem pico -22 dBFS acima de 1 kHz e só -30 dBFS acima de 3 kHz, então 3 kHz subestima)
-    em janelas de 50 ms. Onde a faixa sfx.wav planejada tem som, o MP4 final deve ter agudos bem acima da base."""
+    """Whoosh é gradual (sem pico brusco), então não se procura salto de volume. Método: janelas de 50 ms com FFT do
+    MP4 final, removendo as frequências da voz-tom conhecida (fundamental e harmônicos ±40 Hz). A energia restante
+    (o que não é voz) é comparada entre as janelas onde sfx.wav tem som e o resto do vídeo; também se mede a
+    relação SFX/voz na mesma janela."""
     import numpy as np
     sfx = e2e["work"] / "sfx.wav"
     assert sfx.exists(), "faixa de SFX não foi gerada"
     plan = _env_db(_pcm(sfx))
-    final = _env_db(_pcm(e2e["final"], hp=1000))
-    n = min(len(plan), len(final))
-    plan, final = plan[:n], final[:n]
-    on = plan > plan.max() - 20
+    x = _pcm(e2e["final"])
+    win, sr = 2400, 48000
+    n = min(len(plan), len(x) // win)
+    freqs = np.fft.rfftfreq(win, 1 / sr)
+    rest, voice = np.zeros(n), np.zeros(n)
+    for k in range(n):
+        f0 = 300 + 40 * min(N - 1, int(k * 0.05 // VOICE_S))
+        spec = np.abs(np.fft.rfft(x[k * win:(k + 1) * win] * np.hanning(win))) ** 2
+        near = np.zeros_like(freqs, dtype=bool)
+        for h in range(1, 40):
+            near |= np.abs(freqs - h * f0) < 40
+        rest[k], voice[k] = 10 * np.log10(spec[~near].sum() + 1e-12), 10 * np.log10(spec[near].sum() + 1e-12)
+    on = plan[:n] > plan[:n].max() - 20
     assert on.any()
-    base = np.median(final[~on])
+    base = np.median(rest[~on])
     marks = []
     for k in np.flatnonzero(np.diff(np.r_[0, on.astype(int)]) == 1):
-        seg = final[k: k + int(on[k:].argmin() or n - k)]
-        marks.append({"t": round(k * 0.05, 2), "peak_db": round(float(seg.max()), 1), "rise_db": round(float(seg.max() - base), 1)})
-        marks[-1]["t"] = float(marks[-1]["t"])
-    print("\nSFX_AUDIO " + json.dumps({"base_hf_db": round(float(base), 1), "marks": marks}))
-    assert marks and all(m["rise_db"] >= 12 and m["peak_db"] > -45 for m in marks), marks
+        j = k + (int(np.argmin(on[k:])) or n - k)
+        m = k + int(np.argmax(rest[k:j]))
+        marks.append({"t": round(k * 0.05, 2), "dur_s": round((j - k) * 0.05, 2), "rise_db": round(float(rest[m] - base), 1),
+                      "sfx_vs_voice_db": round(float(rest[m] - voice[m]), 1)})
+    print("\nSFX_AUDIO " + json.dumps({"method": "FFT 50ms sem harmônicos da voz", "marks": marks}))
+    # presença objetiva: >= 10 dB acima do fundo não-voz; audibilidade relativa: no máximo 20 dB abaixo da voz
+    assert marks and all(m["rise_db"] >= 10 for m in marks), ("SFX não presente no MP4", marks)
+    assert all(m["sfx_vs_voice_db"] > -20 for m in marks), ("SFX presente, mas muito abaixo da voz", marks)
 
 
 def _frame(path, t):
@@ -201,7 +216,7 @@ def test_captions_visible_positioned_legible(e2e):
         t = (a + b) / 2
         f1, f0 = _frame(e2e["final"], t), _frame(pre, t)
         mask = np.abs(f1 - f0).sum(2) > 90
-        rows = np.flatnonzero(mask.sum(1) > 6)
+        rows = np.flatnonzero(mask.sum(1) > 720 * 0.03)  # ignora ruído de compressão esparso
         assert rows.size, ("legenda não aparece no quadro", t, text)
         y0, y1 = rows.min(), rows.max()
         cols = np.flatnonzero(mask[y0:y1 + 1].sum(0) > 0)
