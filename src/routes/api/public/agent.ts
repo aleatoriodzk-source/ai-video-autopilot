@@ -218,6 +218,22 @@ async function bundle(db: any, job: { production_id: string | null; reference_id
     const { data: p } = await db.from("productions").select("*, style_profiles(*)").eq("id", job.production_id).single();
     const { data: scenes } = await db.from("scenes").select("*").eq("production_id", job.production_id).order("idx");
     const { data: assets } = await db.from("assets").select("*").or(`production_id.eq.${job.production_id},and(production_id.is.null,source.eq.upload)`);
+    // GAP 2/3: produção sem style_id recebe o perfil v2 só se houver UM candidato do mesmo usuário e da mesma referência.
+    if (p && !p.style_id && p.reference_id) {
+      const { resolveStyleLink } = await import("@/lib/style-link");
+      const { data: cands } = await db.from("style_profiles").select("id,user_id,profile,analyses!inner(reference_id,user_id)").eq("user_id", p.user_id).eq("analyses.reference_id", p.reference_id);
+      const link = resolveStyleLink(p, cands ?? []);
+      out.style_link = { reason: link.reason, style_id: link.styleId, persisted: false };
+      if (link.styleId) {
+        p.style_profiles = (cands ?? []).find((c: any) => c.id === link.styleId);
+        // só grava em produção nova (nunca renderizada); antigas recebem o perfil apenas nesta entrega
+        if (!p.output_path) {
+          await db.from("productions").update({ style_id: link.styleId }).eq("id", p.id).eq("user_id", p.user_id).is("style_id", null);
+          p.style_id = link.styleId;
+          out.style_link.persisted = true;
+        }
+      }
+    } else if (p) out.style_link = { reason: p.style_id ? "already_linked" : "no_reference", style_id: p.style_id ?? null, persisted: false };
     out.production = p;
     out.scenes = scenes;
     out.assets = assets;
