@@ -225,6 +225,7 @@ class Runner:
         ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
                "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice"), "elevenlabs_key": bundle.get("elevenlabs_key"),
                "style_link": bundle.get("style_link")}
+        self.last_ctx = ctx  # inspeção/testes
         try:
             from style_apply import load_report
             for line in load_report(self._plan(ctx), prod, ctx.get("style_link")):
