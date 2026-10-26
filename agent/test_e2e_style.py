@@ -101,6 +101,17 @@ def test_final_mp4_integrity(e2e):
     assert r.stderr.strip() == "", r.stderr[:500]
 
 
+def test_final_audio_has_no_gaps(e2e):
+    """Áudio decodificado deve cobrir o vídeo inteiro (o ffprobe sozinho não pega buracos de timestamp)."""
+    x = _pcm(e2e["final"])
+    assert abs(len(x) / 48000 - N * VOICE_S) < 0.1, len(x) / 48000
+    for i in range(N):  # cada cena tem sua voz-tom no lugar certo
+        seg = x[int((i * VOICE_S + 1) * 48000): int((i * VOICE_S + 2) * 48000)]
+        import numpy as np
+        f = int(np.argmax(np.abs(np.fft.rfft(seg))))
+        assert abs(f - (300 + 40 * i)) <= 2, (i, f)
+
+
 def test_no_black_frames(e2e):
     r = subprocess.run(["ffmpeg", "-i", str(e2e["final"]), "-vf", "blackdetect=d=0.1:pix_th=0.10", "-an", "-f", "null", "-"], capture_output=True, text=True)
     assert "black_start" not in r.stderr, [l for l in r.stderr.splitlines() if "black_start" in l]

@@ -566,9 +566,19 @@ def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdi
         inputs += ["-i", str(sfx)]
         mix.append(f"[{n}:a]")
     af += f";{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0[a]" if len(mix) > 1 else ";[vo]anull[a]"
-    run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
+    # Áudio em passada separada: no FFmpeg 8, loudnorm no mesmo grafo que o vídeo perdia ~3 s de áudio
+    # (buraco nos timestamps AAC, medido no MP4 final). Mixar para WAV e depois juntar não perde nada.
+    mixed = workdir / f"{Path(out.name).stem}_mix.wav"
+    a_in = [x for x in inputs[2:]]
+    a_in = ["-i", str(voice), *a_in]
+    af_a = af.replace("[1:a]", "[0:a]", 1)
+    for k in range(2, n + 1):
+        af_a = af_a.replace(f"[{k}:a]", f"[{k - 1}:a]")
+    run(["ffmpeg", "-y", *a_in, "-filter_complex", af_a, "-map", "[a]", "-ar", "48000", "-c:a", "pcm_s16le", str(mixed)])
+    run(["ffmpeg", "-y", "-i", str(video), "-i", str(mixed), "-filter_complex", vf, "-map", "[v]", "-map", "1:a",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out.name], cwd=workdir)
+    mixed.unlink(missing_ok=True)
 
 
 def validate(out: Path, expected_s: float, w: int, h: int) -> dict:
