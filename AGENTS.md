@@ -15,3 +15,4 @@
 - Every agent file imported at runtime must also be in public/downloads/agente-estudio-windows.zip (root entries) — the Windows agent runs from that zip.
 - media.final_mix mixes audio to WAV in its own FFmpeg pass, then muxes with video — loudnorm in the same graph as video dropped ~3 s of audio (FFmpeg 8).
 - Renderer checks must measure the final MP4 (shots, decoded audio, burned captions), not the plan or the ASS file — receiving a parameter is not proof it was applied.
+- agent/audit.py compares the final MP4 (forensics) with the v2 reference in 7 dimensions without any fidelity score, and step_validate re-renders only failing scenes (max 2 attempts) by invalidating their clip cache; results go in productions.validation.audit (no schema change).

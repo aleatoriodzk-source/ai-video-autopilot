@@ -71,7 +71,7 @@ def e2e(tmp_path_factory):
     runner.production(job, ts["bundle"])
     finals = list((d / "out").glob("*.mp4"))
     assert finals, "nenhum MP4 final"
-    return {"ref": ref, "ts": ts, "api": api, "final": finals[0], "out": forensics.analyze(finals[0]), "probe": forensics.probe(finals[0]), "work": work}
+    return {"runner": runner, "job": job, "ref": ref, "ts": ts, "api": api, "final": finals[0], "out": forensics.analyze(finals[0]), "probe": forensics.probe(finals[0]), "work": work}
 
 
 def test_profile_persisted_with_legacy(e2e):
@@ -274,3 +274,44 @@ def test_report_measured_output(e2e):
            "probe": e2e["probe"]}
     print("\nE2E_REPORT " + json.dumps(rep, ensure_ascii=False, default=str))
     assert o["metrics"]["duration_s"]["basis"] == "measured"
+
+
+def _saved_validation(api):
+    v = [kw["fields"]["validation"] for a, kw in api.calls if a == "save_production" and "validation" in kw.get("fields", {})]
+    return v[-1] if v else None
+
+
+def test_audit_report_saved(e2e):
+    """Fase 4: relatório de aderência gravado em productions.validation.audit, sem porcentagem."""
+    v = _saved_validation(e2e["api"])
+    assert v and v["ok"] and "audit" in v, v
+    a = v["audit"]
+    keys = [d["key"] for d in a["dimensions"]]
+    assert keys == ["cut_rhythm", "motion", "captions", "av_sync", "framing", "media_fit", "speech_density"]
+    by = {d["key"]: d for d in a["dimensions"]}
+    print("\nAUDIT " + json.dumps({k: [d["status"], d["ref"], d["out"]] for k, d in by.items()}, ensure_ascii=False, default=str))
+    assert by["av_sync"]["status"] == "pass" and by["framing"]["status"] == "pass"
+    assert by["media_fit"]["status"] == "not_verified"
+    assert a["failing_scenes"] == [] and not {"score", "fidelity", "percent"} & set(a)
+
+
+def test_surgical_rerender_only_bad_scene(e2e):
+    """Estraga só o clipe da cena 3 (quadros pretos, assinatura mantida = cache 'acha' que está ok), remonta,
+    e confirma: a auditoria acha só a cena 3, re-renderiza só ela, e o MP4 novo passa."""
+    r, job = e2e["runner"], e2e["job"]
+    ctx = r.last_ctx
+    w = ctx["work"]
+    bad = w / "clip_002.mp4"
+    _ff("-f", "lavfi", "-i", f"color=black:s=720x1280:r=30:d={VOICE_S}", "-pix_fmt", "yuv420p", str(bad))
+    before = {p.name: p.stat().st_mtime_ns for p in w.glob("clip_*.mp4") if p.name != bad.name}
+    r.step_scenes(job, ctx)
+    r.step_render(job, ctx)
+    import audit as au
+    assert au.black_intervals(Path(ctx["final"])), "defeito não chegou ao MP4 (teste inválido)"
+    rep = r._audit_and_repair(job, ctx)
+    print("\nREPAIR " + json.dumps({"repairs": rep["repairs"], "result": rep.get("repair_result"), "failing": rep["failing_scenes"]}))
+    assert rep["repairs"] == [{"attempt": 1, "scenes": [2]}]
+    assert rep["repair_result"] == "resolvido" and rep["failing_scenes"] == []
+    after = {p.name: p.stat().st_mtime_ns for p in w.glob("clip_*.mp4") if p.name != bad.name}
+    assert before == after, "outras cenas foram re-renderizadas"
+    assert not au.black_intervals(Path(ctx["final"]))
