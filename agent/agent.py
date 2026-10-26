@@ -487,7 +487,7 @@ class Runner:
         kps = ctx["prod"].get("settings") or {}
         plan = self._plan(ctx)
         if plan["profile_used"]:
-            self.log(job, __import__("style_apply").summary(plan), step="render", data={"plan": plan})
+            self.log(job, __import__("style_apply").summary(plan), step="render")
             for lim in plan["limitations"]:
                 self.log(job, f"limitação: {lim}", step="render")
         if plan["profile_used"]:
