@@ -39,5 +39,5 @@ export function resolveStyleLink(prod: { user_id: string; style_id: string | nul
   );
   if (ok.length === 0) return { styleId: null, reason: "no_candidate" };
   if (ok.length > 1) return { styleId: null, reason: "ambiguous" };
-  return { styleId: ok[0].id, reason: "matched" };
+  return { styleId: ok[0]!.id, reason: "matched" };
 }
