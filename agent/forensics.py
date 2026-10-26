@@ -188,7 +188,7 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
             if ok.sum() >= 8:
                 m, inl = cv2.estimateAffinePartial2D(p1[ok], p2[ok])
                 # Exige consenso: ruído/grão gera pontos sem movimento coerente.
-                if m is not None and inl is not None and int(inl.sum()) >= 15 and inl.mean() >= 0.6:
+                if m is not None and inl is not None and int(inl.sum()) >= 10 and inl.mean() >= 0.5:
                     scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
                     tx = float(m[0, 2]) / g1.shape[1]
                     zr, pr = (scale - 1) / gap, tx / gap  # por segundo
