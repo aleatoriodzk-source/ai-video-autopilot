@@ -569,8 +569,7 @@ def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdi
     # Áudio em passada separada: no FFmpeg 8, loudnorm no mesmo grafo que o vídeo perdia ~3 s de áudio
     # (buraco nos timestamps AAC, medido no MP4 final). Mixar para WAV e depois juntar não perde nada.
     mixed = workdir / f"{Path(out.name).stem}_mix.wav"
-    a_in = [x for x in inputs[2:]]
-    a_in = ["-i", str(voice), *a_in]
+    a_in = inputs[2:]  # voz, música (opcional) e SFX, sem o vídeo
     af_a = af.replace("[1:a]", "[0:a]", 1)
     for k in range(2, n + 1):
         af_a = af_a.replace(f"[{k}:a]", f"[{k - 1}:a]")
