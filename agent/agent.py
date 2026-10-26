@@ -386,11 +386,12 @@ class Runner:
         import hashlib
         fps, crf = ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"]
         todo, reused = [], 0
+        ctx["job"] = job
         for sc in ctx["scenes"]:
             img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
             src = vid if vid.exists() else img
             dur = float(sc.get("duration_s") or 0)
-            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(self._scene_plan(ctx, sc) or {}).get('motion', {}).get('value')}|{self._plan(ctx)['cut_seconds']['value'] if self._plan(ctx)['profile_used'] else ''}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}".encode()).hexdigest()
+            sig = hashlib.md5(f"{src.name}|{src.stat().st_size if src.exists() else 0}|{src.read_bytes()[:65536] if src.exists() else b''}|{dur:.3f}|{sc.get('motion')}|{(self._scene_plan(ctx, sc) or {}).get('motion', {}).get('value')}|{self._plan(ctx)['cut_seconds']['value'] if self._plan(ctx)['profile_used'] else ''}|{(ctx['prod'].get('settings') or {}).get('frame_mix')}|{ctx['w']}x{ctx['h']}|{fps}|{crf}|split2".encode()).hexdigest()
             out, mark = ctx["work"] / f"clip_{sc['idx']:03d}.mp4", ctx["work"] / f"clip_{sc['idx']:03d}.sig"
             if out.exists() and mark.exists() and mark.read_text() == sig:
                 reused += 1
