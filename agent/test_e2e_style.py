@@ -229,7 +229,17 @@ def test_captions_visible_positioned_legible(e2e):
         mask = np.abs(f1 - f0).sum(2) > 90
         rows = np.flatnonzero(mask.sum(1) > 720 * 0.03)  # ignora ruído de compressão esparso
         assert rows.size, ("legenda não aparece no quadro", t, text)
-        y0, y1 = rows.min(), rows.max()
+        # bloco contínuo de linhas com mais diferença (ruído de recompressão fica fora)
+        groups, cur = [], [rows[0]]
+        for r in rows[1:]:
+            if r - cur[-1] <= 3:
+                cur.append(r)
+            else:
+                groups.append(cur)
+                cur = [r]
+        groups.append(cur)
+        best = max(groups, key=lambda g: mask[g[0]:g[-1] + 1].sum())
+        y0, y1 = best[0], best[-1]
         cols = np.flatnonzero(mask[y0:y1 + 1].sum(0) > 0)
         reg = f1[y0:y1 + 1, cols.min():cols.max() + 1]
         lum = reg.mean(2)
