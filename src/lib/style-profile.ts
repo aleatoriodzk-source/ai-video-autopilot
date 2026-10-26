@@ -187,12 +187,12 @@ export function parseStructured(raw: Obj): StructuredStyleProfile {
   };
   p.audio = { music_mood: readTrait(a.music_mood, strOr), music_volume_db: readTrait(a.music_volume_db, numOr), sfx_kinds: readTrait(a.sfx_kinds, strArr) };
   p.narrative = { tone: readTrait(n.tone, strOr), hook_patterns: readTrait(n.hook_patterns, strArr), structure: readTrait(n.structure, strArr), cta_style: readTrait(n.cta_style, strOr) };
-  p.timeline = (Array.isArray(raw.timeline) ? raw.timeline : []).filter(isObj).flatMap((e) => {
+  p.timeline = (Array.isArray(raw.timeline) ? raw.timeline : []).filter(isObj).flatMap((e: Obj) => {
     const s = numOr(e.start_s), en = numOr(e.end_s);
     if (s == null || en == null || en < s || s < 0) return [];
     return [{ start_s: s, end_s: en, kind: (strOr(e.kind) ?? "other") as TimelineEvent["kind"], data: isObj(e.data) ? e.data : {}, basis: BASES.includes(e.basis as Basis) ? (e.basis as Basis) : "inferred" }];
   });
-  p.scene_rules = (Array.isArray(raw.scene_rules) ? raw.scene_rules : []).filter(isObj).flatMap((r) => {
+  p.scene_rules = (Array.isArray(raw.scene_rules) ? raw.scene_rules : []).filter(isObj).flatMap((r: Obj) => {
     const index = numOr(r.index);
     if (index == null || index < 0) return [];
     return [{
@@ -200,7 +200,7 @@ export function parseStructured(raw: Obj): StructuredStyleProfile {
       transition_in: readTrait(r.transition_in, strOr), caption_style: readTrait(r.caption_style, strOr), sfx: readTrait(r.sfx, strOr), media_kind: readTrait(r.media_kind, strOr),
     }];
   });
-  p.limitations = (Array.isArray(raw.limitations) ? raw.limitations : []).filter(isObj).flatMap((l) => {
+  p.limitations = (Array.isArray(raw.limitations) ? raw.limitations : []).filter(isObj).flatMap((l: Obj) => {
     const feature = strOr(l.feature);
     return feature ? [{ feature, reason: (strOr(l.reason) ?? "other") as Limitation["reason"], note: strOr(l.note) ?? "" }] : [];
   });
