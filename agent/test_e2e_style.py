@@ -174,8 +174,14 @@ def test_sfx_audible_in_final_mix(e2e):
     k_n = n // win
     F = np.abs(np.fft.rfft(x[:k_n * win].reshape(k_n, win) * np.hanning(win), axis=1)) ** 2
     C = np.abs(np.fft.rfft(c[:k_n * win].reshape(k_n, win) * np.hanning(win), axis=1)) ** 2
+    plan = _env_db(_pcm(sfx))[:k_n]
+    off = plan <= plan.max() - 20
+    # ganho global único (mono×estéreo do amix muda o nível da voz): calibrado só fora das marcas de SFX
+    g = float(np.median(F[off].sum(1) / (C[off].sum(1) + 1e-9)))
+    C = C * g
     res = 10 * np.log10(np.clip(F - C, 0, None).sum(1) + 1e-6)
-    voice, plan = 10 * np.log10(C.sum(1) + 1e-6), _env_db(_pcm(sfx))
+    voice = 10 * np.log10(C.sum(1) + 1e-6)
+    print(f"\nSFX_GAIN_CAL {10 * np.log10(g):.2f} dB")
     m = min(len(res), len(plan))
     res, voice, plan = res[:m], voice[:m], plan[:m]
     on = plan > plan.max() - 20
