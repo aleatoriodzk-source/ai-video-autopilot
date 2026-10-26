@@ -223,7 +223,14 @@ class Runner:
         work = Path(self.cfg["work_dir"]) / prod["id"]
         work.mkdir(parents=True, exist_ok=True)
         ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
-               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice"), "elevenlabs_key": bundle.get("elevenlabs_key")}
+               "source_reference": bundle.get("source_reference") or bundle.get("reference"), "voice": bundle.get("voice"), "elevenlabs_key": bundle.get("elevenlabs_key"),
+               "style_link": bundle.get("style_link")}
+        try:
+            from style_apply import load_report
+            for line in load_report(self._plan(ctx), prod, ctx.get("style_link")):
+                self.log(job, line, step="style")
+        except Exception as err:
+            self.log(job, f"relatório do perfil v2 indisponível: {str(err)[:200]}", "warn", step="style")
 
         for i, step in enumerate(STEPS):
             if step in done:
@@ -486,8 +493,8 @@ class Runner:
         durs = [media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav") for sc in ctx["scenes"]]
         kps = ctx["prod"].get("settings") or {}
         plan = self._plan(ctx)
+        self.log(job, __import__("style_apply").summary(plan) if plan["profile_used"] else "plano de estilo — sem perfil v2: caminho legado", step="render")
         if plan["profile_used"]:
-            self.log(job, __import__("style_apply").summary(plan), step="render")
             for lim in plan["limitations"]:
                 self.log(job, f"limitação: {lim}", step="render")
         if plan["profile_used"]:

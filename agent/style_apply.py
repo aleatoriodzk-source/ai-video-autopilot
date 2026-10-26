@@ -174,3 +174,31 @@ def summary(plan: dict) -> str:
              f"sfx {plan['sfx']['value']['mode']} ({plan['sfx']['source']})"]
     parts += [f"{k}: {'/'.join(sorted(v))}" for k, v in srcs.items()]
     return "plano de estilo — " + "; ".join(parts)
+
+
+def load_report(plan: dict, prod: dict, link: dict | None = None) -> list[str]:
+    """Linhas de log: se o perfil v2 foi carregado, de onde veio e o que foi realmente aplicado.
+    Só repete rótulos que existem no perfil (basis/confiança categórica); nenhuma porcentagem é calculada."""
+    row = prod.get("style_profiles") or {}
+    st = structured_of(row)
+    origin = (link or {}).get("reason") or ("already_linked" if prod.get("style_id") else "none")
+    if not plan["profile_used"] or not st:
+        return [f"perfil v2: NÃO carregado (style_id={prod.get('style_id')}, associação={origin}); renderização pelo caminho legado"]
+    src = st.get("source") or {}
+    lines = [f"perfil v2: carregado — style_id={row.get('id') or prod.get('style_id')}, associação={origin}"
+             f"{' (gravada)' if (link or {}).get('persisted') else ''}, referência={src.get('reference_id')}, análise={src.get('analysis_id')}"]
+    applied = []
+    for k in ("cut_seconds", "caption", "sfx"):
+        d = plan[k]
+        if d["source"] == "profile":
+            v = d["value"] if k == "cut_seconds" else (d["value"].get("style") if k == "caption" else f"{d['value'].get('mode')} ({len(d['value'].get('kit') or [])} marcas)")
+            applied.append(f"{k}={v} [{d['basis']}]")
+    for k in ("motion", "transition"):
+        vals = [f"{x['idx']}:{x[k]['value']}" for x in plan["scenes"] if x[k]["source"] == "profile"]
+        if vals:
+            applied.append(f"{k} por cena ({len(vals)}/{len(plan['scenes'])}) " + ", ".join(vals))
+    lines.append("aplicado do perfil: " + ("; ".join(applied) if applied else "nada (nenhum traço com evidência suficiente)"))
+    not_applied = [f"{k}←{plan[k]['source']}" for k in ("cut_seconds", "caption", "sfx") if plan[k]["source"] != "profile"]
+    if not_applied:
+        lines.append("não veio do perfil: " + ", ".join(not_applied))
+    return lines
