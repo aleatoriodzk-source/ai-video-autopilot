@@ -285,7 +285,7 @@ function Producoes() {
 }
 
 type AuditDim = { key: string; label: string; status: "pass" | "deviation" | "not_verified"; ref: unknown; out: unknown; tolerance: string | null; note: string };
-type Audit = { dimensions: AuditDim[]; failing_scenes: number[]; summary: Record<string, number>; repairs?: { attempt: number; scenes: number[] }[]; repair_result?: string };
+type Audit = { dimensions: AuditDim[]; failing_scenes: number[]; summary: { pass?: number; deviation?: number; not_verified?: number }; repairs?: { attempt: number; scenes: number[] }[]; repair_result?: string };
 
 const STATUS_LABEL: Record<AuditDim["status"], string> = { pass: "dentro", deviation: "fora", not_verified: "não verificado" };
 const fmt = (v: unknown) => (v == null ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
