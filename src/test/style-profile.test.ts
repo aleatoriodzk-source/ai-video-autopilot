@@ -66,8 +66,8 @@ describe("perfil v2", () => {
 describe("compatibilidade de gravação", () => {
   it("mantém campos legados intactos ao acrescentar o perfil estruturado", () => {
     const out = withStructured(legacy, fromLegacy(legacy));
-    expect(out.captions).toEqual(legacy.captions);
-    expect(out.pacing).toEqual(legacy.pacing);
+    expect(out["captions"]).toEqual(legacy.captions);
+    expect(out["pacing"]).toEqual(legacy.pacing);
     expect(readStyleProfile(out).source.migrated_from_legacy).toBe(true);
   });
 });

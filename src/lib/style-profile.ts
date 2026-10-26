@@ -212,7 +212,7 @@ export function parseStructured(raw: Obj): StructuredStyleProfile {
  */
 export function readStyleProfile(raw: unknown): StructuredStyleProfile {
   if (isV2(raw)) return parseStructured(raw);
-  if (isObj(raw) && isObj(raw.structured) && isV2(raw.structured)) return parseStructured(raw.structured);
+  if (isObj(raw) && isObj(raw["structured"]) && isV2(raw["structured"])) return parseStructured(raw["structured"]);
   return fromLegacy(raw);
 }
 
@@ -221,6 +221,6 @@ export function readStyleProfile(raw: unknown): StructuredStyleProfile {
  * e acrescentando o perfil estruturado em `structured`.
  */
 export function withStructured(legacy: unknown, structured: StructuredStyleProfile): Record<string, unknown> {
-  const base = isObj(legacy) && !isV2(legacy) ? { ...legacy } : {};
+  const base: Obj = isObj(legacy) && !isV2(legacy) ? { ...(legacy as Obj) } : {};
   return { ...base, structured };
 }
