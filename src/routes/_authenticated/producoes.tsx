@@ -61,7 +61,7 @@ function Producoes() {
   const { data: voices } = useQuery({ queryKey: ["voices"], queryFn: async () => (await supabase.from("voices").select("id,name,status")).data ?? [] });
   const { data: prods } = useQuery({
     queryKey: ["prods"],
-    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path,versions").order("created_at", { ascending: false })).data ?? [],
+    queryFn: async () => (await supabase.from("productions").select("id,title,topic,aspect,mode,status,script,reference_id,created_at,settings,preview_path,output_path,versions,validation").order("created_at", { ascending: false })).data ?? [],
     refetchInterval: 10_000,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["prods"] });
@@ -257,6 +257,7 @@ function Producoes() {
                   <StatusBadge status={p.status} />
                 </div>
                 {p.status !== "draft" && <JobStatus productionId={p.id} />}
+                {(p.validation as { audit?: Audit } | null)?.audit ? <AuditReport audit={(p.validation as { audit: Audit }).audit} /> : null}
                 {p.preview_path ? <Versions current={p.preview_path} versions={(p.versions as Version[] | null) ?? []} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
                   <button disabled={b} className={btn} onClick={() => script(p.id)}>{s ? "Refazer roteiro" : "Gerar roteiro"}</button>
@@ -279,6 +280,39 @@ function Producoes() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+type AuditDim = { key: string; label: string; status: "pass" | "deviation" | "not_verified"; ref: unknown; out: unknown; tolerance: string | null; note: string };
+type Audit = { dimensions: AuditDim[]; failing_scenes: number[]; summary: Record<string, number>; repairs?: { attempt: number; scenes: number[] }[]; repair_result?: string };
+
+const STATUS_LABEL: Record<AuditDim["status"], string> = { pass: "dentro", deviation: "fora", not_verified: "não verificado" };
+const fmt = (v: unknown) => (v == null ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
+
+/** Relatório de aderência técnica (Fase 4): medido no MP4 final, sem nota de fidelidade. */
+function AuditReport({ audit }: { audit: Audit }) {
+  const [openR, setOpenR] = useState(false);
+  const s = audit.summary ?? {};
+  return (
+    <div className="rounded-md border border-border p-2 text-xs">
+      <button className="w-full text-left font-medium" onClick={() => setOpenR(!openR)}>
+        Aderência técnica: {s.pass ?? 0} dentro · {s.deviation ?? 0} fora · {s.not_verified ?? 0} não verificados {openR ? "▲" : "▼"}
+      </button>
+      {openR ? (
+        <div className="mt-2 space-y-1">
+          {audit.dimensions.map((d) => (
+            <div key={d.key} className="flex flex-wrap gap-x-2">
+              <span className={d.status === "pass" ? "text-primary" : d.status === "deviation" ? "text-destructive" : "text-muted-foreground"}>[{STATUS_LABEL[d.status]}]</span>
+              <span className="font-medium">{d.label}</span>
+              <span className="text-muted-foreground">referência {fmt(d.ref)} · resultado {fmt(d.out)}{d.tolerance ? ` · tolerância ${d.tolerance}` : ""}</span>
+              {d.note ? <span className="w-full text-muted-foreground">{d.note}</span> : null}
+            </div>
+          ))}
+          {audit.repairs?.length ? <div>Correção por cena: {audit.repairs.map((r) => `tentativa ${r.attempt}: cena(s) ${r.scenes.map((i) => i + 1).join(", ")}`).join(" · ")} — {audit.repair_result}</div> : null}
+          {audit.failing_scenes.length ? <div className="text-destructive">Cenas ainda com defeito: {audit.failing_scenes.map((i) => i + 1).join(", ")}</div> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
