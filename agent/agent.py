@@ -444,7 +444,10 @@ class Runner:
             cut = float(ps.get("cut_seconds") or 0)
             if self._plan(ctx)["profile_used"]:
                 cut = float(self._plan(ctx)["cut_seconds"]["value"] or 0)
-            media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
+            pieces, why = media.video_clip(vid, dur, ctx["w"], ctx["h"], fps, out, crf, cut, frame)
+            ctx.setdefault("split_log", {})[sc["idx"]] = {"pieces": [round(p, 3) for p in pieces], "reason": why}
+            if cut:
+                self.log(ctx.get("job") or {}, f"cena {sc['idx'] + 1}: {why} → {[round(p, 2) for p in pieces]}", step="render")
             return
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
