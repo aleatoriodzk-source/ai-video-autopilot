@@ -152,21 +152,6 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
         sat.append(float(hsv[..., 1].mean()))
         gray = cv2.cvtColor(mid, cv2.COLOR_BGR2GRAY)
         contrast.append(float(gray.std()))
-        # Movimento: transformação afim entre início e fim do plano.
-        g1, g2 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY), cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
-        kind, scale, tx = "unknown", None, None
-        p1 = cv2.goodFeaturesToTrack(g1, 200, 0.01, 8)
-        if p1 is not None and len(p1) >= 10 and L >= 0.4:
-            p2, st, _ = cv2.calcOpticalFlowPyrLK(g1, g2, p1, None)
-            ok = st.flatten() == 1
-            if ok.sum() >= 8:
-                m, _ = cv2.estimateAffinePartial2D(p1[ok], p2[ok])
-                if m is not None:
-                    scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
-                    tx = float(m[0, 2]) / g1.shape[1]
-                    kind = "zoom_in" if scale > 1.03 else "zoom_out" if scale < 0.97 else "pan_left" if tx < -0.04 else "pan_right" if tx > 0.04 else "static"
-        motions.append({"start_s": a, "end_s": b, "kind": kind,
-                        "zoom_per_s": round((scale - 1) / max(L, 0.1), 4) if scale else None, "pan_per_s": round(tx / max(L, 0.1), 4) if tx is not None else None})
         # Legenda: faixa horizontal com texto claro contornado por escuro (heurística local).
         hb = gray.shape[0] // 10
         best, best_score = None, 0.0
@@ -185,6 +170,24 @@ def visual_pass(video: Path, shots: list[tuple[float, float]], cuts: list[float]
             pix = mid[best * hb:(best + 1) * hb][bm]
             if len(pix):
                 text_colors.append(pix.mean(axis=0))
+        # Movimento: transformação afim entre início e fim do plano.
+        g1, g2 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY), cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
+        kind, scale, tx = "unknown", None, None
+        mask = np.full(g1.shape, 255, np.uint8)
+        if best is not None and best_score > 0.012:  # ignora legenda/overlay fixo, que puxaria para 'parado'
+            mask[max(0, (best - 1) * hb):(best + 2) * hb] = 0
+        p1 = cv2.goodFeaturesToTrack(g1, 300, 0.01, 8, mask=mask)
+        if p1 is not None and len(p1) >= 10 and L >= 0.4:
+            p2, st, _ = cv2.calcOpticalFlowPyrLK(g1, g2, p1, None)
+            ok = st.flatten() == 1
+            if ok.sum() >= 8:
+                m, _ = cv2.estimateAffinePartial2D(p1[ok], p2[ok])
+                if m is not None:
+                    scale = float(np.sqrt(m[0, 0] ** 2 + m[0, 1] ** 2))
+                    tx = float(m[0, 2]) / g1.shape[1]
+                    kind = "zoom_in" if scale > 1.03 else "zoom_out" if scale < 0.97 else "pan_left" if tx < -0.04 else "pan_right" if tx > 0.04 else "static"
+        motions.append({"start_s": a, "end_s": b, "kind": kind,
+                        "zoom_per_s": round((scale - 1) / max(L, 0.1), 4) if scale else None, "pan_per_s": round(tx / max(L, 0.1), 4) if tx is not None else None})
     trans = []
     for c in cuts[:400]:
         before, at, after = grab(c - 0.25), grab(c + 0.02), grab(c + 0.3)
