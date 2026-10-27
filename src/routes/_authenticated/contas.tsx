@@ -53,8 +53,17 @@ function Contas() {
   }
 
   async function unlink(platform: string, path: string) {
-    await supabase.storage.from("media").remove([path]);
+    if (!path.startsWith("browser:")) await supabase.storage.from("media").remove([path]);
     await supabase.from("linked_accounts").delete().eq("platform", platform);
+    qc.invalidateQueries({ queryKey: ["linked"] });
+  }
+
+  async function connectBrowser(platform: "youtube" | "tiktok" | "google", browser: string) {
+    if (!browser) return;
+    const { data: u } = await supabase.auth.getUser();
+    const { error } = await supabase.from("linked_accounts").upsert({ user_id: u.user!.id, platform, cookies_path: `browser:${browser}`, label: `Navegador ${browser}`, updated_at: new Date().toISOString() }, { onConflict: "user_id,platform" });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Conectado! O agente vai usar sua conta logada nesse navegador (reabra o run.bat).");
     qc.invalidateQueries({ queryKey: ["linked"] });
   }
 
@@ -80,8 +89,8 @@ function Contas() {
     <div>
       <PageHeader title="Contas e Explorador" subtitle="Vincule suas contas para o agente baixar sem bloqueio de robô, e busque vídeos de referência sem sair do estúdio." />
       <div className="panel mb-4 space-y-2 p-4 text-xs text-muted-foreground">
-        <p><b className="text-foreground">Como vincular (2 minutos):</b> no Chrome, instale a extensão <b>"Get cookies.txt LOCALLY"</b>, entre no YouTube (ou TikTok) com a conta que quiser usar, clique na extensão e em <b>Export</b>. Envie o arquivo aqui.</p>
-        <p>YouTube e TikTok não oferecem um botão oficial de "baixar vídeos" para apps, por isso a ligação é pela sua sessão. O arquivo fica guardado só na sua conta e é usado pelo agente no seu PC. Recomendo usar uma conta secundária. Se a sessão vencer, é só enviar de novo.</p>
+        <p><b className="text-foreground">Conexão direta (recomendado):</b> entre no YouTube, TikTok e Google no navegador do seu PC e escolha esse navegador abaixo. O agente usa a sua conta logada direto, sem arquivo. Firefox e Edge funcionam melhor; no Chrome, feche o navegador antes de abrir o run.bat.</p>
+        <p>Sua sessão nunca sai do seu computador. Recomendo uma conta secundária. Se preferir, ainda dá para enviar um cookies.txt manual.</p>
       </div>
       <div className="mb-6 grid gap-3 md:grid-cols-2">
         {(["youtube", "tiktok", "google"] as const).map((p) => {
@@ -89,10 +98,18 @@ function Contas() {
           return (
             <div key={p} className="panel space-y-2 p-4 text-sm">
               <b>{p === "youtube" ? "YouTube" : p === "google" ? "Google (busca de imagens)" : "TikTok"}</b>
-              <p className="text-xs text-muted-foreground">{a ? `Vinculada (${a.label ?? "cookies.txt"}) em ${new Date(a.updated_at).toLocaleString("pt-BR")}` : "Não vinculada"}</p>
+              <p className="text-xs text-muted-foreground">{a ? `Conectada (${a.label ?? "cookies.txt"}) em ${new Date(a.updated_at).toLocaleString("pt-BR")}` : "Não conectada"}</p>
               <div className="flex flex-wrap gap-2">
+                <select className={btn} value={a?.cookies_path.startsWith("browser:") ? a.cookies_path.slice(8) : ""} onChange={(e) => connectBrowser(p, e.target.value)}>
+                  <option value="">Conectar pelo navegador…</option>
+                  <option value="chrome">Google Chrome</option>
+                  <option value="edge">Microsoft Edge</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="brave">Brave</option>
+                  <option value="opera">Opera</option>
+                </select>
                 <label className={btn + " cursor-pointer"}>
-                  {a ? "Trocar arquivo" : "Enviar cookies.txt"}
+                  {a ? "Usar cookies.txt" : "Enviar cookies.txt"}
                   <input type="file" accept=".txt,text/plain" className="hidden" onChange={(e) => uploadCookies(p, e.target.files?.[0])} />
                 </label>
                 {a && <button className={btn} onClick={() => unlink(p, a.cookies_path)}>Desvincular</button>}
