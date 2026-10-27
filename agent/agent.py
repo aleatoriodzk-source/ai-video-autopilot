@@ -11,6 +11,7 @@ import json
 import platform
 import random
 import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -117,14 +118,30 @@ class Runner:
     def load_cookies(self):
         import analyzer
         try:
-            urls = self.api.call("cookies").get("cookies") or {}
+            res = self.api.call("cookies")
         except Exception:
             return
+        urls = res.get("cookies") or {}
+        browsers = res.get("browsers") or {}
         d = ROOT / "cookies"
         d.mkdir(exist_ok=True)
+        probe = {"youtube": "https://www.youtube.com/", "tiktok": "https://www.tiktok.com/", "google": "https://www.google.com/"}
         for plat in ("youtube", "tiktok", "google"):
             f = d / f"{plat}.txt"
-            if plat in urls:
+            if plat in browsers:
+                # Conexão direta: exporta a sessão do navegador do PC para o mesmo cookies.txt usado por todo o agente.
+                try:
+                    p = subprocess.run(["yt-dlp", "--cookies-from-browser", browsers[plat], "--cookies", str(f),
+                                        "--skip-download", "--flat-playlist", "--playlist-items", "0", probe[plat]],
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+                    if f.exists() and f.stat().st_size > 100:
+                        analyzer.COOKIES[plat] = f
+                        print(f"conta {plat}: conectada pela sessão do {browsers[plat]}")
+                    else:
+                        print(f"conta {plat}: não consegui ler o {browsers[plat]} (feche o navegador e tente de novo). {p.stderr[-300:]}")
+                except Exception as e:
+                    print(f"conta {plat} ({browsers[plat]}): {e}")
+            elif plat in urls:
                 try:
                     r = requests.get(urls[plat], timeout=60)
                     r.raise_for_status()
