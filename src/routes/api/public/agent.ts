@@ -188,11 +188,15 @@ export const Route = createFileRoute("/api/public/agent")({
               // Arquivos de sessão (cookies.txt) que o usuário enviou para YouTube/TikTok.
               const { data } = await db.from("linked_accounts").select("platform,cookies_path").eq("user_id", userId);
               const out: Record<string, string> = {};
+              const browsers: Record<string, string> = {};
               for (const a of data ?? []) {
+                // "browser:<nome>" = conexão direta pela sessão do navegador do PC (sem arquivo).
+                const m = /^browser:(chrome|edge|brave|firefox|opera|vivaldi)$/.exec(a.cookies_path);
+                if (m) { browsers[a.platform] = m[1]; continue; }
                 const { data: s } = await db.storage.from("media").createSignedUrl(a.cookies_path, 600);
                 if (s) out[a.platform] = s.signedUrl;
               }
-              return json({ cookies: out });
+              return json({ cookies: out, browsers });
             }
             case "ai_match_shots": {
               const job = await ownJob(body.job_id);
