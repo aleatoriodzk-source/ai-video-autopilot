@@ -116,7 +116,10 @@ export async function runAnalysis(db: DB, userId: string, args: { analysisId: st
 export function measureReference(collected: unknown): { avg_duration_s: number; avg_words: number | null; words_per_second: number | null; videos: number } | null {
   const vs = ((collected as { videos?: { duration_s?: number; transcript?: { text: string }[] }[] } | null)?.videos ?? []).filter((v) => Number(v.duration_s) > 0);
   if (!vs.length) return null;
-  const avgDur = vs.reduce((a, v) => a + Number(v.duration_s), 0) / vs.length;
+  // Canal de vídeos longos: vídeos curtos avulsos não puxam a média para baixo.
+  const longs = vs.filter((v) => Number(v.duration_s) >= 480);
+  const base = longs.length ? longs : vs;
+  const avgDur = base.reduce((a, v) => a + Number(v.duration_s), 0) / base.length;
   const withText = vs.filter((v) => (v.transcript ?? []).length > 3);
   const words = withText.map((v) => (v.transcript ?? []).reduce((a, t) => a + t.text.split(/\s+/).filter(Boolean).length, 0));
   const avgWords = words.length ? words.reduce((a, b) => a + b, 0) / words.length : null;
