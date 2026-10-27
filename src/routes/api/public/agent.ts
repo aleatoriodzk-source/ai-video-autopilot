@@ -192,7 +192,7 @@ export const Route = createFileRoute("/api/public/agent")({
               for (const a of data ?? []) {
                 // "browser:<nome>" = conexão direta pela sessão do navegador do PC (sem arquivo).
                 const m = /^browser:(chrome|edge|brave|firefox|opera|vivaldi)$/.exec(a.cookies_path);
-                if (m) { browsers[a.platform] = m[1]; continue; }
+                if (m) { browsers[a.platform] = m[1] ?? ""; continue; }
                 const { data: s } = await db.storage.from("media").createSignedUrl(a.cookies_path, 600);
                 if (s) out[a.platform] = s.signedUrl;
               }
