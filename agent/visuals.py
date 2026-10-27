@@ -526,7 +526,62 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     return None
 
 
+def _master_pack(runner, job, topic: str, work: Path) -> dict | None:
+    """Baixa 1 vídeo-mestre do tema (compilado/cenas) e detecta os cortes reais com FFmpeg."""
+    import re as _re, subprocess
+    from analyzer import _ytdlp
+    try:
+        data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch6:{topic} cenas compilado"]))
+    except Exception as e:
+        runner.log(job, f"vídeo-mestre: busca falhou ({str(e)[:120]})", "warn", "visuals")
+        return None
+    out = work / "master.mp4"
+    for e in data.get("entries") or []:
+        vid, dur = e.get("id"), e.get("duration") or 0
+        if not vid or (dur and (dur < 60 or dur > 900)):
+            continue
+        try:
+            out.unlink(missing_ok=True)
+            _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
+                    "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
+        except Exception as ex:
+            runner.log(job, f"vídeo-mestre {vid}: {str(ex)[:120]}", "warn", "visuals")
+            continue
+        if not out.exists() or out.stat().st_size < 100000:
+            continue
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
+                           capture_output=True, text=True)
+        cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
+        dur = float(dur or (cuts[-1] if cuts else 0))
+        pts = [0.0] + cuts
+        # trechos entre cortes; ignora abertura/créditos (primeiros/últimos 5%)
+        shots = [(a, b) for a, b in zip(pts, pts[1:] + [dur]) if b - a >= 1.0 and a > dur * 0.05 and b < dur * 0.95]
+        runner.log(job, f"vídeo-mestre: {e.get('title', '')[:80]} — {len(shots)} tomadas detectadas", step="visuals")
+        if shots:
+            return {"path": out, "shots": shots, "used": set(), "vid": vid, "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
+    return None
+
+
+def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict | None:
+    """Fatia o mestre em tomadas inteiras (sem esticar clipes curtos); até 3 tentativas locais."""
+    import subprocess
+    need = _scene_secs(sc)
+    free = [s for s in m["shots"] if s not in m["used"]]
+    # prefere tomadas que cubram a fala sozinhas; senão as mais longas
+    free.sort(key=lambda s: (s[1] - s[0] < need, -(s[1] - s[0])))
+    for a, b in free[:3]:
+        m["used"].add((a, b))
+        start = a + 0.1
+        vout.unlink(missing_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(m["path"]),
+                        "-t", f"{min(need, b - start) if b - start >= need * 0.6 else need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
+        if vout.exists() and vout.stat().st_size > 20000 and vision_ok(runner, job, vout, sc, prod):
+            return {"id": f"master:{m['vid']}:{start:.1f}", "page": f"https://www.youtube.com/watch?v={m['vid']}&t={int(start)}"}
+    return None
+
+
 def pick_visuals(runner, job, ctx) -> None:
+
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
     w, h = ctx["w"], ctx["h"]
     orientation = "portrait" if h > w else "landscape" if w > h else "square"
@@ -538,6 +593,8 @@ def pick_visuals(runner, job, ctx) -> None:
     yt_used: set = set()
     ai_used = 0
     topic = prod.get("topic") or prod.get("title") or ""
+    image_only = bool((prod.get("settings") or {}).get("image_only"))
+    master = None
     total = len(ctx["scenes"])
     for n_sc, sc in enumerate(ctx["scenes"], 1):
         print(f"[visuals] cena {n_sc} de {total}")
@@ -559,7 +616,19 @@ def pick_visuals(runner, job, ctx) -> None:
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
         q0 = sc.get("visual_query") or sc["narration"][:60]
-        if is_pop(q0, topic) or (prod.get("settings") or {}).get("image_only"):
+        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True):
+            master = _master_pack(runner, job, topic, work) or False
+        # Cena de "ruptura": cita alguém que não está no tema → busca fora do mestre.
+        off_topic = any(nm not in topic.lower() for nm in proper_names(q0))
+        if master and not off_topic:
+            c = _master_clip(runner, job, master, sc, work / f"vid_{sc['idx']:03d}.mp4", prod)
+            if c:
+                aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube", "source_url": c["page"],
+                                      "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar",
+                                      "attribution": f"{master['channel']} — {master['title']}"[:200], "local_path": str(work / f"vid_{sc['idx']:03d}.mp4"), "description": q0})["id"]
+                chosen = {"id": aid, "key": c["id"]}
+                runner.log(job, f"cena {sc['idx'] + 1}: trecho do vídeo-mestre", step="visuals")
+        if not chosen and (is_pop(q0, topic) or image_only):
             # Cultura pop / filmes / famosos: bancos de estoque não têm isso — vai direto no YouTube e na web.
             chosen = _web_pick(runner, job, q0, work, sc, prod, recent, window, yt_used)
         for src in ([] if chosen else s["visuals"]["prefer"]):
