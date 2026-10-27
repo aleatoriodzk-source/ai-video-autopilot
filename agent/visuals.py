@@ -220,6 +220,9 @@ HISTORY = ("war", "ww2", "wwii", "world war", "soldier", "nazi", "hitler", "batt
 def open_order(q: str, topic: str) -> list[str]:
     """Para temas históricos, acervos (Wikimedia) vêm antes; para o resto, Openverse."""
     t = f"{q} {topic}".lower()
+    # Nome próprio (pessoa/programa/filme): bancos abertos só trazem animais e paisagens.
+    if re.search(r"\b[A-ZÀ-Ú][a-zà-ú]+\s+[A-ZÀ-Ú][a-zà-ú]+", f"{q} {topic}") or any(w in t for w in ("apresentador", "tv ", "televis", "ator", "atriz", "cantor", "filme", "novela", "famos")):
+        return ["wikimedia"]
     if any(w in t for w in SPACE):
         return ["nasa", "wikimedia", "openverse"]
     if any(w in t for w in HISTORY):
@@ -440,7 +443,7 @@ def web_images(q: str) -> list[dict]:
     for i, tq in enumerate([t for t in dict.fromkeys(tries) if t] * 2):
         if i:
             time.sleep(1.0)
-        r = requests.get("https://www.bing.com/images/async", params={"q": tq, "first": 0, "count": 35, "setlang": "pt-br", "cc": "BR"},
+        r = requests.get("https://www.bing.com/images/search", params={"q": tq, "form": "HDRSC2", "first": 1, "setlang": "pt-br", "cc": "BR"},
                          headers={**h, "Accept-Language": "pt-BR,pt;q=0.9"}, timeout=30)
         out = []
         for raw in re.findall(r'm="(\{.*?\})"', r.text):
