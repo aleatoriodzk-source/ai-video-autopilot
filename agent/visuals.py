@@ -296,7 +296,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
             start = round(random.uniform(dur * 0.2, max(dur * 0.2, dur * 0.6 - need)), 1)
         out.unlink(missing_ok=True)
         try:
-            _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
+            _ytdlp(["-f", "bv*[height<=1080][height>=720][ext=mp4]+ba[ext=m4a]/bv*[height<=1920][width>=720]+ba/b[height>=720]", "--merge-output-format", "mp4",
                     "--download-sections", f"*{start}-{start + need}", "--force-keyframes-at-cuts",
                     "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
@@ -542,7 +542,7 @@ def _master_pack(runner, job, topic: str, work: Path) -> dict | None:
             continue
         try:
             out.unlink(missing_ok=True)
-            _ytdlp(["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4",
+            _ytdlp(["-f", "bv*[height<=1080][height>=720][ext=mp4]+ba[ext=m4a]/bv*[height<=1920][width>=720]+ba/b[height>=720]", "--merge-output-format", "mp4",
                     "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
             runner.log(job, f"vídeo-mestre {vid}: {str(ex)[:120]}", "warn", "visuals")
@@ -586,7 +586,7 @@ def pick_visuals(runner, job, ctx) -> None:
     w, h = ctx["w"], ctx["h"]
     orientation = "portrait" if h > w else "landscape" if w > h else "square"
     key = runner.cfg.get("pexels_api_key")
-    pxb = runner.cfg.get("pixabay_api_key")
+    pxb = None  # Pixabay removido: banco genérico só gerava recusas
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
@@ -690,7 +690,7 @@ def pick_visuals(runner, job, ctx) -> None:
                 q = sc.get("visual_query") or sc["narration"][:60]
                 chosen = _open_pick(runner, job, q, work, sc, prod, recent, window, open_order(q, prod.get("topic") or ""))
             elif src == "ai_image" and s["ai"]["allow_ai_images"]:
-                aspect = prod["aspect"]
+                aspect = (prod.get("settings") or {}).get("aspect_override") or prod["aspect"]
                 r = runner.api.call("ai_image", job_id=job["id"], prompt=sc.get("visual_description") or sc["narration"], aspect=aspect, used=ai_used)
                 if r.get("b64"):
                     out.write_bytes(base64.b64decode(r["b64"]))
