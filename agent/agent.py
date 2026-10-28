@@ -236,7 +236,7 @@ class Runner:
         settings = self.api.call("heartbeat", info=None)["settings"]
         prod, scenes = bundle["production"], bundle.get("scenes") or []
         done = list(job.get("completed_steps") or [])
-        w, h = media.size_for(prod["aspect"], settings["export"]["resolution"])
+        w, h = media.size_for((prod.get("settings") or {}).get("aspect_override") or prod["aspect"], settings["export"]["resolution"])
         work = Path(self.cfg["work_dir"]) / prod["id"]
         work.mkdir(parents=True, exist_ok=True)
         ctx = {"settings": settings, "prod": prod, "scenes": scenes, "w": w, "h": h, "work": work, "assets": bundle.get("assets") or [],
