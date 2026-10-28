@@ -22,14 +22,31 @@ def structured(vid: Path, words=None, log=None) -> dict | None:
 
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=android,web"]
+BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=tv,web_safari,web"]
 
 
 # Arquivos cookies.txt das contas vinculadas no site ({"youtube": Path, "tiktok": Path}).
 COOKIES: dict = {}
 
 
+_UPDATED = False
+
+
+def _self_update() -> None:
+    """Atualiza o yt-dlp 1x por execução: o YouTube muda e versões antigas tomam 403."""
+    global _UPDATED
+    if _UPDATED:
+        return
+    _UPDATED = True
+    import sys
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "yt-dlp"], capture_output=True, timeout=120)
+    except Exception:
+        pass
+
+
 def _ytdlp(args: list[str]) -> str:
+    _self_update()
     joined = " ".join(args)
     plat = "tiktok" if "tiktok.com" in joined else "youtube"
     base = ["--user-agent", UA] if plat == "tiktok" else BASE

@@ -342,10 +342,13 @@ def tiktok_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | N
     """Busca vídeos verticais no TikTok (tikwm, sem marca d'água) e corta só o trecho da cena."""
     import random
     need = _scene_secs(sc)
+    if getattr(runner, "_tt_blocked", False):
+        return None
     try:
         vids = _tikwm_search(q)
     except Exception as e:
-        runner.log(job, f"TikTok busca: {str(e)[:150]}", "warn", "visuals")
+        runner._tt_blocked = True  # 403/bloqueio: não perde mais tempo nas próximas cenas
+        runner.log(job, f"TikTok bloqueado ({str(e)[:100]}) — pulando TikTok neste vídeo", "warn", "visuals")
         return None
     names = proper_names(q)
     raw = out.with_name(out.stem + "_tt.mp4")
@@ -526,15 +529,35 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     return None
 
 
+_HOOK = r"\b(revela|revelou|segredo|segredos|que ninguém notou|ninguém|nunca|jamais|mexa|com|você|voce|não|nao|sabia|verdade|incrível|incrivel|chocante|mais forte|top \d+|\d+|o|a|os|as|de|do|da|dos|das|que|por|isso|quem|como|porque|why|the|of|secret|nobody|noticed)\b"
+
+
+def _subject(topic: str) -> str:
+    """Tira o gancho do título ('IRON MAN REVELA SEGREDO...' → 'Iron Man')."""
+    import re as _re
+    names = proper_names(topic)
+    if names:
+        return " ".join(names[:2]).title()
+    t = _re.sub(_HOOK, " ", topic.lower())
+    t = _re.sub(r"[^\wÀ-ÿ ]", " ", t)
+    return " ".join(t.split()[:3]).title() or topic[:40]
+
+
 def _master_pack(runner, job, topic: str, work: Path) -> dict | None:
     """Baixa 1 vídeo-mestre do tema (compilado/cenas) e detecta os cortes reais com FFmpeg."""
     import re as _re, subprocess
     from analyzer import _ytdlp
-    try:
-        data = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch6:{topic} cenas compilado"]))
-    except Exception as e:
-        runner.log(job, f"vídeo-mestre: busca falhou ({str(e)[:120]})", "warn", "visuals")
-        return None
+    subj = _subject(topic)
+    data = {"entries": []}
+    for q in (f"{subj} melhores cenas", f"{subj} scenes compilation hd", f"{subj} cenas"):
+        try:
+            d = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch6:{q}"]))
+            data["entries"] += d.get("entries") or []
+        except Exception as e:
+            runner.log(job, f"vídeo-mestre: busca '{q}' falhou ({str(e)[:100]})", "warn", "visuals")
+        if len(data["entries"]) >= 4:
+            break
+    runner.log(job, f"vídeo-mestre: assunto principal = '{subj}'", step="visuals")
     out = work / "master.mp4"
     for e in data.get("entries") or []:
         vid, dur = e.get("id"), e.get("duration") or 0
@@ -699,6 +722,22 @@ def pick_visuals(runner, job, ctx) -> None:
                     chosen = {"id": aid}
             if chosen:
                 break
+        if not chosen and master:
+            # garantia de mídia: tomada livre do mestre (sem nova validação) em vez de fundo neutro
+            import subprocess as _sp
+            free = [x for x in master["shots"] if x not in master["used"]] or master["shots"]
+            a, b = max(free, key=lambda x: x[1] - x[0])
+            master["used"].add((a, b))
+            vout = work / f"vid_{sc['idx']:03d}.mp4"
+            _sp.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{a + 0.1:.2f}", "-i", str(master["path"]),
+                     "-t", f"{_scene_secs(sc):.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
+            if vout.exists() and vout.stat().st_size > 20000:
+                runner.log(job, f"cena {sc['idx'] + 1}: sem fonte aprovada — usada tomada do vídeo-mestre (evita fundo neutro)", "warn", "visuals")
+                aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube",
+                                      "source_url": f"https://www.youtube.com/watch?v={master['vid']}&t={int(a)}",
+                                      "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar",
+                                      "attribution": f"{master['channel']} — {master['title']}"[:200], "local_path": str(vout), "description": q0})["id"]
+                chosen = {"id": aid, "key": f"master:{master['vid']}:{a:.1f}"}
         if not chosen:
             media.text_card(sc.get("caption") or "", w, h, out.with_suffix(".png"))
             out.with_suffix(".png").replace(out)
