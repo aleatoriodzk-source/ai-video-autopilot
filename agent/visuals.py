@@ -733,7 +733,11 @@ def pick_visuals(runner, job, ctx) -> None:
                      "-t", f"{_scene_secs(sc):.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
             if vout.exists() and vout.stat().st_size > 20000:
                 runner.log(job, f"cena {sc['idx'] + 1}: sem fonte aprovada — usada tomada do vídeo-mestre (evita fundo neutro)", "warn", "visuals")
-                continue
+                aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": "youtube",
+                                      "source_url": f"https://www.youtube.com/watch?v={master['vid']}&t={int(a)}",
+                                      "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar",
+                                      "attribution": f"{master['channel']} — {master['title']}"[:200], "local_path": str(vout), "description": q0})["id"]
+                chosen = {"id": aid, "key": f"master:{master['vid']}:{a:.1f}"}
         if not chosen:
             media.text_card(sc.get("caption") or "", w, h, out.with_suffix(".png"))
             out.with_suffix(".png").replace(out)
