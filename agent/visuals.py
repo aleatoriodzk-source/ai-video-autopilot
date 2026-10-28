@@ -569,12 +569,12 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
     free = [s for s in m["shots"] if s not in m["used"]]
     # prefere tomadas que cubram a fala sozinhas; senão as mais longas
     free.sort(key=lambda s: (s[1] - s[0] < need, -(s[1] - s[0])))
-    for a, b in free[:3]:
+    for a, b in [x for x in free if x[1] - x[0] >= 1.5][:6] or free[:3]:
         m["used"].add((a, b))
         start = a + 0.1
         vout.unlink(missing_ok=True)
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(m["path"]),
-                        "-t", f"{min(need, b - start) if b - start >= need * 0.6 else need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
+                        "-t", f"{need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
         if vout.exists() and vout.stat().st_size > 20000 and vision_ok(runner, job, vout, sc, prod):
             return {"id": f"master:{m['vid']}:{start:.1f}", "page": f"https://www.youtube.com/watch?v={m['vid']}&t={int(start)}"}
     return None

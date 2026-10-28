@@ -489,6 +489,8 @@ class Runner:
         plan = self._plan(ctx)
         if plan["profile_used"]:
             cap = plan["caption"]["value"]
+            if cap.get("style") == "none" and ps.get("caption_style") != "none":
+                cap = {**cap, "style": "hormozi"}  # legenda ligada por padrão
             if cap.get("style") == "none":
                 (ctx["work"] / "subs.ass").unlink(missing_ok=True)
                 self.log(job, "sem legenda (escolha sua)", step="captions")
