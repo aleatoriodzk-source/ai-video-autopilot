@@ -89,7 +89,8 @@ function Producoes() {
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
       ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
     };
-    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect, mode, reference_id: refId || null, settings });
+    const is34 = aspect === "3:4";
+    const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: is34 ? "9:16" : aspect, mode, reference_id: refId || null, settings: is34 ? { ...settings, aspect_override: "3:4" } : settings });
     if (error) { toast.error(error.message); return; }
     setTopic(""); setReadyScript(""); toast.success("Produção criada"); refresh();
   }
