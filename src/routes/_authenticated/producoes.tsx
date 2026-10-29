@@ -52,6 +52,8 @@ function Producoes() {
   const [voiceId, setVoiceId] = useState("");
   const [scenesRef, setScenesRef] = useState("");
   const [scenesUrl, setScenesUrl] = useState("");
+  const [base1, setBase1] = useState("");
+  const [base2, setBase2] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
@@ -69,6 +71,8 @@ function Producoes() {
   async function create() {
     if (!topic.trim()) { toast.error(scriptMode === "ready" ? "Dê um título para o vídeo" : "Informe um tema ou instrução"); return; }
     const link = scenesUrl.trim();
+    const baseLinks = [base1, base2].map((x) => x.trim()).filter(Boolean);
+    if (baseLinks.some((x) => !/^https?:\/\//.test(x))) { toast.error("Link de vídeo base inválido"); return; }
     if (sourceMode === "reference" && !scenesRef && !/^https?:\/\//.test(link)) { toast.error("Escolha ou cole o link do vídeo das cenas"); return; }
     if (scriptMode === "ready" && readyScript.trim().split(/\s+/).length < 10) { toast.error("Cole o roteiro pronto (pelo menos algumas frases)"); return; }
     const min = Number(minutes.replace(",", "."));
@@ -88,6 +92,7 @@ function Producoes() {
       ...(sourceMode === "reference" && srcId ? { scenes_reference_id: srcId } : {}),
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
       ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
+      ...(baseLinks.length ? { source_urls: baseLinks } : {}),
     };
     const is34 = aspect === "3:4";
     const { error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: is34 ? "9:16" : aspect, mode, reference_id: refId || null, settings: is34 ? { ...settings, aspect_override: "3:4" } : settings });
@@ -222,6 +227,11 @@ function Producoes() {
             {!scenesRef && <input value={scenesUrl} onChange={(e) => setScenesUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." className={input} />}
           </div>
         )}
+        <div className="grid gap-2 rounded-md border border-border p-3 md:col-span-2">
+          <div className="text-xs text-muted-foreground">Vídeos base (opcional): cole 1 ou 2 links do YouTube/TikTok. O agente baixa uma vez e corta as cenas deles, sem buscar fora.</div>
+          <input value={base1} onChange={(e) => setBase1(e.target.value)} placeholder="Vídeo base 1 — https://..." className={input} />
+          <input value={base2} onChange={(e) => setBase2(e.target.value)} placeholder="Vídeo base 2 (opcional) — https://..." className={input} />
+        </div>
         <label className="text-xs text-muted-foreground">Voz da narração
           <select value={voiceId ? `clone:${voiceId}` : voice} onChange={(e) => { const v = e.target.value; if (v.startsWith("clone:")) setVoiceId(v.slice(6)); else { setVoiceId(""); setVoice(v); } }} className={input + " mt-1"}>
             <option value="pt-BR-AntonioNeural">Antonio (masculina, firme)</option><option value="pt-BR-FranciscaNeural">Francisca (feminina, clara)</option><option value="pt-BR-ThalitaMultilingualNeural">Thalita (feminina, jovem)</option>
