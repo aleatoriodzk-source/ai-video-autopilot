@@ -615,15 +615,27 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
     """Fatia o mestre em tomadas inteiras (sem esticar clipes curtos); até 3 tentativas locais."""
     import subprocess
     need = _scene_secs(sc)
-    free = [s for s in m["shots"] if s not in m["used"]]
+    cur = m.setdefault("cursor", {})  # fim já consumido por fonte: nunca reexibe os mesmos segundos
+    srcof = lambda s: str(s[0]) if len(s) == 3 else str(m["path"])
+    free = [s for s in m["shots"] if s not in m["used"] and s[-2] >= cur.get(srcof(s), 0.0)]
     # prefere tomadas que cubram a fala sozinhas; senão as mais longas
     ln = lambda s: s[-1] - s[-2]
-    if not m.get("user"):
+    if m.get("user"):
+        # intercala os vídeos base: cena 1 no vídeo 1, cena 2 no vídeo 2...
+        srcs = sorted({srcof(s) for s in m["shots"]})
+        turn = m.get("turn", 0)
+        m["turn"] = turn + 1
+        if srcs:
+            want = srcs[turn % len(srcs)]
+            free.sort(key=lambda s: (srcof(s) != want, s[-2]))
+    else:
         free.sort(key=lambda s: (ln(s) < need, -ln(s)))
     for shot in [x for x in free if ln(x) >= 1.5][:6] or free[:3]:
         m["used"].add(shot)
         src, a = (shot[0], shot[1]) if len(shot) == 3 else (m["path"], shot[0])
         start = a + 0.1
+        cur[str(src)] = start + need
+        m["used"].update(x for x in m["shots"] if srcof(x) == str(src) and x[-2] < start + need)
         vout.unlink(missing_ok=True)
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(src),
                         "-t", f"{need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
