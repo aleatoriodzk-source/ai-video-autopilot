@@ -443,12 +443,11 @@ def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None, frame: st
     src_r, dst_r = sw / max(1, sh), w / h
     if src_r <= dst_r * 1.15:
         return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
-    if cx is not None:
-        sw2 = round(h * src_r)
-        x = int(min(max(cx * sw2 - w / 2, 0), sw2 - w))
-        return f"scale={sw2}:{h},crop={w}:{h}:{x}:0"
-    return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=24:3,eq=brightness=-0.08[bg];"
-            f"[b]scale={w}:-2[fg];[bg][fg]overlay=0:(H-h)/2")
+    # Tela cheia sempre: amplia e corta no personagem (ou no centro da ação) — nunca a tira minúscula no meio.
+    sw2 = round(h * src_r)
+    sw2 += sw2 % 2
+    x = int(min(max((cx if cx is not None else 0.5) * sw2 - w / 2, 0), sw2 - w))
+    return f"scale={sw2}:{h},crop={w}:{h}:{x}:0"
 
 
 MIN_PIECE_S = 0.8
