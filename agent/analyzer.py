@@ -21,8 +21,21 @@ def structured(vid: Path, words=None, log=None) -> dict | None:
         return None
 
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=tv,web_safari,web"]
+UAS = {
+    "chrome": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "edge": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+    "firefox": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+}
+UA = UAS["chrome"]
+# Cliente web nativo (sem emular TV/Android, que causava 403/SABR) + pausas naturais entre pedidos.
+BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=web,default", "--sleep-requests", "1"]
+
+
+def set_browser(name: str) -> None:
+    """Alinha a assinatura do navegador com a sessão vinculada (ex.: Firefox)."""
+    global UA, BASE
+    UA = UAS.get((name or "").split(":")[0].lower(), UAS["chrome"])
+    BASE = ["--user-agent", UA, "--extractor-args", "youtube:player_client=web,default", "--sleep-requests", "1"]
 
 
 # Arquivos cookies.txt das contas vinculadas no site ({"youtube": Path, "tiktok": Path}).

@@ -136,6 +136,7 @@ class Runner:
                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
                     if f.exists() and f.stat().st_size > 100:
                         analyzer.COOKIES[plat] = f
+                        analyzer.set_browser(browsers[plat])
                         print(f"conta {plat}: conectada pela sessão do {browsers[plat]}")
                     else:
                         print(f"conta {plat}: não consegui ler o {browsers[plat]} (feche o navegador e tente de novo). {p.stderr[-300:]}")
