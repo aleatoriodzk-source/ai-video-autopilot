@@ -543,10 +543,36 @@ def _subject(topic: str) -> str:
     return " ".join(t.split()[:3]).title() or topic[:40]
 
 
-def _master_pack(runner, job, topic: str, work: Path) -> dict | None:
-    """Baixa 1 vídeo-mestre do tema (compilado/cenas) e detecta os cortes reais com FFmpeg."""
+def _master_pack(runner, job, topic: str, work: Path, links: list | None = None) -> dict | None:
+    """Baixa vídeo(s)-mestre (links do usuário ou busca do tema) e detecta os cortes reais com FFmpeg."""
     import re as _re, subprocess
     from analyzer import _ytdlp
+    if links:
+        packs = []
+        for i, link in enumerate(links[:2]):
+            out = work / f"master_{i}.mp4"
+            try:
+                out.unlink(missing_ok=True)
+                _ytdlp(["-f", "bv*[height>=720][ext=mp4]+ba[ext=m4a]/bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+                        "--no-playlist", "-o", str(out), link])
+            except Exception as ex:
+                runner.log(job, f"vídeo base {i + 1}: não baixou ({str(ex)[:120]})", "warn", "visuals")
+                continue
+            if not out.exists():
+                continue
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
+                               capture_output=True, text=True)
+            cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
+            dm = _re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
+            dur = int(dm[1]) * 3600 + int(dm[2]) * 60 + float(dm[3]) if dm else (cuts[-1] if cuts else 0)
+            pts = [0.0] + cuts
+            shots = [(out, a, b) for a, b in zip(pts, pts[1:] + [dur]) if b - a >= 1.0]
+            runner.log(job, f"vídeo base {i + 1}: {len(shots)} tomadas detectadas", step="visuals")
+            packs += shots
+        if packs:
+            # intercala os dois vídeos para distribuir pelo roteiro
+            return {"path": None, "shots": packs, "used": set(), "vid": "base", "title": "vídeo base", "channel": "", "links": links, "user": True}
+        return None
     subj = _subject(topic)
     data = {"entries": []}
     for q in (f"{subj} melhores cenas", f"{subj} scenes compilation hd", f"{subj} cenas"):
