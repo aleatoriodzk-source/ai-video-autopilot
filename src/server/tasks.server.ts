@@ -371,7 +371,7 @@ export async function runCheckImage(db: DB, userId: string, jobId: string, produ
   const ai = makeAi(userId, s, override);
   const schema = { type: "object", properties: { match: { type: "boolean" }, reason: { type: "string" } }, required: ["match", "reason"], additionalProperties: false };
   const strict = characters.trim()
-    ? ` REGRA ESTRITA DE PERSONAGEM: a cena exige ver "${characters}". Aprove SOMENTE se esse personagem/pessoa específico estiver visível e reconhecível na imagem (rosto, traje ou visual característico). Ser do mesmo filme, série ou franquia NÃO basta: se aparece outro personagem (ex.: Thor no lugar de Loki), só cenário, logotipo ou multidão sem ele, REPROVE. Aqui, na dúvida, reprove.`
+    ? ` REGRA ESTRITA DE PERSONAGEM: a cena exige ver "${characters}". Aprove SOMENTE se esse personagem/pessoa específico estiver visível e reconhecível na imagem (rosto, traje ou visual característico). Ser do mesmo filme, série ou franquia NÃO basta: se aparece outro personagem (ex.: Thor no lugar de Loki), só cenário, logotipo ou multidão sem ele, REPROVE. Expressão, ação, roupa ou momento exato da fala NUNCA reprovam; se o personagem aparece, aprove. Na dúvida, aprove.`
     : " Reprove SOMENTE se for algo sem relação (outro bicho, paisagem aleatória, botão de inscreva-se, tela preta, marca d'água grande). Na dúvida, aprove.";
   const { data, usage } = await ai<{ match: boolean; reason: string }>({
     system: "Você confere se uma imagem serve para uma cena de vídeo. Detalhes (ângulo, quantidade, cor, se é à mão ou máquina, silhueta, carimbo) NUNCA reprovam. Mas quando a cena cita um personagem ou pessoa pelo nome, ele precisa estar na imagem.",

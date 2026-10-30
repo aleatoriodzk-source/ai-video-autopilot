@@ -443,6 +443,9 @@ def reframe_filter(sw: int, sh: int, w: int, h: int, cx: float | None, frame: st
     src_r, dst_r = sw / max(1, sh), w / h
     if src_r <= dst_r * 1.15:
         return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+    if cx is None and h > w and src_r > 1.2:
+        # sem rosto detectado: não corta cabeça — quadro 1:1 no centro com fundo desfocado
+        return framed_filter(sw, sh, w, h, "1:1", None)
     # Tela cheia sempre: amplia e corta no personagem (ou no centro da ação) — nunca a tira minúscula no meio.
     sw2 = round(h * src_r)
     sw2 += sw2 % 2
