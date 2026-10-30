@@ -93,7 +93,7 @@ def online_sfx(kind: str, cache: Path) -> Path | None:
     return None
 
 
-def make_sfx(kind: str, cache: Path) -> Path:
+def make_sfx(kind: str, cache: Path) -> Path | None:
     cache.mkdir(parents=True, exist_ok=True)
     own = next((p for p in (Path(__file__).parent / "sfx").glob(f"{kind}.*")), None) if (Path(__file__).parent / "sfx").exists() else None
     if own:
@@ -101,10 +101,7 @@ def make_sfx(kind: str, cache: Path) -> Path:
     real = online_sfx(kind, cache)
     if real:
         return real
-    out = cache / f"{kind}.wav"
-    if not out.exists():
-        media.run(["ffmpeg", "-y", "-f", "lavfi", "-i", SFX[kind], "-ar", "48000", "-ac", "2", str(out)])
-    return out
+    return None  # nunca usa chiado/apito sintético
 
 
 def online_music(mood: str, cache: Path, log=print) -> Path | None:
@@ -221,11 +218,11 @@ def kit_hits(kit: list[dict], durs: list[float], ref_s: float | None) -> list[tu
             if kind == "whoosh":
                 at -= 0.25
         at = max(0.0, min(total - 0.3, at))
-        if at - last < 0.6:
+        if at - last < 10.0:  # cirúrgico: no máximo 1 efeito a cada 10 s
             continue
         hits.append((at, kind))
         last = at
-    return hits[:40]
+    return hits[:4]
 
 
 def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, total: float, kit: list[dict] | None = None, ref_s: float | None = None) -> Path | None:
@@ -233,12 +230,14 @@ def sfx_track(scenes: list[dict], durs: list[float], cache: Path, out: Path, tot
     hits, t, last = [], 0.0, -99.0
     if kit:
         hits = [(at, make_sfx(k, cache)) for at, k in kit_hits(kit, durs, ref_s)]
+        hits = [x for x in hits if x[1]]
     for i, sc in enumerate(scenes if not hits else []):
         k = sfx_kind(sc.get("sfx") or "")
         if i == 0:
             k = k or "impact"
-        if k and (i == 0 or (len(hits) < 3 and t - last >= 8)):
-            hits.append((max(0.0, t - (0.25 if k == "whoosh" else 0)), make_sfx(k, cache)))
+        f = make_sfx(k, cache) if k and (i == 0 or (len(hits) < 3 and t - last >= 10)) else None
+        if f:
+            hits.append((max(0.0, t - (0.25 if k == "whoosh" else 0)), f))
             last = t
         t += durs[i]
     if not hits:

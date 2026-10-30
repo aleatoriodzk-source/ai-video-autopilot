@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 import requests
@@ -296,7 +297,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
             start = round(random.uniform(dur * 0.2, max(dur * 0.2, dur * 0.6 - need)), 1)
         out.unlink(missing_ok=True)
         try:
-            _ytdlp(["-f", "bv*[height<=1080][height>=720][ext=mp4]+ba[ext=m4a]/bv*[height<=1920][width>=720]+ba/b[height>=720]", "--merge-output-format", "mp4",
+            _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
                     "--download-sections", f"*{start}-{start + need}", "--force-keyframes-at-cuts",
                     "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
@@ -446,9 +447,11 @@ def web_images(q: str) -> list[dict]:
     for i, tq in enumerate([t for t in dict.fromkeys(tries) if t] * 2):
         if i:
             time.sleep(1.0)
-        r = requests.get("https://www.bing.com/images/search", params={"q": tq, "form": "HDRSC2", "first": 1, "setlang": "pt-br", "cc": "BR"},
+        r = requests.get("https://www.bing.com/images/async", params={"q": tq, "first": 0, "count": 35, "mmasync": 1, "setlang": "pt-br", "cc": "BR"},
                          headers={**h, "Accept-Language": "pt-BR,pt;q=0.9"}, timeout=30)
         out = []
+        for u in dict.fromkeys(_h.unescape(x) for x in re.findall(r'murl&quot;:&quot;(.*?)&quot;', r.text)):
+            out.append({"id": f"web:{u[-80:]}", "url": u, "page": None, "text": tq})
         for raw in re.findall(r'm="(\{.*?\})"', r.text):
             try:
                 d = json.loads(_h.unescape(raw))
@@ -535,12 +538,27 @@ _HOOK = r"\b(revela|revelou|segredo|segredos|que ninguém notou|ninguém|nunca|j
 def _subject(topic: str) -> str:
     """Tira o gancho do título ('IRON MAN REVELA SEGREDO...' → 'Iron Man')."""
     import re as _re
-    names = proper_names(topic)
+    topic = _re.split(r"(?i)\b(gancho|[âa]ngulo)\s*:", topic)[0]
+    topic = _re.sub(r"#\w+", " ", topic)
+    names = [n for n in proper_names(topic) if n.lower() not in ("gancho", "ângulo", "angulo")]
     if names:
         return " ".join(names[:2]).title()
     t = _re.sub(_HOOK, " ", topic.lower())
     t = _re.sub(r"[^\wÀ-ÿ ]", " ", t)
     return " ".join(t.split()[:3]).title() or topic[:40]
+
+
+_STOP = set("o a os as um uma de do da dos das e em no na nos nas com por para que se seu sua com sobre muito mais quando onde como the of and with in on at".split())
+_VAGUE = set("expressao expressão chocado chocada anunciando dramatico dramático olhando cena momento close tensao tensão misterioso misteriosa sombrio epico épico conceito simbolizando representando enquanto frente".split())
+
+
+def _clean_q(q: str, topic: str = "") -> str:
+    """Busca concreta: nomes próprios + até 3 substantivos; nada de frase poética da narração."""
+    names = proper_names(q)
+    words = [w for w in re.sub(r"[^\wÀ-ÿ ]", " ", q).split() if w.lower() not in _STOP and w.lower() not in _VAGUE and len(w) > 2]
+    rest = [w for w in words if not any(w.lower() in n.lower() for n in names)][:3 if not names else 2]
+    out = " ".join(list(dict.fromkeys(names))[:2] + rest).strip()
+    return out or q[:40]
 
 
 def _master_pack(runner, job, topic: str, work: Path, links: list | None = None) -> dict | None:
@@ -553,7 +571,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             out = work / f"master_{i}.mp4"
             try:
                 out.unlink(missing_ok=True)
-                _ytdlp(["-f", "bv*[height>=720][ext=mp4]+ba[ext=m4a]/bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+                _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
                         "--no-playlist", "-o", str(out), link])
             except Exception as ex:
                 runner.log(job, f"vídeo base {i + 1}: não baixou ({str(ex)[:120]})", "warn", "visuals")
@@ -574,40 +592,52 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             return {"path": None, "shots": packs, "used": set(), "vid": "base", "title": "vídeo base", "channel": "", "links": links, "user": True}
         return None
     subj = _subject(topic)
-    data = {"entries": []}
-    for q in (f"{subj} melhores cenas", f"{subj} scenes compilation hd", f"{subj} cenas"):
-        try:
-            d = json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch6:{q}"]))
-            data["entries"] += d.get("entries") or []
-        except Exception as e:
-            runner.log(job, f"vídeo-mestre: busca '{q}' falhou ({str(e)[:100]})", "warn", "visuals")
-        if len(data["entries"]) >= 4:
+    names = [n for n in proper_names(_re.split(r"(?i)\b(gancho|[âa]ngulo)\s*:", topic)[0]) if len(n) > 2]
+    ents = list(dict.fromkeys([subj] + [n.title() for n in names]))[:2]
+    runner.log(job, f"vídeo-mestre: assuntos = {ents}", step="visuals")
+    runner.update(job, wait_reason="Baixando e escaneando vídeos base…")
+    packs, got, pages = [], set(), []
+    for qi in range(2):
+        ent = ents[qi % len(ents)]
+        entries = []
+        for q in (f"{ent} edit hd", f"{ent} edit 4k", f"{ent} melhores momentos hd"):
+            try:
+                entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"])).get("entries") or []
+            except Exception as e:
+                runner.log(job, f"vídeo-mestre: busca '{q}' falhou ({str(e)[:100]})", "warn", "visuals")
+            if len(entries) >= 4:
+                break
+        out = work / f"master_{len(pages)}.mp4"
+        for e in entries:
+            vid, dur = e.get("id"), e.get("duration") or 0
+            if not vid or vid in got or (dur and (dur < 20 or dur > 900)):
+                continue
+            try:
+                out.unlink(missing_ok=True)
+                _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+                        "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
+            except Exception as ex:
+                runner.log(job, f"vídeo-mestre {vid}: {str(ex)[:120]}", "warn", "visuals")
+                continue
+            if not out.exists() or out.stat().st_size < 100000:
+                continue
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
+                               capture_output=True, text=True)
+            cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
+            dm = _re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
+            d = int(dm[1]) * 3600 + int(dm[2]) * 60 + float(dm[3]) if dm else float(dur or (cuts[-1] if cuts else 0))
+            pts = [0.0] + cuts
+            shots = [(out, a, b) for a, b in zip(pts, pts[1:] + [d]) if b - a >= 1.0 and a > d * 0.03 and b < d * 0.97]
+            if not shots:
+                continue
+            got.add(vid)
+            pages.append(f"https://www.youtube.com/watch?v={vid}")
+            packs += shots
+            runner.log(job, f"vídeo-mestre {len(pages)}: {e.get('title', '')[:80]} — {len(shots)} tomadas", step="visuals")
             break
-    runner.log(job, f"vídeo-mestre: assunto principal = '{subj}'", step="visuals")
-    out = work / "master.mp4"
-    for e in data.get("entries") or []:
-        vid, dur = e.get("id"), e.get("duration") or 0
-        if not vid or (dur and (dur < 60 or dur > 900)):
-            continue
-        try:
-            out.unlink(missing_ok=True)
-            _ytdlp(["-f", "bv*[height<=1080][height>=720][ext=mp4]+ba[ext=m4a]/bv*[height<=1920][width>=720]+ba/b[height>=720]", "--merge-output-format", "mp4",
-                    "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
-        except Exception as ex:
-            runner.log(job, f"vídeo-mestre {vid}: {str(ex)[:120]}", "warn", "visuals")
-            continue
-        if not out.exists() or out.stat().st_size < 100000:
-            continue
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
-                           capture_output=True, text=True)
-        cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
-        dur = float(dur or (cuts[-1] if cuts else 0))
-        pts = [0.0] + cuts
-        # trechos entre cortes; ignora abertura/créditos (primeiros/últimos 5%)
-        shots = [(a, b) for a, b in zip(pts, pts[1:] + [dur]) if b - a >= 1.0 and a > dur * 0.05 and b < dur * 0.95]
-        runner.log(job, f"vídeo-mestre: {e.get('title', '')[:80]} — {len(shots)} tomadas detectadas", step="visuals")
-        if shots:
-            return {"path": out, "shots": shots, "used": set(), "vid": vid, "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
+    if packs:
+        return {"path": packs[0][0], "shots": packs, "used": set(), "vid": got and next(iter(got)) or "", "title": "vídeos-mestres", "channel": "YouTube",
+                "links": pages, "auto": True}
     return None
 
 
@@ -620,7 +650,7 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
     free = [s for s in m["shots"] if s not in m["used"] and s[-2] >= cur.get(srcof(s), 0.0)]
     # prefere tomadas que cubram a fala sozinhas; senão as mais longas
     ln = lambda s: s[-1] - s[-2]
-    if m.get("user"):
+    if m.get("user") or m.get("auto"):
         # intercala os vídeos base: cena 1 no vídeo 1, cena 2 no vídeo 2...
         srcs = sorted({srcof(s) for s in m["shots"]})
         turn = m.get("turn", 0)
@@ -641,7 +671,7 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
                         "-t", f"{need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
         # vídeo base escolhido por você: não passa pela recusa da IA
         if vout.exists() and vout.stat().st_size > 20000 and (m.get("user") or vision_ok(runner, job, vout, sc, prod)):
-            if m.get("user"):
+            if m.get("user") or m.get("auto"):
                 i = int(Path(src).stem.split("_")[-1])
                 return {"id": f"base{i}:{start:.1f}", "page": m["links"][i]}
             return {"id": f"master:{m['vid']}:{start:.1f}", "page": f"https://www.youtube.com/watch?v={m['vid']}&t={int(start)}"}
@@ -683,7 +713,7 @@ def pick_visuals(runner, job, ctx) -> None:
             recent.append(mine["id"])
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
-        q0 = sc.get("visual_query") or sc["narration"][:60]
+        q0 = _clean_q(sc.get("visual_query") or sc["narration"][:60], topic)
         links = [u for u in ((prod.get("settings") or {}).get("source_urls") or []) if u][:2]
         if master is None and links:
             master = _master_pack(runner, job, topic, work, links) or False
@@ -774,10 +804,12 @@ def pick_visuals(runner, job, ctx) -> None:
             # garantia de mídia: tomada livre do mestre (sem nova validação) em vez de fundo neutro
             import subprocess as _sp
             free = [x for x in master["shots"] if x not in master["used"]] or master["shots"]
-            a, b = max(free, key=lambda x: x[1] - x[0])
-            master["used"].add((a, b))
+            pick = max(free, key=lambda x: x[-1] - x[-2])
+            master["used"].add(pick)
+            a = pick[-2]
+            msrc = pick[0] if len(pick) == 3 else master["path"]
             vout = work / f"vid_{sc['idx']:03d}.mp4"
-            _sp.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{a + 0.1:.2f}", "-i", str(master["path"]),
+            _sp.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{a + 0.1:.2f}", "-i", str(msrc),
                      "-t", f"{_scene_secs(sc):.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
             if vout.exists() and vout.stat().st_size > 20000:
                 runner.log(job, f"cena {sc['idx'] + 1}: sem fonte aprovada — usada tomada do vídeo-mestre (evita fundo neutro)", "warn", "visuals")
