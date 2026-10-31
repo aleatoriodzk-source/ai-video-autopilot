@@ -589,7 +589,7 @@ def _scene_terms(sc) -> set:
     txt = f"{sc.get('narration') or ''} {sc.get('visual_query') or ''}"
     names = {n.lower() for n in proper_names(txt)}
     words = {w for w in _re.findall(r"[a-zà-ú]{5,}", txt.lower())}
-    return names | {w for n in names for w in n.split() if len(w) > 2} | words
+    return {"!" + n for n in names} | {"!" + w for n in names for w in n.split() if len(w) > 2} | words
 
 
 def _shot_score(m, shot, terms) -> float:
@@ -598,8 +598,8 @@ def _shot_score(m, shot, terms) -> float:
     txt = " ".join(c[2] for c in cues if c[1] >= a - 1.5 and c[0] <= b + 1.5)
     if not txt:
         return 0.0
-    names = {t for t in terms if " " in t or t[:1].isalpha()}
-    return float(sum((3 if t in txt and len(t) > 2 and t[0].isalpha() and t in names and len(t.split()) > 0 else 0) for t in names if t in txt))
+    names = {t for t in terms if t.startswith("!")}
+    return float(sum((3 if t in names else 1) for t in terms if t.lstrip("!") in txt))
 
 
 def _master_pack(runner, job, topic: str, work: Path, links: list | None = None) -> dict | None:
