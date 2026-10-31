@@ -561,10 +561,52 @@ def _clean_q(q: str, topic: str = "") -> str:
     return out or q[:40]
 
 
+
+def _master_subs(out, link, work):
+    """Legendas (auto) do vídeo base, grátis via yt-dlp: [(ini, fim, texto)] para casar fala × trecho."""
+    import re as _re
+    from analyzer import _ytdlp
+    base = work / f"{out.stem}_subs"
+    try:
+        _ytdlp(["--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "pt.*,en.*",
+                "--sub-format", "vtt", "--no-playlist", "-o", str(base), link])
+    except Exception:
+        pass
+    cues = []
+    for f in sorted(work.glob(f"{base.name}*.vtt")):
+        txt = f.read_text(encoding="utf-8", errors="ignore")
+        for m in _re.finditer(r"(\d+):(\d+):([\d.]+) --> (\d+):(\d+):([\d.]+)[^\n]*\n(.+?)(?:\n\n|$)", txt, _re.S):
+            a = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3])
+            b = int(m[4]) * 3600 + int(m[5]) * 60 + float(m[6])
+            cues.append((a, b, _re.sub(r"<[^>]+>", "", m[7]).lower()))
+        if cues:
+            break
+    return cues
+
+
+def _scene_terms(sc) -> set:
+    import re as _re
+    txt = f"{sc.get('narration') or ''} {sc.get('visual_query') or ''}"
+    names = {n.lower() for n in proper_names(txt)}
+    words = {w for w in _re.findall(r"[a-zà-ú]{5,}", txt.lower())}
+    return names | {w for n in names for w in n.split() if len(w) > 2} | words
+
+
+def _shot_score(m, shot, terms) -> float:
+    cues = (m.get("subs") or {}).get(str(shot[0]) if len(shot) == 3 else str(m["path"])) or []
+    a, b = shot[-2], shot[-1]
+    txt = " ".join(c[2] for c in cues if c[1] >= a - 1.5 and c[0] <= b + 1.5)
+    if not txt:
+        return 0.0
+    names = {t for t in terms if " " in t or t[:1].isalpha()}
+    return float(sum((3 if t in txt and len(t) > 2 and t[0].isalpha() and t in names and len(t.split()) > 0 else 0) for t in names if t in txt))
+
+
 def _master_pack(runner, job, topic: str, work: Path, links: list | None = None) -> dict | None:
     """Baixa vídeo(s)-mestre (links do usuário ou busca do tema) e detecta os cortes reais com FFmpeg."""
     import re as _re, subprocess
     from analyzer import _ytdlp
+    subs = {}
     if links:
         packs = []
         for i, link in enumerate(links[:2]):
@@ -585,11 +627,12 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             dur = int(dm[1]) * 3600 + int(dm[2]) * 60 + float(dm[3]) if dm else (cuts[-1] if cuts else 0)
             pts = [0.0] + cuts
             shots = [(out, a, b) for a, b in zip(pts, pts[1:] + [dur]) if b - a >= 1.0]
-            runner.log(job, f"vídeo base {i + 1}: {len(shots)} tomadas detectadas", step="visuals")
+            subs[str(out)] = _master_subs(out, link, work)
+            runner.log(job, f"vídeo base {i + 1}: {len(shots)} tomadas, {len(subs[str(out)])} falas legendadas", step="visuals")
             packs += shots
         if packs:
             # intercala os dois vídeos para distribuir pelo roteiro
-            return {"path": None, "shots": packs, "used": set(), "vid": "base", "title": "vídeo base", "channel": "", "links": links, "user": True}
+            return {"path": None, "shots": packs, "used": set(), "vid": "base", "title": "vídeo base", "channel": "", "links": links, "user": True, "subs": subs}
         return None
     subj = _subject(topic)
     names = [n for n in proper_names(_re.split(r"(?i)\b(gancho|[âa]ngulo)\s*:", topic)[0]) if len(n) > 2]
@@ -633,11 +676,12 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             got.add(vid)
             pages.append(f"https://www.youtube.com/watch?v={vid}")
             packs += shots
+            subs[str(out)] = _master_subs(out, pages[-1], work)
             runner.log(job, f"vídeo-mestre {len(pages)}: {e.get('title', '')[:80]} — {len(shots)} tomadas", step="visuals")
             break
     if packs:
         return {"path": packs[0][0], "shots": packs, "used": set(), "vid": got and next(iter(got)) or "", "title": "vídeos-mestres", "channel": "YouTube",
-                "links": pages, "auto": True}
+                "links": pages, "auto": True, "subs": subs}
     return None
 
 
@@ -660,6 +704,15 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
             free.sort(key=lambda s: (srcof(s) != want, s[-2]))
     else:
         free.sort(key=lambda s: (ln(s) < need, -ln(s)))
+    # Fala × trecho: tomada onde o personagem/assunto citado aparece na legenda do vídeo base vem primeiro
+    terms = _scene_terms(sc)
+    if terms and m.get("subs"):
+        pool = [s for s in m["shots"] if s not in m["used"]]
+        hit = sorted(((_shot_score(m, s, terms), s) for s in pool), key=lambda x: -x[0])
+        best = [s for sc_, s in hit if sc_ > 0][:3]
+        if best:
+            runner.log(job, f"cena {sc['idx'] + 1}: trecho casado com a fala", step="visuals")
+            free = best + [s for s in free if s not in best]
     for shot in [x for x in free if ln(x) >= 1.5][:6] or free[:3]:
         m["used"].add(shot)
         src, a = (shot[0], shot[1]) if len(shot) == 3 else (m["path"], shot[0])
