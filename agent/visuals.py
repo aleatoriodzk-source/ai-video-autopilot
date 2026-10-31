@@ -578,7 +578,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
                 continue
             if not out.exists():
                 continue
-            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "scale=-2:240,select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
                                capture_output=True, text=True)
             cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
             dm = _re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
@@ -621,7 +621,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
                 continue
             if not out.exists() or out.stat().st_size < 100000:
                 continue
-            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-vf", "scale=-2:240,select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"],
                                capture_output=True, text=True)
             cuts = [float(x) for x in _re.findall(r"pts_time:([\d.]+)", r.stderr)]
             dm = _re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
