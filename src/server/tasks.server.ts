@@ -268,6 +268,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
       "\nEm references, liste cada afirmação factual e como verificá-la (fonte primária sugerida). Não invente URLs." +
       (rep.script_skeleton?.length && !ready ? `\nESQUELETO DA REFERÊNCIA (siga esta sequência de funções das frases, com conteúdo novo): ${rep.script_skeleton.join(" → ")}` : "") +
       (rep.hook_anatomy ? `\nANATOMIA DO GANCHO DA REFERÊNCIA (replique a mecânica nos 3 primeiros segundos): ${rep.hook_anatomy}` : "") +
+      "\nGANCHO FIEL (obrigatório): a PRIMEIRA frase da cena 1 deve seguir literalmente o molde da primeira frase do DNA da referência (first_line / modelos com [TEMA]), trocando só o tema. Não invente outra introdução." +
+      "\nPROTAGONISTA ÚNICO (obrigatório): mesmo que o título seja lista (ex.: 'Top 5...'), conte a história inteira de UM único personagem principal, com profundidade, em todas as cenas; não divida o vídeo entre vários personagens, salvo se a referência claramente fizer isso. Toda visual_query deve conter o nome desse protagonista." +
       (measured ? `\nRITMO MEDIDO NA REFERÊNCIA: um corte a cada ${measured}s. Cenas curtas, uma ideia por cena, sem pausas longas (pause_after_ms entre 0 e 150).` : "") +
       (dnaOf(report) ? `\nDNA DO FORMATO DE REFERÊNCIA (siga o gancho, a estrutura com as porcentagens, o jeito de narrar, a retenção e o CTA — com conteúdo 100% novo, sem copiar falas): ${JSON.stringify(dnaOf(report)).slice(0, 8000)}` : "") +
       `\nPerfil de estilo: ${JSON.stringify(style ?? "não definido")}` +
