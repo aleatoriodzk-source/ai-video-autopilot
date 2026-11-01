@@ -265,7 +265,9 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     import random
     from analyzer import _ytdlp
     entries = []
-    for search in (f"ytsearch8:{q} #shorts", f"ytsearch8:{q}"):
+    _nm = proper_names(q)
+    _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
+    for search in (f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit 4k"):
         try:
             data = json.loads(_ytdlp(["--flat-playlist", "-J", search]))
             entries += data.get("entries") or []
@@ -477,6 +479,17 @@ def scene_frame(sc: dict, prod: dict) -> str:
     return ["9:16", "16:9", "9:16", "1:1"][sc.get("idx", 0) % 4]
 
 
+def _img_ok(path: Path) -> bool:
+    try:
+        if path.stat().st_size < 25000:
+            return False
+        from PIL import Image
+        with Image.open(path) as im:
+            return min(im.size) >= 480 and max(im.size) >= 720
+    except Exception:
+        return path.exists() and path.stat().st_size > 60000
+
+
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     """Mídia real do assunto: TikTok/YouTube conforme a proporção da cena, depois imagem da web."""
     ps = prod.get("settings") or {}
@@ -521,7 +534,8 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
                 _download(c["url"], out)
             except Exception:
                 continue
-            if not vision_ok(runner, job, out, sc, prod):
+            # Foto da web: sem IA de visão (lenta). Só confere tamanho/resolução mínima.
+            if not _img_ok(out):
                 recent.append(c["id"])
                 continue
             aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "web", "source_url": c["page"],
@@ -871,6 +885,21 @@ def pick_visuals(runner, job, ctx) -> None:
                                       "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar",
                                       "attribution": f"{master['channel']} — {master['title']}"[:200], "local_path": str(vout), "description": q0})["id"]
                 chosen = {"id": aid, "key": f"master:{master['vid']}:{a:.1f}"}
+        if not chosen:
+            # Garantia final (zero tela preta): primeira foto HD do protagonista, sem validação de IA.
+            try:
+                for c in web_images(_subject(topic) or q0)[:8]:
+                    try:
+                        _download(c["url"], out)
+                    except Exception:
+                        continue
+                    if _img_ok(out):
+                        aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "web", "source_url": c["page"],
+                                              "license": "Imagem da web — direitos do autor original; verifique antes de monetizar", "attribution": (c["text"] or "web")[:200], "local_path": str(out), "description": q0})["id"]
+                        chosen = {"id": aid, "key": c["id"] + f":{sc['idx']}"}
+                        break
+            except Exception as e:
+                runner.log(job, f"foto de garantia: {e}", "warn", "visuals")
         if not chosen:
             media.text_card(sc.get("caption") or "", w, h, out.with_suffix(".png"))
             out.with_suffix(".png").replace(out)
