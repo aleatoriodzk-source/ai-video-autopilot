@@ -120,36 +120,16 @@ def clean_tiktok_url(url: str) -> str:
 
 
 def fetch_tiktok(url: str, out: Path) -> Path:
-    """TikTok sem marca d'água: 1) yt-dlp (com cookies da conta, se vinculada); 2) serviço público tikwm.
-    Se os dois falharem, avisa com o erro real em vez de seguir com vídeo vazio."""
-    u, errs = clean_tiktok_url(url), []
+    """TikTok direto pelo yt-dlp (com cookies/navegador da conta vinculada). Sem TikWM."""
+    u = clean_tiktok_url(url)
     try:
         _ytdlp(["-f", "b[vcodec!=none][acodec!=none]/b", "-o", str(out), "--no-playlist", "--force-overwrites", u])
         if out.exists() and out.stat().st_size > 50000:
             return out
-        errs.append("yt-dlp gerou arquivo vazio")
+        err = "yt-dlp gerou arquivo vazio"
     except Exception as e:
-        errs.append(str(e)[-300:])
-    try:
-        import requests
-        r = requests.post("https://www.tikwm.com/api/", data={"url": u, "hd": 1}, timeout=40, headers={"User-Agent": UA})
-        d = (r.json() or {}).get("data") or {}
-        link = d.get("hdplay") or d.get("play")
-        if not link:
-            raise RuntimeError(f"tikwm sem vídeo: {str(r.text)[:200]}")
-        if link.startswith("/"):
-            link = "https://www.tikwm.com" + link
-        with requests.get(link, stream=True, timeout=300, headers={"User-Agent": UA}) as v:
-            v.raise_for_status()
-            with open(out, "wb") as fh:
-                for c in v.iter_content(1 << 20):
-                    fh.write(c)
-        if out.stat().st_size > 50000:
-            return out
-        errs.append("tikwm gerou arquivo vazio")
-    except Exception as e:
-        errs.append(str(e)[-300:])
-    raise RuntimeError("Não consegui baixar o TikTok: " + " | ".join(errs) + ". Dica: vincule sua conta do TikTok (cookies) na aba Contas.")
+        err = str(e)[-300:]
+    raise RuntimeError("Não consegui baixar o TikTok: " + err + ". Dica: vincule sua conta pelo navegador na aba Contas.")
 
 
 def tiktok_profile(url: str, first_err=None) -> dict:
