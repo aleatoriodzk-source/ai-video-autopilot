@@ -420,7 +420,7 @@ FRAME_RATIOS = {"16:9": 16 / 9, "1:1": 1.0, "3:4": 3 / 4, "9:16": 9 / 16}
 
 def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None) -> str:
     """Cena principal na proporção pedida (16:9, 1:1, 3:4), centralizada sobre o próprio vídeo ampliado e desfocado.
-    Nunca barra preta: o fundo é sempre o desfoque escurecido."""
+    Nunca barra preta: o fundo é o próprio vídeo desfocado, mesma cor."""
     fw, fh = frame_box(w, h, frame)
     r = fw / fh
     src_r = sw / max(1, sh)
@@ -431,7 +431,7 @@ def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None
         fg = f"scale={sw2}:{fh},crop={fw}:{fh}:{x}:0"
     else:
         fg = f"scale={fw}:-2,crop={fw}:{fh}"
-    return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=28:3,eq=brightness=-0.12[bg];"
+    return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=28:3[bg];"
             f"[b]{fg}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
 
 
