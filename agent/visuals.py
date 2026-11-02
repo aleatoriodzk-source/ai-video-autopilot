@@ -311,73 +311,58 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     return None
 
 
-def _tikwm_search(q: str) -> list[dict]:
-    """tikwm limita a ~1 pedido/segundo e responde texto (não JSON) quando bloqueia: espera e tenta de novo."""
-    import time
-    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
-         "Accept": "application/json", "Referer": "https://www.tikwm.com/"}
-    last = ""
-    for attempt in range(4):
-        if attempt:
-            time.sleep(1.5 * attempt)
-        try:
-            if attempt % 2 == 0:
-                r = requests.post("https://www.tikwm.com/api/feed/search", timeout=30, headers=h,
-                                  data={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
-            else:
-                r = requests.get("https://www.tikwm.com/api/feed/search", timeout=30, headers=h,
-                                 params={"keywords": q[:80], "count": 12, "cursor": 0, "HD": 1})
-            txt = (r.text or "").strip()
-            if not txt.startswith("{"):
-                last = f"HTTP {r.status_code}: resposta não-JSON ({txt[:60]!r})"
-                continue
-            d = r.json()
-            vids = (d.get("data") or {}).get("videos") or []
-            if vids:
-                return vids
-            last = d.get("msg") or "sem resultados"
-        except Exception as e:
-            last = str(e)
-    raise RuntimeError(last)
+def _tiktok_search(q: str) -> list[dict]:
+    """Acha links de vídeos do TikTok pelo Bing (sem TikWM). O download é feito pelo yt-dlp com os cookies da conta."""
+    import re, html as _h
+    r = requests.get("https://www.bing.com/search", timeout=25,
+                     params={"q": f"site:tiktok.com {q[:80]}", "setlang": "pt-br", "cc": "BR", "count": 30},
+                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+                              "Accept-Language": "pt-BR,pt;q=0.9"})
+    if r.status_code != 200:
+        raise RuntimeError(f"Bing HTTP {r.status_code}")
+    out, seen = [], set()
+    for m in re.finditer(r"https?://(?:www\.)?tiktok\.com/@([\w.\-]+)/video/(\d+)", _h.unescape(r.text)):
+        if m.group(2) not in seen:
+            seen.add(m.group(2))
+            out.append({"id": m.group(2), "author": m.group(1), "url": m.group(0)})
+    return out
 
 
 def tiktok_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
-    """Busca vídeos verticais no TikTok (tikwm, sem marca d'água) e corta só o trecho da cena."""
+    """Busca vídeos do TikTok (links via Bing, download direto pelo yt-dlp + cookies) e corta só o trecho da cena."""
     import random
+    from analyzer import fetch_tiktok
     need = _scene_secs(sc)
     if getattr(runner, "_tt_blocked", False):
         return None
     try:
-        vids = _tikwm_search(q)
+        vids = _tiktok_search(q)
     except Exception as e:
-        runner._tt_blocked = True  # 403/bloqueio: não perde mais tempo nas próximas cenas
-        runner.log(job, f"TikTok bloqueado ({str(e)[:100]}) — pulando TikTok neste vídeo", "warn", "visuals")
+        runner.log(job, f"Busca TikTok falhou ({str(e)[:100]})", "warn", "visuals")
         return None
-    names = proper_names(q)
     raw = out.with_name(out.stem + "_tt.mp4")
-    for v in vids:
-        vid, dur = str(v.get("video_id") or v.get("id") or ""), float(v.get("duration") or 0)
-        title = (v.get("title") or "").lower()
-        if not vid or vid in used or dur < 4 or (names and not any(nm in title for nm in names)):
+    fails = 0
+    for v in vids[:5]:
+        vid = v["id"]
+        if vid in used:
             continue
-        url = v.get("hdplay") or v.get("play")
-        if not url:
-            continue
-        if url.startswith("/"):
-            url = "https://www.tikwm.com" + url
         try:
-            _download(url, raw)
+            fetch_tiktok(v["url"], raw)
+            dur = media.duration(raw)
             start = round(random.uniform(0, max(0.0, dur - need - 0.5)), 1) if dur > need + 1 else 0.0
             media.run(["ffmpeg", "-y", "-ss", f"{start}", "-i", str(raw), "-t", f"{need:.2f}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out)])
         except Exception as ex:
+            fails += 1
             runner.log(job, f"TikTok download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            if "403" in str(ex) or fails >= 3:
+                runner._tt_blocked = True  # bloqueio: não perde mais tempo nas próximas cenas
+                return None
             continue
         finally:
             raw.unlink(missing_ok=True)
         if out.exists() and out.stat().st_size > 20000:
             used.add(vid)
-            author = (v.get("author") or {}).get("unique_id") or ""
-            return {"id": f"tt:{vid}:{start}", "page": f"https://www.tiktok.com/@{author}/video/{vid}", "title": v.get("title") or "", "channel": f"@{author}"}
+            return {"id": f"tt:{vid}:{start}", "page": v["url"], "title": "", "channel": f"@{v['author']}"}
     return None
 
 
