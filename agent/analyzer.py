@@ -133,24 +133,11 @@ def fetch_tiktok(url: str, out: Path) -> Path:
 
 
 def tiktok_profile(url: str, first_err=None) -> dict:
-    """Lista os vídeos de um perfil do TikTok pelo serviço público tikwm quando o yt-dlp é bloqueado."""
-    import requests
+    """Sem TikWM: quando o yt-dlp não lista o perfil, pede o link de um vídeo."""
     m = re.search(r"tiktok\.com/@([\w.\-]+)", url)
-    if not m:
-        raise RuntimeError(f"link de perfil do TikTok inválido: {url}")
-    user = m.group(1)
-    r = requests.post("https://www.tikwm.com/api/user/posts", data={"unique_id": user, "count": 30, "cursor": 0},
-                      timeout=40, headers={"User-Agent": UA})
-    try:
-        vids = ((r.json() or {}).get("data") or {}).get("videos") or []
-    except ValueError:
-        vids = []
-    if not vids:
-        raise RuntimeError(f"Não consegui listar o perfil @{user} do TikTok ({str(first_err)[-150:]} | {r.text[:150]}). "
-                           "Cole o link de um vídeo do perfil em vez do perfil.")
-    return {"title": f"@{user}", "uploader": user, "entries": [
-        {"title": v.get("title"), "duration": v.get("duration"), "view_count": v.get("play_count"),
-         "url": f"https://www.tiktok.com/@{user}/video/{v.get('video_id')}"} for v in vids]}
+    user = m.group(1) if m else url
+    raise RuntimeError(f"Não consegui listar o perfil @{user} do TikTok ({str(first_err)[-150:]}). "
+                       "Vincule sua conta pelo navegador na aba Contas ou cole o link de um vídeo do perfil.")
 
 
 def scene_cuts(video: Path, threshold: float = 0.3) -> list[float]:

@@ -348,7 +348,7 @@ def tiktok_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | N
             continue
         try:
             fetch_tiktok(v["url"], raw)
-            dur = media.duration(raw) if hasattr(media, "duration") else 0.0
+            dur = media.duration(raw)
             start = round(random.uniform(0, max(0.0, dur - need - 0.5)), 1) if dur > need + 1 else 0.0
             media.run(["ffmpeg", "-y", "-ss", f"{start}", "-i", str(raw), "-t", f"{need:.2f}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out)])
         except Exception as ex:
