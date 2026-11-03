@@ -394,13 +394,19 @@ def subject_center_x(src: Path, dur: float) -> float | None:
             return None
         cap = cv2.VideoCapture(str(src))
         xs, wsum = [], 0.0
-        for t in (0.2, 0.5, 0.8):
+        prof = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+        for t in (0.1, 0.3, 0.5, 0.7, 0.9):
             cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, dur * t) * 1000)
             ok, fr = cap.read()
             if not ok:
                 continue
             g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
-            for (x, y, fw, fh) in casc.detectMultiScale(g, 1.15, 5, minSize=(g.shape[1] // 20, g.shape[1] // 20)):
+            mn = (g.shape[1] // 24, g.shape[1] // 24)
+            faces = list(casc.detectMultiScale(g, 1.1, 4, minSize=mn))
+            if not faces and not prof.empty():
+                faces = list(prof.detectMultiScale(g, 1.1, 4, minSize=mn)) + [
+                    (g.shape[1] - x - fw, y, fw, fh) for (x, y, fw, fh) in prof.detectMultiScale(cv2.flip(g, 1), 1.1, 4, minSize=mn)]
+            for (x, y, fw, fh) in faces:
                 a = float(fw * fh)
                 xs.append((x + fw / 2) / g.shape[1] * a)
                 wsum += a
@@ -430,7 +436,8 @@ def framed_filter(sw: int, sh: int, w: int, h: int, frame: str, cx: float | None
         x = int(min(max((cx if cx is not None else 0.5) * sw2 - fw / 2, 0), sw2 - fw))
         fg = f"scale={sw2}:{fh},crop={fw}:{fh}:{x}:0"
     else:
-        fg = f"scale={fw}:-2,crop={fw}:{fh}"
+        # fonte mais alta: corta mais embaixo e preserva a cabeça (terço superior)
+        fg = f"scale={fw}:-2,crop={fw}:{fh}:0:(ih-{fh})*0.25"
     return (f"split[a][b];[a]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=28:3[bg];"
             f"[b]{fg}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
 

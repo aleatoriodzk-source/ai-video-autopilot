@@ -711,7 +711,7 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
         if best:
             runner.log(job, f"cena {sc['idx'] + 1}: trecho casado com a fala", step="visuals")
             free = best + [s for s in free if s not in best]
-    for shot in [x for x in free if ln(x) >= 1.5][:6] or free[:3]:
+    for shot in [x for x in free if ln(x) >= 1.5][:3] or free[:2]:
         m["used"].add(shot)
         src, a = (shot[0], shot[1]) if len(shot) == 3 else (m["path"], shot[0])
         start = a + 0.1
@@ -721,7 +721,12 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(src),
                         "-t", f"{need:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-an", str(vout)])
         # vídeo base escolhido por você: não passa pela recusa da IA
-        if vout.exists() and vout.stat().st_size > 20000 and (m.get("user") or vision_ok(runner, job, vout, sc, prod)):
+        # Catálogo do mestre: depois de 2 tomadas aprovadas da mesma fonte, confia nela (sem nova checagem da IA).
+        trust = m.setdefault("trust", {})
+        ok = vout.exists() and vout.stat().st_size > 20000 and (
+            m.get("user") or trust.get(str(src), 0) >= 2 or vision_ok(runner, job, vout, sc, prod))
+        if ok:
+            trust[str(src)] = trust.get(str(src), 0) + 1
             if m.get("user") or m.get("auto"):
                 i = int(Path(src).stem.split("_")[-1])
                 return {"id": f"base{i}:{start:.1f}", "page": m["links"][i]}
