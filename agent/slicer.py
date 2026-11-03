@@ -99,7 +99,7 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
         short = (b - a) < need
         if short:  # tomada mais curta que a fala: repete só essa tomada (não invade a próxima cena)
             start = a + 0.05
-        src = ["-stream_loop", "-1", "-ss", f"{start:.3f}", "-t", f"{max(0.3, b - a - 0.1):.3f}", "-i", str(base)] if short else ["-ss", f"{start:.3f}", "-i", str(base)]
+        src = ["-ss", f"{start:.3f}", "-i", str(base)] if short else ["-ss", f"{start:.3f}", "-i", str(base)]
         media.run(["ffmpeg", "-y", *src, "-t", f"{need + 0.2:.3f}", "-an", *(["-vf", blur] if blur else []),
                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(out)])
         runner.log(job, f"cena {sc['idx'] + 1}: tomada {idx} ({start:.1f}s do vídeo base)", step="visuals")

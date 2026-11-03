@@ -72,6 +72,8 @@ def resolve_plan(structured: dict | None, settings: dict | None, scenes: list[di
     # ---- movimento padrão ----
     mdef, mb = _usable(visual.get("motion_default"))
     km = s.get("kit_motion") or {}
+    if not isinstance(km, dict):
+        km = {"main_move": km, "moving_share": 1.0} if isinstance(km, str) else {}
     legacy_motion = km.get("main_move") if km.get("main_move") in RENDER_MOTIONS and (km.get("moving_share") or 0) >= 0.4 else None
     if mdef == "static":
         limits.append("movimento 'static' medido, mas o motor de imagem não tem câmera parada: usando padrão")
