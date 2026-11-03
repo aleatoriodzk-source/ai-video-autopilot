@@ -539,7 +539,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
     vf = f"{pre}{reframe_filter(sw, sh, w, h, cx, frame)},fps={fps},format=yuv420p,setsar=1"
-    run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", str(src), "-vf", vf, "-frames:v", str(n), "-r", str(fps),
+    run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-vf", vf + ",tpad=stop_mode=clone:stop_duration=60", "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
 

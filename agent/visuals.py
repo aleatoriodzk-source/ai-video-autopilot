@@ -413,6 +413,8 @@ def web_images(q: str) -> list[dict]:
     except Exception:
         pass
     h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
+    if True:  # DuckDuckGo bloqueia e atrasa 2-4s por cena: vai direto ao Bing
+        return bing_images(q) if "bing_images" in globals() else []
     r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
     m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
     if m:
@@ -885,11 +887,19 @@ def pick_visuals(runner, job, ctx) -> None:
                         break
             except Exception as e:
                 runner.log(job, f"foto de garantia: {e}", "warn", "visuals")
+        if not chosen and recent_imgs:
+            import shutil as _sh
+            _sh.copyfile(recent_imgs[-1], out)
+            aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "image", "source": "web", "local_path": str(out), "description": "reaproveitada (Ken Burns)"})["id"]
+            chosen = {"id": aid, "key": f"reuse:{sc['idx']}"}
+            runner.log(job, f"cena {sc['idx'] + 1}: reaproveitada foto anterior com novo movimento (sem fundo neutro)", "warn", "visuals")
         if not chosen:
             media.text_card(sc.get("caption") or "", w, h, out.with_suffix(".png"))
             out.with_suffix(".png").replace(out)
             runner.log(job, f"cena {sc['idx'] + 1}: nenhuma fonte de imagem disponível — usado fundo neutro. Configure a chave Pexels ou envie imagens.", "warn", "visuals")
             continue
         recent.append(chosen.get("key") or chosen["id"])
+        if out.exists():
+            recent_imgs.append(str(out))
         runner.api.call("update_scene", scene_id=sc["id"], fields={"asset_id": chosen["id"], "status": "visual_ok"})
         sc["asset_id"] = chosen["id"]

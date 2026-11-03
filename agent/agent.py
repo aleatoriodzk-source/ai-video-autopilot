@@ -371,7 +371,7 @@ class Runner:
             self.update(job, progress=30 + int(10 * k / total_n), wait_reason=f"Narrando: {k} de {total_n} cenas prontas")
 
         # Edge (internet) aguenta várias cenas ao mesmo tempo; a clonagem usa a placa de vídeo, então vai uma por vez.
-        workers = 1 if (clone and not isinstance(clone, tuple)) else int(self.cfg.get("narration_workers") or 4)
+        workers = 1 if (clone and not isinstance(clone, tuple)) else int(self.cfg.get("narration_workers") or 8)
         with ThreadPoolExecutor(max_workers=workers) as ex:
             list(ex.map(narrate, ctx["scenes"]))
         self.update(job, wait_reason=None)
@@ -472,6 +472,8 @@ class Runner:
         if not img.exists():
             raise media.MediaError(f"imagem da cena {sc['idx'] + 1} ausente")
         km = (ctx["prod"].get("settings") or {}).get("kit_motion") or {}
+        if not isinstance(km, dict):
+            km = {"main_move": km, "moving_share": 1.0} if isinstance(km, str) else {}
         mv = km["main_move"] if km.get("main_move") in media.MOTIONS and (km.get("moving_share") or 0) >= 0.4 else (sc.get("motion") or "zoom_in")
         sp = self._scene_plan(ctx, sc)
         if sp:
