@@ -413,10 +413,7 @@ def web_images(q: str) -> list[dict]:
     except Exception:
         pass
     h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"}
-    if True:  # DuckDuckGo bloqueia e atrasa 2-4s por cena: vai direto ao Bing
-        return bing_images(q) if "bing_images" in globals() else []
-    r = requests.get("https://duckduckgo.com/", params={"q": q, "iax": "images", "ia": "images"}, headers=h, timeout=30)
-    m = re.search(r"vqd=[\"']?([\d-]+)", r.text)
+    m = None  # DuckDuckGo desativado: bloqueia e atrasa 2-4s por cena; vai direto ao Bing
     if m:
         r = requests.get("https://duckduckgo.com/i.js", headers={**h, "Referer": "https://duckduckgo.com/"}, timeout=30,
                          params={"l": "wt-wt", "o": "json", "q": q, "vqd": m.group(1), "f": ",,,,,", "p": "1"})
@@ -742,6 +739,7 @@ def pick_visuals(runner, job, ctx) -> None:
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]
     recent: list[str] = []
+    recent_imgs: list[str] = []
     yt_used: set = set()
     ai_used = 0
     topic = prod.get("topic") or prod.get("title") or ""
