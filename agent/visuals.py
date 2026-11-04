@@ -267,7 +267,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     entries = []
     _nm = proper_names(q)
     _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
-    for search in (f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit 4k"):
+    for search in (f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit"):
         try:
             data = json.loads(_ytdlp(["--flat-playlist", "-J", search]))
             entries += data.get("entries") or []
@@ -490,6 +490,8 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     if scene_frame(sc, prod) != "9:16":
         sources.reverse()
     vout = work / f"vid_{sc['idx']:03d}.mp4"
+    if not video_only:
+        sources = sources[:1]  # misto: 1 tentativa de vídeo, depois foto HD direto
     for name, fn in sources:
         for _ in range(2 if video_only else 1):
             c = fn(runner, job, q, sc, vout, yt_used)
@@ -641,7 +643,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
     for qi in range(2):
         ent = ents[qi % len(ents)]
         entries = []
-        for q in (f"{ent} edit hd", f"{ent} edit 4k", f"{ent} melhores momentos hd"):
+        for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} edit", f"{ent} cenas hd", f"{ent} melhores momentos"):
             try:
                 entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"])).get("entries") or []
             except Exception as e:
@@ -774,7 +776,8 @@ def pick_visuals(runner, job, ctx) -> None:
         links = [u for u in ((prod.get("settings") or {}).get("source_urls") or []) if u][:2]
         if master is None and links:
             master = _master_pack(runner, job, topic, work, links) or False
-        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True):
+        # Vídeo-mestre só para personagem único; listas/vários nomes buscam cena a cena.
+        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True) and len(set(proper_names(topic))) <= 2:
             master = _master_pack(runner, job, topic, work) or False
         # Cena de "ruptura": cita alguém que não está no tema → busca fora do mestre.
         off_topic = not (master and master.get("user")) and any(nm not in topic.lower() for nm in proper_names(q0))
