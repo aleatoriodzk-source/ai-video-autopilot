@@ -163,7 +163,7 @@ function Producoes() {
         })()}
         <label className="text-xs text-muted-foreground">Tipo de mídia
           <select value={mediaRule} onChange={(e) => setMediaRule(e.target.value)} className={input + " mt-1"}>
-            <option value="auto">Automático (segue a referência)</option><option value="video_only">Somente vídeos (ex.: Marvel, filmes, games)</option><option value="mixed">Vídeos e fotos</option>
+            <option value="auto">Automático (segue a referência)</option><option value="video_only">Somente vídeos (ex.: Marvel, filmes, games)</option><option value="image_only">Somente fotos (documentários, TV, histórias)</option><option value="mixed">Vídeos e fotos</option>
           </select>
         </label>
         <label className="text-xs text-muted-foreground">Estilo da legenda
