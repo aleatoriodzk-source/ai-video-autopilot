@@ -24,6 +24,8 @@ export const Route = createFileRoute("/api/public/agent")({
         const { data: agent } = await db.from("agents").select("id,user_id,revoked").eq("token_hash", await sha256(token)).maybeSingle();
         if (!agent || agent.revoked) return json({ error: "token inválido ou revogado" }, 401);
         const userId = agent.user_id;
+        // Qualquer chamada (log, progresso) prova que o agente está vivo: nada de falso "desconectado" durante renders longos.
+        void db.from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", agent.id).then(() => {}, () => {});
 
         let body: any;
         try {
