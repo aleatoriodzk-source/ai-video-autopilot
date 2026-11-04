@@ -53,6 +53,7 @@ function Referencias() {
   const [ideas, setIdeas] = useState<Record<string, { title: string; hook: string; angle: string; why_fits: string; factual: boolean }[]>>({});
   const [wish, setWish] = useState("");
   const [thinking, setThinking] = useState<string | null>(null);
+  const [shown, setShown] = useState<Record<string, string[]>>({});
   const [format, setFormat] = useState<"auto" | "short" | "long">("auto");
   const [opts, setOpts] = useState<VideoOpts>(defaultOpts);
   const navigate = useNavigate();
@@ -60,8 +61,9 @@ function Referencias() {
   async function suggest(id: string) {
     setThinking(id);
     try {
-      const r = await channelIdeas({ data: { referenceId: id, wish } });
+      const r = await channelIdeas({ data: { referenceId: id, wish, avoid: [...(shown[id] ?? []), ...(ideas[id] ?? []).map((x) => x.title)] } });
       if (!r.ok) throw new Error(r.error);
+      setShown((m) => ({ ...m, [id]: [...(m[id] ?? []), ...r.ideas.map((x) => x.title)].slice(-80) }));
       setIdeas((m) => ({ ...m, [id]: r.ideas }));
     } catch (e) { toast.error((e as Error).message); } finally { setThinking(null); }
   }

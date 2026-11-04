@@ -64,10 +64,19 @@ def _ytdlp(args: list[str]) -> str:
     plat = "tiktok" if "tiktok.com" in joined else "youtube"
     base = ["--user-agent", UA] if plat == "tiktok" else BASE
     extra = ["--cookies", str(COOKIES[plat])] if COOKIES.get(plat) and Path(COOKIES[plat]).exists() else []
-    p = subprocess.run(["yt-dlp", *base, *extra, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    net = ["--socket-timeout", "25", "--retries", "2"]
+    lim = 600 if ("--skip-download" not in args and "--flat-playlist" not in args and "-x" not in args and len(args) > 3 and "ytsearch" not in joined and "list=" not in joined and "/videos" not in joined) else 120
+
+    def go(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=lim)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"yt-dlp: passou de {lim}s sem terminar (rede lenta); pulando")
+
+    p = go(["yt-dlp", *base, *net, *extra, *args])
     if p.returncode != 0 and extra:
         # cookie vencido não pode travar tudo: tenta sem a conta
-        p = subprocess.run(["yt-dlp", *base, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        p = go(["yt-dlp", *base, *net, *args])
     if p.returncode != 0:
         raise RuntimeError("yt-dlp: " + p.stderr[-800:])
     return p.stdout

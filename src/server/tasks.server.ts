@@ -163,11 +163,15 @@ export async function runIdeas(db: DB, userId: string, productionId: string, job
 }
 
 /** Ideias de vídeo novas a partir do DNA de um canal já analisado (sem produção ainda). */
-export async function runChannelIdeas(db: DB, userId: string, referenceId: string, wish: string) {
+export async function runChannelIdeas(db: DB, userId: string, referenceId: string, wish: string, avoid: string[] = []) {
   const { data: r } = await db.from("reference_sources").select("id,title,urls,platform").eq("id", referenceId).eq("user_id", userId).maybeSingle();
   if (!r) throw new Error("Referência não encontrada");
   const { data: a } = await db.from("analyses").select("report").eq("reference_id", r.id).eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (!a?.report) throw new Error("Analise o canal primeiro (botão Analisar) para a IA aprender o formato.");
+  const { data: made } = await db.from("productions").select("title").eq("user_id", userId).order("created_at", { ascending: false }).limit(60);
+  const banned = [...new Set([...avoid, ...(made ?? []).map((x) => x.title as string)].filter(Boolean))].slice(-120);
+  const focos = ["personagens/pessoas pouco lembradas", "bastidores e polêmicas", "comparações e rankings", "mistérios e curiosidades", "antes e depois", "fatos recentes", "recordes e números", "histórias de superação ou queda"];
+  const foco = focos[Math.floor(Math.random() * focos.length)];
   const s = await guardBudget(db, userId, null, null);
   const ai = makeAi(userId, s);
   const { data, usage } = await ai<{ ideas: { title: string; hook: string; angle: string; why_fits: string; factual: boolean }[] }>({
@@ -175,6 +179,8 @@ export async function runChannelIdeas(db: DB, userId: string, referenceId: strin
     user:
       "Você estudou o canal abaixo. Sugira 8 temas NOVOS e originais que esse criador faria e que têm potencial de viralizar no mesmo formato. " +
       "Não repita temas de vídeos que ele já fez. Em 'hook' escreva a primeira frase do vídeo no molde de gancho do canal; em 'why_fits' explique em 1 frase por que funciona nesse formato. Marque factual=true se depende de fatos verificáveis." +
+      `\nFoco desta rodada (varie os ângulos): ${foco}. Pedido nº ${Date.now() % 100000}.` +
+      (banned.length ? `\nPROIBIDO repetir ou parafrasear qualquer um destes temas (já mostrados ou já produzidos): ${banned.map((t) => `"${t}"`).join("; ")}` : "") +
       (wish ? `\nPreferência do usuário: ${wish}` : "") +
       `\nCanal: ${r.title ?? r.urls[0]} (${r.platform})` +
       `\nRelatório/DNA do canal: ${JSON.stringify(a.report).slice(0, 30000)}`,
