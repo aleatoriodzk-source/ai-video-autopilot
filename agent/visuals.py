@@ -22,7 +22,7 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
     if not runner.cfg.get("check_images", True):
         return True
     sc["_checks"] = sc.get("_checks", 0) + 1
-    if sc["_checks"] > (8 if proper_names(sc.get("visual_query") or "") else 4):  # limite por cena (economiza IA); com personagem citado insiste mais
+    if sc["_checks"] > 1:  # 1 checagem só; depois aceita (fim da recusa em loop)  # limite por cena (economiza IA); com personagem citado insiste mais
         return True
     thumb = path.with_name(path.stem + "_chk.jpg")
     try:
@@ -403,7 +403,31 @@ def google_images(q: str) -> list[dict]:
     return out
 
 
+_WEB_CACHE: dict = {}
+
+
+def prefetch_web_images(queries: list, workers: int = 8) -> None:
+    """Busca as fotos de várias cenas ao mesmo tempo (8 de uma vez)."""
+    from concurrent.futures import ThreadPoolExecutor
+    todo = [q for q in dict.fromkeys(queries) if q and q not in _WEB_CACHE]
+    def one(q):
+        try:
+            web_images(q)
+        except Exception:
+            pass
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(one, todo))
+
+
 def web_images(q: str) -> list[dict]:
+    if q in _WEB_CACHE:
+        return _WEB_CACHE[q]
+    r = _web_images_raw(q)
+    _WEB_CACHE[q] = r
+    return r
+
+
+def _web_images_raw(q: str) -> list[dict]:
     """Busca de imagens na web: Google (se tiver cookies), depois DuckDuckGo e Bing."""
     import re
     try:
@@ -477,7 +501,7 @@ def _img_ok(path: Path) -> bool:
 def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
     """Mídia real do assunto: TikTok/YouTube conforme a proporção da cena, depois imagem da web."""
     ps = prod.get("settings") or {}
-    image_only = bool(ps.get("image_only"))
+    image_only = bool(ps.get("image_only")) or ps.get("media_rule") == "image_only" or bool(re.search(r"(?i)\b(foto|fotos|photo|arquivo|jornal|retrato)\b", q))
     video_only = not image_only and (bool(ps.get("video_only")) or is_pop(q, prod.get("topic") or ""))
     sources = []
     # Igual à referência: canal de fotos não busca vídeo; referência do YouTube nunca busca TikTok.
@@ -753,6 +777,11 @@ def pick_visuals(runner, job, ctx) -> None:
     image_only = bool((prod.get("settings") or {}).get("image_only"))
     master = None
     total = len(ctx["scenes"])
+    try:
+        runner.update(job, wait_reason="Buscando fotos de 8 cenas ao mesmo tempo…")
+        prefetch_web_images([_clean_q(x.get("visual_query") or x["narration"][:60], topic) for x in ctx["scenes"]])
+    except Exception as e:
+        runner.log(job, f"busca paralela de fotos: {str(e)[:100]}", "warn", "visuals")
     for n_sc, sc in enumerate(ctx["scenes"], 1):
         print(f"[visuals] cena {n_sc} de {total}")
         try:
@@ -777,7 +806,7 @@ def pick_visuals(runner, job, ctx) -> None:
         if master is None and links:
             master = _master_pack(runner, job, topic, work, links) or False
         # Vídeo-mestre só para personagem único; listas/vários nomes buscam cena a cena.
-        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True) and len(set(proper_names(topic))) <= 2:
+        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True) and len(set(proper_names(topic))) <= 1 and len({n for x in ctx["scenes"] for n in proper_names(x.get("visual_query") or "")}) <= 3:
             master = _master_pack(runner, job, topic, work) or False
         # Cena de "ruptura": cita alguém que não está no tema → busca fora do mestre.
         off_topic = not (master and master.get("user")) and any(nm not in topic.lower() for nm in proper_names(q0))
