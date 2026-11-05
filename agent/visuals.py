@@ -304,6 +304,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
                     "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
             runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            used.add(vid)  # link quebrado/lento: nunca tentar de novo
             continue
         if out.exists() and out.stat().st_size > 20000:
             used.add(vid)
