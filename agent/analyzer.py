@@ -64,8 +64,10 @@ def _ytdlp(args: list[str]) -> str:
     plat = "tiktok" if "tiktok.com" in joined else "youtube"
     base = ["--user-agent", UA] if plat == "tiktok" else BASE
     extra = ["--cookies", str(COOKIES[plat])] if COOKIES.get(plat) and Path(COOKIES[plat]).exists() else []
-    net = ["--socket-timeout", "25", "--retries", "2"]
-    lim = 600 if ("--skip-download" not in args and "--flat-playlist" not in args and "-x" not in args and len(args) > 3 and "ytsearch" not in joined and "list=" not in joined and "/videos" not in joined) else 120
+    net = ["--socket-timeout", "20", "--retries", "1"]
+    if "ytsearch" in joined:
+        net += ["--match-filter", "duration < 900 & !is_live"]  # sem transmissões de horas
+    lim = (60 if "--download-sections" in args else 600) if ("--skip-download" not in args and "--flat-playlist" not in args and "-x" not in args and len(args) > 3 and "ytsearch" not in joined and "list=" not in joined and "/videos" not in joined) else 120
 
     def go(cmd):
         try:

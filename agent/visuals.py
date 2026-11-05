@@ -304,6 +304,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
                     "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
             runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
+            used.add(vid)  # link quebrado/lento: nunca tentar de novo
             continue
         if out.exists() and out.stat().st_size > 20000:
             used.add(vid)
@@ -585,7 +586,8 @@ def _clean_q(q: str, topic: str = "") -> str:
     q = re.sub(r"\b(19|20)\d{2}\b", " ", q)  # anos poluem a busca
     words = [w for w in re.sub(r"[^\wÀ-ÿ ]", " ", q).split() if not w.isdigit() if w.lower() not in _STOP and w.lower() not in _VAGUE and len(w) > 2]
     rest = [w for w in words if not any(w.lower() in n.lower() for n in names)][:3 if not names else 2]
-    out = " ".join(list(dict.fromkeys(names))[:2] + rest).strip()
+    # nunca descartar o personagem: mantém todos os nomes (até 5), na ordem original
+    out = " ".join(list(dict.fromkeys(names))[:5] + rest).strip()
     return out or q[:40]
 
 

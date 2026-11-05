@@ -176,16 +176,21 @@ async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usag
     const m = /^data:([^;]+);base64,(.*)$/.exec(url);
     if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
   }
-  const model = process.env["GEMINI_MODEL"] || "gemini-3.5-flash-lite";
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: opts.system }] },
-      contents: [{ role: "user", parts }],
-      generationConfig: { responseMimeType: "application/json", responseJsonSchema: opts.schema },
-    }),
-  });
+  // flash-lite vive sobrecarregado (503); tenta flash primeiro e alterna se oscilar
+  const models = [process.env["GEMINI_MODEL"], "gemini-3.5-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"].filter(Boolean) as string[];
+  let res!: Response;
+  for (const model of [...new Set(models)]) {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: opts.system }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", responseJsonSchema: opts.schema },
+      }),
+    });
+    if (res.ok || ![503, 500, 404].includes(res.status)) break;
+  }
   if (!res.ok) throw new AiError(res.status, `Gemini respondeu ${res.status}: ${(await res.text()).slice(0, 400)}`);
   const j = (await res.json()) as any;
   const text = (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
