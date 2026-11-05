@@ -911,7 +911,7 @@ def pick_visuals(runner, job, ctx) -> None:
                                       "license": "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar",
                                       "attribution": f"{master['channel']} — {master['title']}"[:200], "local_path": str(vout), "description": q0})["id"]
                 chosen = {"id": aid, "key": f"master:{master['vid']}:{a:.1f}"}
-        if not chosen:
+        if not chosen and not (prod.get("settings") or {}).get("video_only"):
             # Garantia final (zero tela preta): primeira foto HD do protagonista, sem validação de IA.
             try:
                 for c in web_images(_subject(topic) or q0)[:8]:
