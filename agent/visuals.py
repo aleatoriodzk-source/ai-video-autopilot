@@ -532,7 +532,10 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
         # Nicho só de vídeos: tenta mais uma vez com uma busca mais ampla antes de aceitar foto.
         sc["_vo_try"] = 1
         base = " ".join((prod.get("topic") or q).split()[:4])
-        return _web_pick(runner, job, f"{base} movie scene", work, sc, prod, recent, window, yt_used)
+        return _web_pick(runner, job, base, work, sc, prod, recent, window, yt_used)
+    if video_only:
+        runner.log(job, f"cena {sc['idx'] + 1}: canal só de vídeo — sem foto, reaproveita clipe", step="visuals")
+        return None
     out = work / f"img_{sc['idx']:03d}.jpg"
     try:
         tried = 0
@@ -579,7 +582,8 @@ _VAGUE = set("expressao expressão chocado chocada anunciando dramatico dramáti
 def _clean_q(q: str, topic: str = "") -> str:
     """Busca concreta: nomes próprios + até 3 substantivos; nada de frase poética da narração."""
     names = proper_names(q)
-    words = [w for w in re.sub(r"[^\wÀ-ÿ ]", " ", q).split() if w.lower() not in _STOP and w.lower() not in _VAGUE and len(w) > 2]
+    q = re.sub(r"\b(19|20)\d{2}\b", " ", q)  # anos poluem a busca
+    words = [w for w in re.sub(r"[^\wÀ-ÿ ]", " ", q).split() if not w.isdigit() if w.lower() not in _STOP and w.lower() not in _VAGUE and len(w) > 2]
     rest = [w for w in words if not any(w.lower() in n.lower() for n in names)][:3 if not names else 2]
     out = " ".join(list(dict.fromkeys(names))[:2] + rest).strip()
     return out or q[:40]
