@@ -321,10 +321,10 @@ def text_card(text: str, w: int, h: int, out: Path) -> None:
 
 
 MOTIONS = {
-    "zoom_in": ("min(zoom+{r},1.25)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
-    "zoom_out": ("if(eq(on,0),1.25,max(zoom-{r},1.0))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
-    "pan_left": ("1.15", "(iw-iw/zoom)*(1-on/{n})", "ih/2-(ih/zoom/2)"),
-    "pan_right": ("1.15", "(iw-iw/zoom)*on/{n}", "ih/2-(ih/zoom/2)"),
+    "zoom_in": ("min(zoom+{r},1.25)", "iw/2-(iw/zoom/2)", "(ih-ih/zoom)*0.2"),
+    "zoom_out": ("if(eq(on,0),1.25,max(zoom-{r},1.0))", "iw/2-(iw/zoom/2)", "(ih-ih/zoom)*0.2"),
+    "pan_left": ("1.15", "(iw-iw/zoom)*(1-on/{n})", "(ih-ih/zoom)*0.2"),
+    "pan_right": ("1.15", "(iw-iw/zoom)*on/{n}", "(ih-ih/zoom)*0.2"),
 }
 
 
@@ -375,7 +375,7 @@ def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, o
         base = (f"scale={int(w * 1.7)}:{int(h * 1.7)}:force_original_aspect_ratio=decrease,"
                 f"colorkey=0xFFFFFF:0.12:0.08,pad={w * 2}:{h * 2}:(ow-iw)/2:(oh-ih)/2:color=0x0d0e12,format=yuv420p,vignette,")
     else:
-        base = f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+        base = f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2}:(iw-ow)/2:(ih-oh)*0.2,"
     vf = (base +
           f"zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={w}x{h}:fps={fps},format=yuv420p")
     run(["ffmpeg", "-y", "-i", str(image), "-vf", vf, "-frames:v", str(n), "-r", str(fps),

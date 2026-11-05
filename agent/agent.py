@@ -481,13 +481,16 @@ class Runner:
         media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf, frame)
 
     def step_captions(self, job, ctx):
-        cues, t = [], 0.0
+        from concurrent.futures import ThreadPoolExecutor
+        starts, t = [], 0.0
         for sc in ctx["scenes"]:
-            wav = ctx["work"] / f"voice_{sc['idx']:03d}.wav"
-            total = media.duration(wav)
-            speech = float(sc.get("audio_duration_s") or total)
-            cues += media.aligned_timings(media.clean_tts(sc["narration"]), wav, start=t)
-            t += total
+            starts.append(t)
+            t += media.duration(ctx["work"] / f"voice_{sc['idx']:03d}.wav")
+        def _al(a):
+            sc, st = a
+            return media.aligned_timings(media.clean_tts(sc["narration"]), ctx["work"] / f"voice_{sc['idx']:03d}.wav", start=st)
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            cues = [c for part in ex.map(_al, zip(ctx["scenes"], starts)) for c in part]
         ps = ctx["prod"].get("settings") or {}
         plan = self._plan(ctx)
         if plan["profile_used"]:
@@ -723,7 +726,16 @@ def main():
     api = Api(cfg["api_url"], cfg["token"])
     runner = Runner(api, cfg)
     print(f"Agente {VERSION} conectado a {cfg['api_url']}. Ctrl+C para parar.")
-    last_beat = 0.0
+    import threading
+    def _beat():
+        while True:
+            try:
+                api.call("heartbeat", info=info())
+            except Exception:
+                pass
+            time.sleep(30)
+    threading.Thread(target=_beat, daemon=True).start()
+    last_beat = time.time()
     last_clean = 0.0
     while True:
         try:
