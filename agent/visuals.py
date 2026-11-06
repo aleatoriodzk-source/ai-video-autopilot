@@ -260,15 +260,40 @@ def proper_names(q: str) -> list[str]:
     return [w.lower() for w in re.findall(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕ][\wÀ-ú'-]{2,}", q) if w.lower() not in stop]
 
 
+_YT_CACHE: dict = {}
+
+
+def _yt_searches(q: str) -> list:
+    _nm = proper_names(q)
+    _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
+    return [f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit"]
+
+
+def prefetch_youtube_searches(queries: list, workers: int = 4) -> None:
+    """Faz as buscas do YouTube de todas as cenas ao mesmo tempo (4 por vez); a cena depois só baixa o trecho."""
+    from concurrent.futures import ThreadPoolExecutor
+    from analyzer import _ytdlp
+
+    def one(search):
+        try:
+            _YT_CACHE[search] = json.loads(_ytdlp(["--flat-playlist", "-J", search])).get("entries") or []
+        except Exception:
+            pass
+    todo = list(dict.fromkeys(s for q in queries if q for s in _yt_searches(q)))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(one, todo))
+
+
 def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | None:
     """Busca no YouTube priorizando Shorts/clipes curtos (o personagem fica em cena o tempo todo) e baixa só o trecho da cena."""
     import random
     from analyzer import _ytdlp
     entries = []
-    _nm = proper_names(q)
-    _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
-    for search in (f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit"):
+    for search in _yt_searches(q):
         try:
+            if search in _YT_CACHE:
+                entries += _YT_CACHE[search]
+                continue
             data = json.loads(_ytdlp(["--flat-playlist", "-J", search]))
             entries += data.get("entries") or []
         except Exception as e:
@@ -788,6 +813,12 @@ def pick_visuals(runner, job, ctx) -> None:
         prefetch_web_images([_clean_q(x.get("visual_query") or x["narration"][:60], topic) for x in ctx["scenes"]])
     except Exception as e:
         runner.log(job, f"busca paralela de fotos: {str(e)[:100]}", "warn", "visuals")
+    if not image_only:
+        try:
+            runner.update(job, wait_reason="Pesquisando vídeos de 4 cenas ao mesmo tempo…")
+            prefetch_youtube_searches([_clean_q(x.get("visual_query") or x["narration"][:60], topic) for x in ctx["scenes"]])
+        except Exception as e:
+            runner.log(job, f"busca paralela de vídeos: {str(e)[:100]}", "warn", "visuals")
     for n_sc, sc in enumerate(ctx["scenes"], 1):
         print(f"[visuals] cena {n_sc} de {total}")
         try:

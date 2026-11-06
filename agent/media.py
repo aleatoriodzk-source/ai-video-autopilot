@@ -395,6 +395,7 @@ def subject_center_x(src: Path, dur: float) -> float | None:
         cap = cv2.VideoCapture(str(src))
         xs, wsum = [], 0.0
         prof = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+        upper = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_upperbody.xml")
         for t in (0.1, 0.3, 0.5, 0.7, 0.9):
             cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, dur * t) * 1000)
             ok, fr = cap.read()
@@ -406,6 +407,9 @@ def subject_center_x(src: Path, dur: float) -> float | None:
             if not faces and not prof.empty():
                 faces = list(prof.detectMultiScale(g, 1.1, 4, minSize=mn)) + [
                     (g.shape[1] - x - fw, y, fw, fh) for (x, y, fw, fh) in prof.detectMultiScale(cv2.flip(g, 1), 1.1, 4, minSize=mn)]
+            if not faces and not upper.empty():
+                # máscara/capacete (ex.: Homem-Aranha): rosto não é achado, mas tronco e ombros sim
+                faces = list(upper.detectMultiScale(g, 1.1, 3, minSize=(g.shape[1] // 10, g.shape[1] // 10)))
             for (x, y, fw, fh) in faces:
                 a = float(fw * fh)
                 xs.append((x + fw / 2) / g.shape[1] * a)
