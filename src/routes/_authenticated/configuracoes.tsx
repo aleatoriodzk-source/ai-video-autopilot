@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
 });
 
 const PROVIDERS = [
-  { id: "gemini", name: "Gemini (Google)", hint: "Tem plano gratuito. Pegue em aistudio.google.com → Get API key.", ph: "AIza... ou AQ..." },
+  { id: "gemini", name: "Gemini (Google)", hint: "Tem plano gratuito. Pegue em aistudio.google.com → Get API key. Pode colar 2 ou 3 chaves separadas por vírgula: elas se revezam sozinhas.", ph: "AIza... ou AQ..." },
   { id: "openai", name: "ChatGPT (OpenAI)", hint: "Pago por uso. Pegue em platform.openai.com → API keys.", ph: "sk-..." },
   { id: "anthropic", name: "Claude (Anthropic)", hint: "Pago por uso. Pegue em console.anthropic.com → API Keys.", ph: "sk-ant-..." },
   { id: "elevenlabs", name: "ElevenLabs (voz clonada, opcional)", hint: "Opcional. Clona a voz na nuvem sem placa de vídeo. Sem chave, usa as vozes grátis. Pegue em elevenlabs.io → API Keys.", ph: "sk_..." },
