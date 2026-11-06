@@ -170,7 +170,44 @@ export async function aiImage(prompt: string, aspect: string, model: string): Pr
   return b64;
 }
 
+/** Várias chaves gratuitas separadas por vírgula/linha: alterna sozinho se uma bater no limite (429/503). */
+export const splitKeys = (key: string) => key.split(/[\s,;]+/).map((k) => k.trim()).filter((k) => k.length >= 10);
+let rot = 0;
 async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
+  const ks = splitKeys(key);
+  if (ks.length <= 1) return geminiOne<T>(opts, key.trim());
+  const start = rot++ % ks.length;
+  let last: unknown;
+  for (let i = 0; i < ks.length; i++) {
+    try {
+      return await geminiOne<T>(opts, ks[(start + i) % ks.length]!);
+    } catch (e) {
+      last = e;
+      if (!(e instanceof AiError) || ![429, 503, 500, 403].includes(e.status)) throw e;
+    }
+  }
+  throw last;
+}
+
+/** Estado de cada chave Gemini: ok, limite por minuto, cota do dia esgotada ou inválida. */
+export async function geminiStatus(key: string): Promise<{ last4: string; state: "ok" | "minute" | "daily" | "busy" | "invalid"; msg: string }[]> {
+  const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
+  return Promise.all(splitKeys(key).map(async (k) => {
+    const last4 = k.slice(-4);
+    try {
+      await geminiOne({ system: "JSON.", user: "ok=true", schemaName: "t", schema }, k);
+      return { last4, state: "ok" as const, msg: "Pronta" };
+    } catch (e) {
+      const m = (e as Error).message;
+      const st = e instanceof AiError ? e.status : 0;
+      if (st === 429) return /per ?day|PerDay|daily/i.test(m) ? { last4, state: "daily" as const, msg: "Cota do dia esgotada" } : { last4, state: "minute" as const, msg: "Limite por minuto — aguarde 60s" };
+      if (st === 503 || st === 500) return { last4, state: "busy" as const, msg: "Google sobrecarregado agora" };
+      return { last4, state: "invalid" as const, msg: m.slice(0, 120) };
+    }
+  }));
+}
+
+async function geminiOne<T>(opts: AiOpts, key: string): Promise<{ data: T; usage: Usage }> {
   const parts: Record<string, unknown>[] = [{ text: opts.user }];
   for (const url of opts.images ?? []) {
     const m = /^data:([^;]+);base64,(.*)$/.exec(url);

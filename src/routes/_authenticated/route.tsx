@@ -5,6 +5,7 @@ import { Boxes, Clapperboard, FlaskConical, Film, KeyRound, LayoutDashboard, Lin
 import { supabase } from "@/integrations/supabase/client";
 import { agentOnline } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
+import { KeyStatus } from "@/components/app/KeyStatus";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -74,6 +75,7 @@ function Shell() {
             <span className={cn("h-2 w-2 rounded-full", online ? "bg-success" : "bg-destructive")} />
             Agente local {online ? "conectado" : "desconectado"}
           </div>
+          <KeyStatus />
           <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
             <LogOut className="h-3.5 w-3.5" /> Sair
           </button>
