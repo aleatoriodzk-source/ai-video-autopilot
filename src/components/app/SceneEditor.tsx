@@ -20,6 +20,7 @@ type Draft = {
 const MOTIONS: [string, string][] = [["zoom_in", "Zoom aproximando"], ["zoom_out", "Zoom afastando"], ["pan_left", "Deslizar à esquerda"], ["pan_right", "Deslizar à direita"], ["static", "Parada"]];
 const TRANS: [string, string][] = [["cut", "Corte seco"], ["fade", "Esmaecer"], ["slideleft", "Deslizar ←"], ["slideright", "Deslizar →"], ["zoomin", "Zoom"], ["circleopen", "Círculo"]];
 
+const PAUSES: [number, string][] = [[0, "Nenhum"], [150, "Curto"], [400, "Médio"], [800, "Longo"]];
 const field = "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm";
 const btn = "rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50";
 
@@ -39,6 +40,11 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState("");
   const [pick, setPick] = useState(false);
+  const { data: prod } = useQuery({
+    queryKey: ["prod-aspect", productionId],
+    queryFn: async () => (await supabase.from("productions").select("aspect").eq("id", productionId).maybeSingle()).data,
+  });
+  const wide = prod?.aspect === "16:9";
 
   useEffect(() => {
     if (!data || dirty) return;
@@ -168,51 +174,50 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         ))}
       </div>
 
-      {/* Inspector */}
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="text-xs text-muted-foreground md:col-span-2">Narração da cena {sel + 1} (o que a voz vai falar)
-          <textarea rows={3} value={cur.narration} onChange={(e) => edit({ narration: e.target.value })} className={field + " mt-1"} />
-        </label>
-        <label className="text-xs text-muted-foreground">Legenda curta
-          <input value={cur.caption} onChange={(e) => edit({ caption: e.target.value })} className={field + " mt-1"} />
-        </label>
-        <label className="text-xs text-muted-foreground">Pausa depois (ms)
-          <input type="number" min={0} max={5000} step={100} value={cur.pause_after_ms} onChange={(e) => edit({ pause_after_ms: Number(e.target.value) })} className={field + " mt-1"} />
-        </label>
-        <label className="text-xs text-muted-foreground">Busca de vídeo/foto (em inglês, ex.: deep ocean submarine)
-          <input value={cur.visual_query} onChange={(e) => edit({ visual_query: e.target.value })} className={field + " mt-1 font-mono"} />
-        </label>
-        <label className="text-xs text-muted-foreground">O que deve aparecer (descrição)
-          <input value={cur.visual_description} onChange={(e) => edit({ visual_description: e.target.value })} className={field + " mt-1"} />
-        </label>
-      </div>
+      {/* Inspector em 2 colunas: narrativa à esquerda, prévia e mídia à direita */}
+      <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+        <div className="min-w-0 space-y-2">
+          <label className="block text-xs text-muted-foreground">
+            <span className="flex justify-between"><span>Fala da cena {sel + 1}</span><span>{cur.narration.split(/\s+/).filter(Boolean).length} palavras · ~{est(cur).toFixed(1)}s</span></span>
+            <textarea rows={3} value={cur.narration} onChange={(e) => edit({ narration: e.target.value })} className={field + " mt-1"} />
+          </label>
+          <label className="block text-xs text-muted-foreground">Legenda curta (texto em destaque)
+            <input value={cur.caption} onChange={(e) => edit({ caption: e.target.value })} className={field + " mt-1"} />
+          </label>
+          <label className="block text-xs text-muted-foreground">O que aparece na tela (descreva em português)
+            <textarea rows={2} value={cur.visual_description} onChange={(e) => edit({ visual_description: e.target.value })} placeholder="Ex.: Peter Parker vestindo o traje caseiro no quarto" className={field + " mt-1"} />
+          </label>
+          <label className="block text-xs text-muted-foreground">Palavras de busca (personagem primeiro, ex.: Peter Parker homemade suit)
+            <input value={cur.visual_query} onChange={(e) => edit({ visual_query: e.target.value })} className={field + " mt-1"} />
+          </label>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="text-xs text-muted-foreground">Câmera
+              <select value={cur.motion} onChange={(e) => edit({ motion: e.target.value })} className={field + " mt-1"}>{MOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            </label>
+            <label className="text-xs text-muted-foreground">Passagem
+              <select value={cur.transition} onChange={(e) => edit({ transition: e.target.value })} className={field + " mt-1"}>{TRANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            </label>
+            <label className="text-xs text-muted-foreground">Respiro depois
+              <select value={PAUSES.reduce((b, p) => (Math.abs(p[0] - cur.pause_after_ms) < Math.abs(b[0] - cur.pause_after_ms) ? p : b))[0]} onChange={(e) => edit({ pause_after_ms: Number(e.target.value) })} className={field + " mt-1"}>{PAUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            </label>
+          </div>
+        </div>
 
-      <div className="grid gap-2 md:grid-cols-3">
-        <label className="text-xs text-muted-foreground">Movimento da imagem
-          <select value={cur.motion} onChange={(e) => edit({ motion: e.target.value })} className={field + " mt-1"}>{MOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        </label>
-        <label className="text-xs text-muted-foreground">Transição para a próxima
-          <select value={cur.transition} onChange={(e) => edit({ transition: e.target.value })} className={field + " mt-1"}>{TRANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        </label>
-        <div className="text-xs text-muted-foreground">Mídia da cena
+        <div className="space-y-2 text-xs text-muted-foreground md:w-72">
+          <div className="font-medium text-foreground">Prévia da cena {sel + 1} {wide ? "(YouTube 16:9)" : "(celular 9:16)"}</div>
+          <PhonePreview assetId={cur.asset_id} text={cur.caption || cur.narration} wide={wide} />
           <SceneMedia assetId={cur.asset_id} />
-          <div className="mt-1 flex flex-wrap gap-2">
-            <label className={btn + " cursor-pointer"}>Trocar por arquivo meu<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
-            <button className={btn} onClick={() => setPick((p) => !p)}>Usar do acervo</button>
-            {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Buscar automática</button>}
+          <div className="font-medium text-foreground">Trocar mídia</div>
+          <div className="flex flex-wrap gap-2">
+            <button className={btn} onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cur.visual_query || cur.visual_description || cur.narration.slice(0, 60))}`, "_blank")}>Pesquisar no YouTube</button>
+            <label className={btn + " cursor-pointer"}>Subir do PC<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
+            <button className={btn} onClick={() => setPick((p) => !p)}>Pegar do acervo</button>
+            {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Voltar para automática</button>}
           </div>
           {pick && <LibraryPicker onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-start gap-3">
-        <PhonePreview assetId={cur.asset_id} text={cur.caption || cur.narration} />
-        <div className="min-w-0 flex-1 space-y-2 text-xs text-muted-foreground">
-          <div className="font-medium text-foreground">Prévia da cena {sel + 1} no celular</div>
-          <p>Assim a cena aparece no vídeo final: mídia por cima do fundo desfocado e a legenda destacando a palavra falada.</p>
-          <p>{cur.asset_id ? "Mídia definida para esta cena." : "Mídia automática: o agente vai buscar no TikTok, YouTube e bancos de imagem ao renderizar. Para escolher você mesmo, use os botões acima."}</p>
-          <div className="flex flex-wrap gap-2">
-            <button className={btn} disabled={sel === 0} onClick={() => setSel(sel - 1)}>← Cena anterior</button>
-            <button className={btn} disabled={sel === draft.length - 1} onClick={() => setSel(sel + 1)}>Próxima cena →</button>
+          <div className="flex gap-2">
+            <button className={btn} disabled={sel === 0} onClick={() => setSel(sel - 1)}>← Anterior</button>
+            <button className={btn} disabled={sel === draft.length - 1} onClick={() => setSel(sel + 1)}>Próxima →</button>
           </div>
         </div>
       </div>
@@ -312,7 +317,7 @@ function SceneMedia({ assetId }: { assetId: string | null }) {
 }
 
 /** Prévia vertical 9:16: mídia sobre fundo desfocado + legenda animada. */
-function PhonePreview({ assetId, text }: { assetId: string | null; text: string }) {
+function PhonePreview({ assetId, text, wide }: { assetId: string | null; text: string; wide?: boolean }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
@@ -326,7 +331,7 @@ function PhonePreview({ assetId, text }: { assetId: string | null; text: string 
   const url = assetId ? data?.url : null;
   const isVid = data?.kind === "video";
   return (
-    <div className="relative aspect-[9/16] w-40 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+    <div className={"relative shrink-0 overflow-hidden rounded-lg border border-border bg-muted " + (wide ? "aspect-video w-full" : "aspect-[9/16] w-40")}>
       {url ? (
         <>
           {isVid ? <video src={url} muted autoPlay loop playsInline className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" /> : <img src={url} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" />}
@@ -335,7 +340,7 @@ function PhonePreview({ assetId, text }: { assetId: string | null; text: string 
       ) : (
         <div className="absolute inset-0 flex items-center justify-center p-2 text-center text-[10px] text-muted-foreground">Mídia automática</div>
       )}
-      <div className="absolute inset-x-1 bottom-[22%]"><CaptionPreview text={text} compact /></div>
+      <div className={"absolute inset-x-1 " + (wide ? "bottom-[8%]" : "bottom-[22%]")}><CaptionPreview text={text} compact /></div>
     </div>
   );
 }
