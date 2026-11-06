@@ -76,8 +76,16 @@ function Referencias() {
     const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);
     const { data: p, error } = await supabase.from("productions").insert({ user_id: u.user!.id, title: idea.title.slice(0, 80), topic, aspect: short ? "9:16" : "16:9", mode: "auto", reference_id: refId, settings }).select("id").single();
     if (error) throw error;
-    const s = await generateScript({ data: { productionId: p.id, topic } });
-    if (!s.ok) throw new Error(s.error);
+    // IA oscilou? tenta de novo uma vez; se falhar, apaga o rascunho para não sobrar produção "sem roteiro"
+    let s = await generateScript({ data: { productionId: p.id, topic } }).catch((e) => ({ ok: false as const, error: (e as Error).message }));
+    if (!s.ok) {
+      await new Promise((r) => setTimeout(r, 4000));
+      s = await generateScript({ data: { productionId: p.id, topic } }).catch((e) => ({ ok: false as const, error: (e as Error).message }));
+    }
+    if (!s.ok) {
+      await supabase.from("productions").delete().eq("id", p.id);
+      throw new Error("A IA não respondeu agora (" + s.error + "). Nada foi criado — tente de novo em 1 minuto.");
+    }
     return p.id;
   }
 
