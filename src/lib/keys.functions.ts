@@ -65,7 +65,7 @@ export const geminiKeyStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { loadKeys } = await import("@/server/tasks.server");
-    const k = ((await loadKeys(context.userId)) as Record<string, string | undefined>).gemini ?? process.env["GEMINI_API_KEY"];
+    const k = ((await loadKeys(context.userId)) as Record<string, string | undefined>)["gemini"] ?? process.env["GEMINI_API_KEY"];
     if (!k) return { keys: [] as { last4: string; state: string; msg: string }[] };
     const { geminiStatus } = await import("@/server/ai.server");
     return { keys: await geminiStatus(k) };

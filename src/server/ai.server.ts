@@ -180,7 +180,7 @@ async function geminiJson<T>(opts: AiOpts, key: string): Promise<{ data: T; usag
   let last: unknown;
   for (let i = 0; i < ks.length; i++) {
     try {
-      return await geminiOne<T>(opts, ks[(start + i) % ks.length]);
+      return await geminiOne<T>(opts, ks[(start + i) % ks.length]!);
     } catch (e) {
       last = e;
       if (!(e instanceof AiError) || ![429, 503, 500, 403].includes(e.status)) throw e;
