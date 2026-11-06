@@ -15,7 +15,7 @@ export const listKeys = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data } = await supabaseAdmin.from("user_api_keys").select("provider,api_key,updated_at").eq("user_id", context.userId);
     const out: Record<string, { last4: string; updated_at: string } | null> = { gemini: null, openai: null, anthropic: null, elevenlabs: null };
-    for (const r of data ?? []) out[r.provider] = { last4: r.api_key.slice(-4), updated_at: r.updated_at };
+    for (const r of data ?? []) out[r.provider] = { last4: r.api_key.trim().slice(-4), updated_at: r.updated_at };
     return { keys: out, platformGemini: !!process.env["GEMINI_API_KEY"] };
   });
 
@@ -23,7 +23,7 @@ export const saveKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { provider: string; key: string }) => ({ provider: check(i.provider), key: String(i.key ?? "").trim() }))
   .handler(async ({ data, context }) => {
-    if (data.key.length < 10 || data.key.length > 500) return { ok: false as const, error: "Chave inválida" };
+    if (data.key.length < 10 || data.key.length > 3000) return { ok: false as const, error: "Chave inválida" };
     const { testProvider } = await import("@/server/ai.server");
     try {
       await testProvider(data.provider, data.key);
@@ -58,4 +58,15 @@ export const testSavedKey = createServerFn({ method: "POST" })
     } catch (e) {
       return { ok: false as const, error: (e as Error).message.slice(0, 250) };
     }
+  });
+
+/** Monitor da chave gratuita Gemini (uma ou várias): mostra se está pronta, no limite do minuto ou sem cota. */
+export const geminiKeyStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { loadKeys } = await import("@/server/tasks.server");
+    const k = ((await loadKeys(context.userId)) as Record<string, string | undefined>).gemini ?? process.env["GEMINI_API_KEY"];
+    if (!k) return { keys: [] as { last4: string; state: string; msg: string }[] };
+    const { geminiStatus } = await import("@/server/ai.server");
+    return { keys: await geminiStatus(k) };
   });
