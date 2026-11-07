@@ -261,6 +261,8 @@ def proper_names(q: str) -> list[str]:
 
 
 _YT_CACHE: dict = {}
+import re as _re
+BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reação|legendado|subtitles?|lyrics?)\b")
 
 
 def _yt_searches(q: str) -> list:
@@ -309,6 +311,9 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         title = (e.get("title") or "").lower()
         # O personagem citado na cena tem que estar no vídeo: título sem o nome dele é descartado.
         if names and not any(nm in title for nm in names):
+            continue
+        # Entrevistas/podcasts/cortes quase sempre têm legenda queimada: nunca usar.
+        if BANNED_TITLE.search(title):
             continue
         # busca rápida às vezes vem sem duração: não descarta, assume um clipe de ~3 min
         if not vid or vid in used or (dur and (dur < 5 or dur > 1200)):
