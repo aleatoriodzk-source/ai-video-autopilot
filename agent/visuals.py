@@ -547,7 +547,10 @@ def _web_pick(runner, job, q, work, sc, prod, recent, window, yt_used):
             c = fn(runner, job, q, sc, vout, yt_used)
             if not c:
                 break
-            if not vision_ok(runner, job, vout, sc, prod):
+            _tl = (c.get("title") or "").lower()
+            _nm = [n for n in dict.fromkeys(proper_names(q)) if len(n) > 2]
+            # Título já cita o personagem da busca: aprova direto (sem tribunal de 1 frame).
+            if not (_nm and any(n in _tl for n in _nm)) and not vision_ok(runner, job, vout, sc, prod):
                 continue
             lic = "Trecho curto do TikTok — uso transformativo/comentário; verifique antes de monetizar" if name == "tiktok" else "Trecho curto do YouTube — uso transformativo/comentário; verifique antes de monetizar"
             aid = runner.api.call("create_asset", asset={"production_id": prod["id"], "kind": "video", "source": name, "source_url": c["page"],
@@ -796,7 +799,7 @@ def pick_visuals(runner, job, ctx) -> None:
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
     w, h = ctx["w"], ctx["h"]
     orientation = "portrait" if h > w else "landscape" if w > h else "square"
-    key = runner.cfg.get("pexels_api_key")
+    key = None  # Pexels removido: banco genérico não combina com os canais de referência
     pxb = None  # Pixabay removido: banco genérico só gerava recusas
     window = s["visuals"].get("avoid_repeat_window", 4)
     uploads = [a for a in ctx["assets"] if a["source"] == "upload" and a["kind"] == "image" and a.get("storage_path")]

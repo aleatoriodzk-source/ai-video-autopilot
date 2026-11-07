@@ -133,7 +133,7 @@ class Runner:
                 try:
                     p = subprocess.run(["yt-dlp", "--cookies-from-browser", browsers[plat], "--cookies", str(f),
                                         "--skip-download", "--flat-playlist", "--playlist-items", "0", probe[plat]],
-                                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
                     if f.exists() and f.stat().st_size > 100:
                         analyzer.COOKIES[plat] = f
                         analyzer.set_browser(browsers[plat])
