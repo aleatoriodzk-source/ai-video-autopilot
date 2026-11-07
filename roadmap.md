@@ -1,53 +1,28 @@
-# Roadmap
+# Roadmap — Estúdio Inteligente (V3 + V2 + Multifaixa + Biblioteca)
+
+Rodadas diárias às 21h (horário de Brasília).
 
 ## Feito
-- [x] Aba "Chaves de IA" (Gemini, ChatGPT, Claude) com teste, IA padrão e escolha por produção
-- [x] Novas tentativas automáticas quando a IA dá 503/429 e troca para a próxima IA
+- [x] Roteiro: motor de engenharia reversa (blocos, frases curtas, sem CTA automático, máx. 3 personagens no Short)
+- [x] Proibição de buscas metafóricas (cadeado, cofre, pesquisador…)
+- [x] Pexels e Pixabay removidos do agente
+- [x] Aprovação direta por título (sem tribunal de 1 frame do Gemini)
+- [x] Timeouts menores (cookies 20s, socket 15s)
+- [x] Filtro anti-entrevista/podcast/cortes/react nas buscas de vídeo e no roteiro
+- [x] Foto só quando a referência usa foto (canal só de vídeo não cai em foto)
 
-## Próximos (em ordem)
-1. [x] Fila: mensagens claras por etapa, reiniciar só a etapa que falhou, evitar loops
-2. [x] Duração garantida pelo áudio final (não entregar 39s quando pediu 60s)
-3. [x] Tela de roteiro completo (gancho, desenvolvimento, clímax, CTA, fontes) + regenerar uma cena
-4. [x] Mídia: filtro pelo assunto + IA confere a imagem (até 4 por cena)
-5. [x] Novas fontes: Wikimedia, Openverse, NASA, Internet Archive; acervo próprio (aba Acervo + escolha no editor + agente usa o acervo)
-6. [x] Análise profunda: transcrição, hook, estrutura, ritmo, legendas, áudio → DNA de Nicho e Estilo
-7. [x] Análise de canal comparando vários vídeos
-8. [x] Editor estilo CapCut (timeline, troca de mídia por cena, legendas palavra por palavra)
-9. [x] Automático: transições reais no vídeo, efeitos sonoros gerados pelo programa, música livre online por clima (clima escolhido sozinho)
-9b. [ ] Prévia da voz antes de gerar
-10. [x] Versões do vídeo e renderização mais rápida
-11. [~] ZIP novo gerado com tudo; falta o Júlio trocar os arquivos no PC. Agente do PC: gerar ZIP novo e trocar os arquivos no PC (deixado para o final, a pedido do Júlio)
-- [x] Mídia real por assunto: trechos do YouTube + imagens da web para cultura pop/filmes/famosos; IA de conferência menos rígida; roteiro usa nomes próprios na busca
-- [x] Banco de Vozes: isolar voz (Demucs) + medir ritmo/pausas + clonar (F5-TTS/XTTS no PC via install_voice_clone.bat)
-- [x] Modo fatiador: IA assiste as tomadas do vídeo de referência e monta o roteiro com elas
-- [x] Contas vinculadas (cookies.txt YouTube/TikTok) + Explorador de busca no YouTube
-- [x] Narração sem pausas, fatiador fiel à IA, faxina de 24h
-- [x] Legenda sincronizada com a fala real (ignora pausas)
-- [ ] Próximos: efeitos sonoros reais, voz clonada mais rápida, sugestões de temas após análise de canal
-- [ ] Testar no PC do Júlio (depende de trocar os arquivos do agente)
+## Fase 1 — Cérebro V3 + Etapa 5 (falta)
+- [ ] Miniatura real de cada cena enviada ao site enquanto o agente trabalha
+- [ ] Amostragem local de 4–6 frames (movimento/brilho) no lugar do Gemini
+- [ ] Rastreio de rosto no corte 9:16 (terço superior)
+- [ ] Pool de chaves Gemini com revezamento automático
 
-## Lista de correções (Out/2026)
-- [x] Mínimo 60s em vídeos curtos
-- [x] Legenda na zona segura inferior
-- [x] Análise de canal: 5 vídeos mais recentes + link /videos
-- [x] Excluir referências + atualização automática + selo "Analisado"
-- [x] Campo de tema no Laboratório (sem janelinha do navegador)
-- [x] Narração reaproveitada se o agente reiniciar
-- [x] Smart crop (personagem centralizado) e personagem bater com a fala
-- [x] Ritmo de cortes igual ao da referência; trilha e efeitos ligados por padrão
-- [x] Laboratório: música isolada (sem voz), zoom/pan/flash medidos, kit aplica o movimento
-- [x] Escolher voz, velocidade, legenda, música e efeitos ao criar vídeo (Laboratório e Referências)
-- [x] Efeitos sonoros reais (CC0) no lugar do chiado; imagens de fundo branco ficam sobre fundo escuro
-- [x] Roteiro com uma história só, linear e com nomes reais
+## Fase 2 — Biblioteca
+- [ ] Aba Biblioteca: SFX, músicas, presets de legenda, filtros de cor, pacote de canal
 
-## Visual e estilo (Out/2026) — ZIP só no final, a pedido do Júlio
-- [x] Roteiro curto: 165-195 palavras (nunca < 60s)
-- [x] Legenda Karaokê (palavra falada acende) e Caixa escura
-- [x] Proporção por cena (16:9, 1:1, 3:4, tela cheia) aprendida da referência, sempre com fundo desfocado (vídeos e fotos)
-- [x] TikTok: link curto, sem marca d'água, plano B se o yt-dlp falhar
-- [x] Gerar ZIP final (efeitos ligados por padrão, 6 sons reais embutidos, verificação do FFmpeg)
-- [ ] Voz clonada na nuvem (deixada por último)
-- [x] Canal de fotos usa só fotos (sem TikTok/vídeo); referência do YouTube nunca busca TikTok
-- [x] Laboratório sem isolar voz/música; não inicia sozinho
-- [x] Escolher a voz no cartão da produção antes de iniciar
-- [x] Corte automático de tarjas pretas de cinema
+## Fase 3 — Editor Multifaixa
+- [ ] Timeline com faixas Vídeo / Legenda / Voz / SFX+Trilha e player de prévia
+
+## Fase 4 — Comandos e render
+- [ ] Cortar, trocar mídia na faixa, ajustar pontas e mandar renderizar no agente
+- [ ] Botão de baixar o pacote do agente
