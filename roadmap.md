@@ -12,7 +12,7 @@ Rodadas diárias às 21h (horário de Brasília).
 - [x] Foto só quando a referência usa foto (canal só de vídeo não cai em foto)
 
 ## Fase 1 — Cérebro V3 + Etapa 5 (falta)
-- [ ] Miniatura real de cada cena enviada ao site enquanto o agente trabalha
+- [x] Miniatura real de cada cena enviada ao site enquanto o agente trabalha
 - [x] Conferência em 4 momentos do clipe (mosaico) + descarte local de tela preta
 - [ ] Rastreio de rosto no corte 9:16 (terço superior)
 - [ ] Pool de chaves Gemini com revezamento automático
