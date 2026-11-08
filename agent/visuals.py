@@ -17,6 +17,25 @@ def _download(url: str, out: Path) -> None:
     out.write_bytes(r.content)
 
 
+def local_frames(path: Path, n: int = 4):
+    """Lê n quadros espalhados pelo clipe (pula vinheta inicial/final). None se não der para ler."""
+    try:
+        import cv2
+        cap = cv2.VideoCapture(str(path))
+        total = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+        out = []
+        pts = [0.15 + 0.7 * i / max(1, n - 1) for i in range(n)] if total > 1 else [0]
+        for p in pts:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * p))
+            ok, fr = cap.read()
+            if ok:
+                out.append(fr)
+        cap.release()
+        return out or None
+    except Exception:
+        return None
+
+
 def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
     """Pede para a IA olhar a mídia baixada e confirmar se mostra o assunto da cena. Se a conferência falhar, aceita (não trava o vídeo)."""
     if not runner.cfg.get("check_images", True):
@@ -26,11 +45,22 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
         return True
     thumb = path.with_name(path.stem + "_chk.jpg")
     try:
-        args = ["ffmpeg", "-y"] + (["-ss", f"{max(1.0, media.duration(path) / 2):.2f}"] if path.suffix == ".mp4" else []) + ["-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)]
-        media.run(args)
+        # V3: assiste o clipe em 4 momentos (não 1 print congelado) e monta um mosaico 2x2.
+        frames = local_frames(path, 4)
+        if frames is not None and path.suffix == ".mp4":
+            if max(f.mean() for f in frames) < 18:
+                runner.log(job, f"cena {sc['idx'] + 1}: clipe escuro/tela preta — descartado localmente", "info", "visuals")
+                return False
+        if frames:
+            import cv2, numpy as np
+            fs = [cv2.resize(f, (256, 144)) for f in (frames + frames * 3)[:4]]
+            cv2.imwrite(str(thumb), np.vstack([np.hstack(fs[:2]), np.hstack(fs[2:])]), [cv2.IMWRITE_JPEG_QUALITY, 70])
+        else:
+            media.run(["ffmpeg", "-y", "-i", str(path), "-frames:v", "1", "-vf", "scale=384:-2", "-q:v", "6", str(thumb)])
         img = "data:image/jpeg;base64," + base64.b64encode(thumb.read_bytes()).decode()
         q = sc.get("visual_query") or ""
-        desc = f"{sc.get('visual_description') or q} | narração: {(sc.get('narration') or '')[:200]}"
+        desc = (f"{sc.get('visual_description') or q} | narração: {(sc.get('narration') or '')[:200]}"
+                " | A imagem é um mosaico de 4 momentos do mesmo clipe: aprove se o assunto aparece em QUALQUER um deles.")
         r = runner.api.call("check_image", job_id=job["id"], image=img, description=desc, topic=prod.get("topic") or prod.get("title") or "",
                             characters=", ".join(dict.fromkeys(proper_names(q))))
     except Exception as e:
