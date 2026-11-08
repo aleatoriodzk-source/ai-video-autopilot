@@ -32,6 +32,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["scenes", productionId],
     queryFn: async () => (await supabase.from("scenes").select("*").eq("production_id", productionId).order("idx")).data ?? [],
+    refetchInterval: 6000,
   });
   const [draft, setDraft] = useState<Draft[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
@@ -284,11 +285,14 @@ function SceneThumb({ assetId }: { assetId: string | null }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
+    refetchInterval: (q) => (q.state.data?.url ? false : 6000),
     queryFn: async () => {
       const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
       if (!a) return null;
-      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
-      return { ...a, url };
+      const thumb = (a.meta as { thumb?: string } | null)?.thumb;
+      const p = a.storage_path ?? thumb ?? null;
+      const url = p ? (await supabase.storage.from("media").createSignedUrl(p, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, kind: a.storage_path ? a.kind : "image", url };
     },
   });
   if (!assetId || !data?.url) return <div className="flex h-10 w-full items-center justify-center rounded bg-muted text-[9px] text-muted-foreground">{assetId ? "…" : "auto"}</div>;
@@ -299,11 +303,14 @@ function SceneMedia({ assetId }: { assetId: string | null }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
+    refetchInterval: (q) => (q.state.data?.url ? false : 6000),
     queryFn: async () => {
       const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
       if (!a) return null;
-      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
-      return { ...a, url };
+      const thumb = (a.meta as { thumb?: string } | null)?.thumb;
+      const p = a.storage_path ?? thumb ?? null;
+      const url = p ? (await supabase.storage.from("media").createSignedUrl(p, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, kind: a.storage_path ? a.kind : "image", url };
     },
   });
   if (!assetId) return <div className="mt-1 rounded border border-dashed border-border p-2">Automática (o agente busca pela descrição)</div>;
@@ -321,11 +328,14 @@ function PhonePreview({ assetId, text, wide }: { assetId: string | null; text: s
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
+    refetchInterval: (q) => (q.state.data?.url ? false : 6000),
     queryFn: async () => {
       const { data: a } = await supabase.from("assets").select("kind, source, storage_path, attribution, meta").eq("id", assetId!).maybeSingle();
       if (!a) return null;
-      const url = a.storage_path ? (await supabase.storage.from("media").createSignedUrl(a.storage_path, 3600)).data?.signedUrl ?? null : null;
-      return { ...a, url };
+      const thumb = (a.meta as { thumb?: string } | null)?.thumb;
+      const p = a.storage_path ?? thumb ?? null;
+      const url = p ? (await supabase.storage.from("media").createSignedUrl(p, 3600)).data?.signedUrl ?? null : null;
+      return { ...a, kind: a.storage_path ? a.kind : "image", url };
     },
   });
   const url = assetId ? data?.url : null;
