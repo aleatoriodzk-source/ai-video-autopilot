@@ -160,6 +160,15 @@ export const Route = createFileRoute("/api/public/agent")({
               const { data } = await db.from("assets").insert({ ...a, user_id: userId, meta: a.meta ?? {} } as never).select("id").single();
               return json({ id: data!.id });
             }
+            case "set_asset_thumb": {
+              const id = uuid.parse(body.asset_id);
+              const path = z.string().max(500).parse(body.path);
+              if (!path.startsWith(`${userId}/thumbs/`)) return json({ error: "caminho não permitido" }, 403);
+              const { data: a } = await db.from("assets").select("meta").eq("id", id).eq("user_id", userId).maybeSingle();
+              if (!a) return json({ error: "mídia não encontrada" }, 404);
+              await db.from("assets").update({ meta: { ...((a.meta as Record<string, unknown>) ?? {}), thumb: path } } as never).eq("id", id).eq("user_id", userId);
+              return json({ ok: true });
+            }
             case "save_production": {
               const prod = await ownProduction(body.production_id);
               const f = z.object({ validation: z.unknown().optional(), report: z.unknown().optional(), output_path: z.string().max(500).optional(), preview_path: z.string().max(500).optional(), status: z.string().max(30).optional(), title: z.string().max(200).optional(), topic: z.string().max(500).optional(), versions: z.array(z.record(z.string(), z.unknown())).max(50).optional() }).parse(body.fields ?? {});
