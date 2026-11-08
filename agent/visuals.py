@@ -1013,3 +1013,4 @@ def pick_visuals(runner, job, ctx) -> None:
             recent_imgs.append(str(out))
         runner.api.call("update_scene", scene_id=sc["id"], fields={"asset_id": chosen["id"], "status": "visual_ok"})
         sc["asset_id"] = chosen["id"]
+        _live_thumb(runner, out, chosen["id"], prod["id"], sc["idx"])
