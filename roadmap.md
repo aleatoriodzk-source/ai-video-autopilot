@@ -14,11 +14,13 @@ Rodadas diárias às 21h (horário de Brasília).
 ## Fase 1 — Cérebro V3 + Etapa 5 (falta)
 - [x] Miniatura real de cada cena enviada ao site enquanto o agente trabalha
 - [x] Conferência em 4 momentos do clipe (mosaico) + descarte local de tela preta
-- [ ] Rastreio de rosto no corte 9:16 (terço superior)
+- [x] Rastreio de rosto no corte 9:16 (já existia no agente)
 - [x] Pool de chaves Gemini com revezamento automático
 
 ## Fase 2 — Biblioteca
-- [ ] Aba Biblioteca: SFX, músicas, presets de legenda, filtros de cor, pacote de canal
+- [x] Aba Biblioteca (filtros, legendas, SFX com prévia, trilhas) — escolha salva no navegador
+- [ ] Ligar a escolha da Biblioteca ao agente (aplicar no render)
+- [ ] Pacote de canal 1-clique e upload de SFX/músicas próprios
 
 ## Fase 3 — Editor Multifaixa
 - [ ] Timeline com faixas Vídeo / Legenda / Voz / SFX+Trilha e player de prévia

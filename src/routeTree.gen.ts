@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAcervoRouteImport } from './routes/_authenticated/acervo'
 import { Route as AuthenticatedAgenteRouteImport } from './routes/_authenticated/agente'
+import { Route as AuthenticatedBibliotecaRouteImport } from './routes/_authenticated/biblioteca'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedContasRouteImport } from './routes/_authenticated/contas'
 import { Route as AuthenticatedLaboratorioRouteImport } from './routes/_authenticated/laboratorio'
@@ -45,6 +46,11 @@ const AuthenticatedAcervoRoute = AuthenticatedAcervoRouteImport.update({
 const AuthenticatedAgenteRoute = AuthenticatedAgenteRouteImport.update({
   id: '/agente',
   path: '/agente',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBibliotecaRoute = AuthenticatedBibliotecaRouteImport.update({
+  id: '/biblioteca',
+  path: '/biblioteca',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedConfiguracoesRoute =
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
+  '/biblioteca': typeof AuthenticatedBibliotecaRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/contas': typeof AuthenticatedContasRoute
   '/laboratorio': typeof AuthenticatedLaboratorioRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/acervo': typeof AuthenticatedAcervoRoute
   '/agente': typeof AuthenticatedAgenteRoute
+  '/biblioteca': typeof AuthenticatedBibliotecaRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/contas': typeof AuthenticatedContasRoute
   '/laboratorio': typeof AuthenticatedLaboratorioRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/acervo': typeof AuthenticatedAcervoRoute
   '/_authenticated/agente': typeof AuthenticatedAgenteRoute
+  '/_authenticated/biblioteca': typeof AuthenticatedBibliotecaRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/contas': typeof AuthenticatedContasRoute
   '/_authenticated/laboratorio': typeof AuthenticatedLaboratorioRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/acervo'
     | '/agente'
+    | '/biblioteca'
     | '/configuracoes'
     | '/contas'
     | '/laboratorio'
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/acervo'
     | '/agente'
+    | '/biblioteca'
     | '/configuracoes'
     | '/contas'
     | '/laboratorio'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/acervo'
     | '/_authenticated/agente'
+    | '/_authenticated/biblioteca'
     | '/_authenticated/configuracoes'
     | '/_authenticated/contas'
     | '/_authenticated/laboratorio'
@@ -223,6 +235,13 @@ declare module '@tanstack/react-router' {
       path: '/agente'
       fullPath: '/agente'
       preLoaderRoute: typeof AuthenticatedAgenteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/biblioteca': {
+      id: '/_authenticated/biblioteca'
+      path: '/biblioteca'
+      fullPath: '/biblioteca'
+      preLoaderRoute: typeof AuthenticatedBibliotecaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/configuracoes': {
@@ -287,6 +306,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAcervoRoute: typeof AuthenticatedAcervoRoute
   AuthenticatedAgenteRoute: typeof AuthenticatedAgenteRoute
+  AuthenticatedBibliotecaRoute: typeof AuthenticatedBibliotecaRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedContasRoute: typeof AuthenticatedContasRoute
   AuthenticatedLaboratorioRoute: typeof AuthenticatedLaboratorioRoute
@@ -299,6 +319,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAcervoRoute: AuthenticatedAcervoRoute,
   AuthenticatedAgenteRoute: AuthenticatedAgenteRoute,
+  AuthenticatedBibliotecaRoute: AuthenticatedBibliotecaRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedContasRoute: AuthenticatedContasRoute,
   AuthenticatedLaboratorioRoute: AuthenticatedLaboratorioRoute,
