@@ -28,7 +28,7 @@ function playSfx(kind: SfxPreset["kind"]) {
   const g = ctx.createGain();
   o.connect(g).connect(ctx.destination);
   const t = ctx.currentTime;
-  const f = { whoosh: [800, 200, 0.4], boom: [90, 30, 0.9], drop: [160, 40, 1.2], riser: [200, 1200, 1.5], click: [1500, 1500, 0.05] }[kind];
+  const f: [number, number, number] = ({ whoosh: [800, 200, 0.4], boom: [90, 30, 0.9], drop: [160, 40, 1.2], riser: [200, 1200, 1.5], click: [1500, 1500, 0.05] } as Record<string, [number, number, number]>)[kind];
   o.type = kind === "whoosh" ? "sawtooth" : "sine";
   o.frequency.setValueAtTime(f[0], t);
   o.frequency.exponentialRampToValueAtTime(f[1], t + f[2]);
