@@ -829,6 +829,28 @@ def _master_clip(runner, job, m: dict, sc: dict, vout: Path, prod: dict) -> dict
     return None
 
 
+
+def _live_thumb(runner, src, asset_id, prod_id, idx):
+    """Miniatura da cena para o painel. Nunca interrompe a produção."""
+    try:
+        src = Path(src)
+        if not src.exists():
+            return
+        jpg = src.with_name(src.stem + "_live.jpg")
+        media.run(["ffmpeg", "-y", "-ss", "0.5", "-i", str(src), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "7", str(jpg)])
+        if not jpg.exists():
+            media.run(["ffmpeg", "-y", "-i", str(src), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "7", str(jpg)])
+        if not jpg.exists():
+            return
+        up = runner.api.call("upload_url", name=f"thumbs/{prod_id}-{idx}.jpg")
+        r = requests.put(up["signed_url"], data=jpg.read_bytes(), headers={"Content-Type": "image/jpeg", "x-upsert": "true"}, timeout=30)
+        r.raise_for_status()
+        runner.api.call("set_asset_thumb", asset_id=asset_id, path=up["path"])
+        jpg.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def pick_visuals(runner, job, ctx) -> None:
 
     s, work, prod = ctx["settings"], ctx["work"], ctx["prod"]
