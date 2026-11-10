@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import subprocess
 import json
 import re
 from pathlib import Path
@@ -292,13 +293,40 @@ def proper_names(q: str) -> list[str]:
 
 _YT_CACHE: dict = {}
 import re as _re
-BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reação|legendado|subtitles?|lyrics?)\b")
+BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip)\b")
+_NEG = "-toy -unboxing -figure -review -gameplay -podcast -reaction"
 
 
 def _yt_searches(q: str) -> list:
     _nm = proper_names(q)
     _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
-    return [f"ytsearch8:{_qq} shorts", f"ytsearch8:{_qq} edit"]
+    # Presença ativa + anti-lixo: o personagem em ação, nunca brinquedo/jogo/entrevista.
+    return [f"ytsearch8:{_qq} scene shorts {_NEG}", f"ytsearch8:{_qq} in action edit {_NEG}"]
+
+
+def _best_window(raw: Path, need: float) -> float | None:
+    """'Olho' local do V3: assiste o trecho baixado a 4 fps e escolhe a janela com mais ação,
+    sem tela preta e sem imagem congelada. Roda no notebook em <1 s, sem IA."""
+    import re
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(raw), "-vf", "fps=4,scale=160:-2,signalstats,metadata=print",
+                            "-an", "-f", "null", "-"], capture_output=True, text=True, timeout=60)
+    except Exception:
+        return None
+    ys = [float(x) for x in re.findall(r"signalstats\.YAVG=([\d.]+)", r.stderr)]
+    ds = [float(x) for x in re.findall(r"signalstats\.YDIF=([\d.]+)", r.stderr)]
+    n, win = min(len(ys), len(ds)), max(1, int(need * 4))
+    if n < win:
+        return 0.0 if n else None
+    best, best_s = None, -1e9
+    for i in range(0, n - win + 1, 2):
+        y, d = ys[i:i + win], ds[i:i + win]
+        dark = sum(1 for v in y if v < 22) / win
+        frozen = sum(1 for v in d if v < 0.4) / win
+        score = sum(min(v, 25) for v in d) / win - 40 * dark - 20 * frozen
+        if score > best_s:
+            best, best_s = i / 4.0, score
+    return best if best_s > -10 else None
 
 
 def prefetch_youtube_searches(queries: list, workers: int = 4) -> None:
@@ -358,14 +386,31 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
             # Vídeo longo: evita a abertura e créditos e fica no miolo, onde a cena citada costuma estar.
             start = round(random.uniform(dur * 0.2, max(dur * 0.2, dur * 0.6 - need)), 1)
         out.unlink(missing_ok=True)
+        raw = out.with_name(out.stem + "_scan.mp4")
+        raw.unlink(missing_ok=True)
+        extra = min(12.0, max(0.0, dur - start - need))  # janela maior p/ re-scan local sem novo download
         try:
             _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
-                    "--download-sections", f"*{start}-{start + need}", "--force-keyframes-at-cuts",
-                    "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
+                    "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
+                    "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
             runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
             used.add(vid)  # link quebrado/lento: nunca tentar de novo
             continue
+        if raw.exists() and raw.stat().st_size > 20000:
+            off = _best_window(raw, need)
+            if off is None:
+                runner.log(job, f"cena {sc.get('idx', 0) + 1}: trecho escuro/parado em {vid} — descartado localmente", "info", "visuals")
+                raw.unlink(missing_ok=True)
+                used.add(vid)
+                continue
+            try:
+                media.run(["ffmpeg", "-y", "-ss", f"{off:.2f}", "-i", str(raw), "-t", f"{need:.2f}", "-c:v", "libx264",
+                           "-preset", "veryfast", "-crf", "20", "-c:a", "aac", str(out)])
+            except Exception:
+                raw.replace(out)
+            raw.unlink(missing_ok=True)
+            start = round(start + off, 1)
         if out.exists() and out.stat().st_size > 20000:
             used.add(vid)
             return {"id": f"yt:{vid}:{start}", "page": f"https://www.youtube.com/watch?v={vid}&t={int(start)}", "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
@@ -834,6 +879,9 @@ def _live_thumb(runner, src, asset_id, prod_id, idx):
     """Miniatura da cena para o painel. Nunca interrompe a produção."""
     try:
         src = Path(src)
+        vid = src.with_name(src.stem.replace("img_", "vid_") + ".mp4")
+        if vid.exists() and (not src.exists() or vid.stat().st_mtime >= src.stat().st_mtime):
+            src = vid  # cena em vídeo: a miniatura sai do .mp4 real
         if not src.exists():
             return
         jpg = src.with_name(src.stem + "_live.jpg")

@@ -20,11 +20,14 @@ Rodadas diárias às 21h (horário de Brasília).
 ## Fase 2 — Biblioteca
 - [x] Aba Biblioteca (filtros, legendas, SFX com prévia, trilhas) — escolha salva no navegador
 - [ ] Ligar a escolha da Biblioteca ao agente (aplicar no render)
-- [ ] Pacote de canal 1-clique e upload de SFX/músicas próprios
+- [x] Upload de SFX/músicas próprios (MP3/WAV)
+- [ ] Pacote de canal 1-clique
 
 ## Fase 3 — Editor Multifaixa
-- [ ] Timeline com faixas Vídeo / Legenda / Voz / SFX+Trilha e player de prévia
+- [x] Timeline com faixas Vídeo / Legenda / Voz / SFX+Trilha e player de prévia
 
 ## Fase 4 — Comandos e render
 - [ ] Cortar, trocar mídia na faixa, ajustar pontas e mandar renderizar no agente
 - [ ] Botão de baixar o pacote do agente
+- [x] Etapa 5: miniatura ao vivo do .mp4, filtro anti-brinquedo/jogo/entrevista, escolha local do melhor trecho (sem tela preta/parada)
+- [ ] Terça: Smart Framing 9:16 + ranking ouro, cortar/trocar mídia, Biblioteca→render, fontes, render 1080p 60fps
