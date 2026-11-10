@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-type Scene = { id: string; idx: number; caption: string | null; narration: string; sfx: string | null; duration_s: number | null; audio_duration_s: number | null; asset_id: string | null; thumb?: string };
+type Scene = { id: string; idx: number; caption: string | null; narration: string; sfx: string | null; duration_s: number | null; audio_duration_s: number | null; asset_id: string | null; thumb?: string | undefined };
 
 /** Linha do tempo multifaixa: vídeo (miniaturas), legenda, voz e SFX, com player e agulha. */
 export function Timeline({ productionId }: { productionId: string }) {
@@ -17,7 +17,7 @@ export function Timeline({ productionId }: { productionId: string }) {
       if (ids.length) {
         const { data: assets } = await supabase.from("assets").select("id, meta").in("id", ids);
         const paths = new Map<string, string>();
-        for (const a of assets ?? []) { const t = (a.meta as { thumb?: string } | null)?.thumb; if (t) paths.set(a.id, t); }
+        for (const a of assets ?? []) { const t = (a.meta as { thumb?: string | undefined } | null)?.thumb; if (t) paths.set(a.id, t); }
         const urls = paths.size ? (await supabase.storage.from("media").createSignedUrls([...paths.values()], 3600)).data ?? [] : [];
         const byPath = new Map(urls.map((u) => [u.path, u.signedUrl]));
         for (const s of list) { const p = s.asset_id && paths.get(s.asset_id); if (p) s.thumb = byPath.get(p) ?? undefined; }
@@ -44,7 +44,7 @@ export function Timeline({ productionId }: { productionId: string }) {
   if (!scenes.length) return null;
   let acc = 0;
   const starts = durs.map((d) => { const s = acc; acc += d; return s; });
-  const cur = Math.max(0, starts.findLastIndex((s) => s <= t));
+  let cur = 0; starts.forEach((v, i) => { if (v <= t) cur = i; });
   const s = scenes[cur];
   const pct = (x: number) => `${(x / total) * 100}%`;
   const track = "relative h-10 rounded bg-muted";
@@ -69,14 +69,14 @@ export function Timeline({ productionId }: { productionId: string }) {
           <div key={name} className="flex items-center gap-2">
             <span className="w-14 shrink-0 text-muted-foreground">{name}</span>
             <div className={track + " flex-1"}>
-              {scenes.map((sc, i) => (
-                <div key={sc.id} className={block} style={{ left: pct(starts[i]), width: pct(durs[i]) }} title={`Cena ${i + 1}`}>
+              {scenes.map((sc, i) => { const d = durs[i] ?? 1; return (
+                <div key={sc.id} className={block} style={{ left: pct(starts[i] ?? 0), width: pct(d) }} title={`Cena ${i + 1}`}>
                   {name === "Vídeo" && (sc.thumb ? <img src={sc.thumb} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-secondary" />)}
                   {name === "Legenda" && <div className="truncate bg-accent px-1 leading-10 text-accent-foreground">{sc.caption || sc.narration}</div>}
-                  {name === "Voz" && <div className="mx-px mt-3 h-4 rounded bg-primary/70" style={{ width: `${Math.min(100, ((sc.audio_duration_s ?? durs[i]) / durs[i]) * 100)}%` }} />}
+                  {name === "Voz" && <div className="mx-px mt-3 h-4 rounded bg-primary/70" style={{ width: `${Math.min(100, ((sc.audio_duration_s ?? d) / d) * 100)}%` }} />}
                   {name === "SFX" && sc.sfx && <div className="truncate px-1 leading-10 text-foreground">♪ {sc.sfx}</div>}
                 </div>
-              ))}
+              ); })}
             </div>
           </div>
         ))}
