@@ -1,3 +1,4 @@
+import { Timeline } from "@/components/app/Timeline";
 import { VoicePicker } from "@/components/app/VideoOptions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -268,6 +269,7 @@ function Producoes() {
                   <StatusBadge status={p.status} />
                 </div>
                 {p.status !== "draft" && <JobStatus productionId={p.id} />}
+                <details><summary className="cursor-pointer text-xs font-medium">Linha do tempo</summary><Timeline productionId={p.id} /></details>
                 {(p.validation as { audit?: Audit } | null)?.audit ? <AuditReport audit={(p.validation as { audit: Audit }).audit} /> : null}
                 {p.preview_path ? <Versions current={p.preview_path} versions={(p.versions as Version[] | null) ?? []} /> : p.output_path ? <div className="text-xs text-muted-foreground">Salvo só no computador: {p.output_path}</div> : null}
                 <div className="flex flex-wrap gap-2">
