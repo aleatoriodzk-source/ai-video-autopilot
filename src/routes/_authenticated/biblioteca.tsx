@@ -25,7 +25,7 @@ const KEY = "biblioteca-escolha";
 
 type Audio = { name: string; path: string; url: string };
 
-function MeusAudios({ folder, title }: { folder: "sfx" | "musica"; title: string }) {
+function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; title: string }) {
   const [items, setItems] = useState<Audio[]>([]);
   const [busy, setBusy] = useState(false);
   async function load() {
@@ -53,7 +53,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica"; title: string
         if (!/\.(mp3|wav)$/i.test(file.name)) { toast.error(`${file.name}: envie MP3 ou WAV`); continue; }
         if (file.size > 50 * 1024 * 1024) { toast.error(`${file.name}: máximo 50 MB`); continue; }
         const safe = file.name.replace(/[^\w.\-]+/g, "_");
-        const up = await supabase.storage.from("media").upload(`${u.user.id}/biblioteca/${folder}/${Date.now()}-${safe}`, file, { contentType: file.type || "audio/mpeg" });
+        const up = await supabase.storage.from("media").upload(`${u.user.id}/biblioteca/${folder}/${Date.now()}-${safe}`, file, { contentType: file.type || (folder === "fontes" ? "font/ttf" : "audio/mpeg") });
         if (up.error) throw up.error;
       }
       toast.success("Áudio guardado na Biblioteca");
@@ -70,7 +70,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica"; title: string
         <h2 className="text-lg font-semibold">{title}</h2>
         <label className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
           {busy ? "Enviando..." : "Enviar MP3/WAV"}
-          <input type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" multiple className="hidden" disabled={busy} onChange={(e) => upload(e.target.files)} />
+          <input type="file" accept={folder === "fontes" ? ".ttf,.otf" : ".mp3,.wav,audio/mpeg,audio/wav"} multiple className="hidden" disabled={busy} onChange={(e) => upload(e.target.files)} />
         </label>
       </div>
       {items.length === 0 ? (
@@ -80,7 +80,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica"; title: string
           {items.map((a) => (
             <div key={a.path} className="flex items-center gap-2 rounded-lg border p-2">
               <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
-              <audio controls preload="none" src={a.url} className="h-8 max-w-[220px]" />
+              {folder === "fontes" ? null : <audio controls preload="none" src={a.url} className="h-8 max-w-[220px]" />}
               <button className="rounded border px-2 py-1 text-xs" onClick={() => remove(a)} aria-label={`Excluir ${a.name}`}><Trash2 className="h-3 w-3" /></button>
             </div>
           ))}
@@ -135,6 +135,7 @@ function Biblioteca() {
 
       <MeusAudios folder="sfx" title="Meus efeitos sonoros" />
       <MeusAudios folder="musica" title="Minhas trilhas de fundo" />
+      <MeusAudios folder="fontes" title="Minhas fontes de legenda (.ttf/.otf)" />
 
       <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" onClick={() => toast.success("Pacote salvo como padrão")}>Salvar pacote</button>
     </div>
