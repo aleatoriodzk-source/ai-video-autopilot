@@ -372,46 +372,59 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     entries = [e for e in entries if e.get("id") and e.get("id") not in used
                and not (names and not any(nm in (e.get("title") or "").lower() for nm in names))
                and not BANNED_TITLE.search((e.get("title") or "").lower())]
-    for e in entries:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def plan(e):
         vid, dur = e.get("id"), e.get("duration")
-        title = (e.get("title") or "").lower()
-        # O personagem citado na cena tem que estar no vídeo: título sem o nome dele é descartado.
-        if names and not any(nm in title for nm in names):
-            continue
-        # Entrevistas/podcasts/cortes quase sempre têm legenda queimada: nunca usar.
-        if BANNED_TITLE.search(title):
-            continue
-        # busca rápida às vezes vem sem duração: não descarta, assume um clipe de ~3 min
         if not vid or vid in used or (dur and (dur < 5 or dur > 1200)):
-            continue
+            return None
         dur = float(dur or 180)
         if dur <= need + 1:
             start = 0.0
         elif dur <= 90:
-            # Short: o personagem aparece logo; pega um trecho nos primeiros 2/3.
             start = round(random.uniform(0.5, max(0.5, min(dur * 0.66, dur - need - 0.5))), 1)
         else:
-            # Vídeo longo: evita a abertura e créditos e fica no miolo, onde a cena citada costuma estar.
             start = round(random.uniform(dur * 0.2, max(dur * 0.2, dur * 0.6 - need)), 1)
-        out.unlink(missing_ok=True)
-        raw = out.with_name(out.stem + "_scan.mp4")
-        raw.unlink(missing_ok=True)
         extra = min(12.0, max(0.0, dur - start - need))  # janela maior p/ re-scan local sem novo download
+        return e, vid, start, extra
+
+    def fetch(pl, k):
+        e, vid, start, extra = pl
+        raw = out.with_name(f"{out.stem}_scan{k}.mp4")
+        raw.unlink(missing_ok=True)
         try:
             _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
                     "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
                     "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
-            runner.log(job, f"YouTube download {vid}: {str(ex)[:150]}", "warn", "visuals")
-            used.add(vid)  # link quebrado/lento: nunca tentar de novo
-            continue
-        if raw.exists() and raw.stat().st_size > 20000:
-            off = _best_window(raw, need)
-            if off is None:
-                runner.log(job, f"cena {sc.get('idx', 0) + 1}: trecho escuro/parado em {vid} — descartado localmente", "info", "visuals")
+            return pl, raw, str(ex)[:150], None
+        if not (raw.exists() and raw.stat().st_size > 20000):
+            return pl, raw, "arquivo vazio", None
+        return pl, raw, None, _best_window(raw, need)
+
+    plans = [x for x in (plan(e) for e in entries) if x]
+    # Downloads em paralelo: baixa 3 candidatos ao mesmo tempo e fica com a tomada de melhor nota.
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        for i in range(0, min(len(plans), 9), 3):
+            res = list(ex.map(lambda t: fetch(*t), [(pl, i + j) for j, pl in enumerate(plans[i:i + 3])]))
+            good = []
+            for pl, raw, err, off in res:
+                used.add(pl[1])
+                if err:
+                    runner.log(job, f"YouTube download {pl[1]}: {err}", "warn", "visuals")
+                elif off is None:
+                    runner.log(job, f"cena {sc.get('idx', 0) + 1}: trecho escuro/parado em {pl[1]} — descartado localmente", "info", "visuals")
+                else:
+                    good.append((_BW_SCORE.get(str(raw), 0), pl, raw, off))
+            good.sort(key=lambda g: -g[0])
+            for _, _, raw, _ in good[1:]:
                 raw.unlink(missing_ok=True)
-                used.add(vid)
+            for _, _, raw, _ in [r for r in [(0, 0, x[1], 0) for x in res] if not any(r[2] == g[2] for g in good[:1])]:
+                raw.unlink(missing_ok=True)
+            if not good:
                 continue
+            _, (e, vid, start, _x), raw, off = good[0]
+            out.unlink(missing_ok=True)
             try:
                 media.run(["ffmpeg", "-y", "-ss", f"{off:.2f}", "-i", str(raw), "-t", f"{need:.2f}", "-c:v", "libx264",
                            "-preset", "veryfast", "-crf", "20", "-c:a", "aac", str(out)])
@@ -419,9 +432,8 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
                 raw.replace(out)
             raw.unlink(missing_ok=True)
             start = round(start + off, 1)
-        if out.exists() and out.stat().st_size > 20000:
-            used.add(vid)
-            return {"id": f"yt:{vid}:{start}", "page": f"https://www.youtube.com/watch?v={vid}&t={int(start)}", "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
+            if out.exists() and out.stat().st_size > 20000:
+                return {"id": f"yt:{vid}:{start}", "page": f"https://www.youtube.com/watch?v={vid}&t={int(start)}", "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or ""}
     return None
 
 
