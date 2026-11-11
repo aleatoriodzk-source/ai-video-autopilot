@@ -293,8 +293,8 @@ def proper_names(q: str) -> list[str]:
 
 _YT_CACHE: dict = {}
 import re as _re
-BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip)\b")
-_NEG = "-toy -unboxing -figure -review -gameplay -podcast -reaction"
+BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
+_NEG = "-toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
 
 
 def _yt_searches(q: str) -> list:
@@ -302,6 +302,9 @@ def _yt_searches(q: str) -> list:
     _qq = (f'"{" ".join(w.capitalize() for w in _nm[0].split())}" ' + " ".join(x for x in q.split() if x.lower() not in _nm[0])) if _nm else q
     # Presença ativa + anti-lixo: o personagem em ação, nunca brinquedo/jogo/entrevista.
     return [f"ytsearch8:{_qq} scene shorts {_NEG}", f"ytsearch8:{_qq} in action edit {_NEG}"]
+
+
+_BW_SCORE: dict = {}
 
 
 def _best_window(raw: Path, need: float) -> float | None:
@@ -323,9 +326,11 @@ def _best_window(raw: Path, need: float) -> float | None:
         y, d = ys[i:i + win], ds[i:i + win]
         dark = sum(1 for v in y if v < 22) / win
         frozen = sum(1 for v in d if v < 0.4) / win
-        score = sum(min(v, 25) for v in d) / win - 40 * dark - 20 * frozen
+        cuts = sum(1 for v in d[1:] if v > 35)  # Scene Detect: pico de YDIF = corte de câmera
+        score = sum(min(v, 25) for v in d) / win - 40 * dark - 20 * frozen - 6 * cuts
         if score > best_s:
             best, best_s = i / 4.0, score
+    _BW_SCORE[str(raw)] = best_s
     return best if best_s > -10 else None
 
 
@@ -364,6 +369,9 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     entries.sort(key=lambda e: (e.get("duration") or 180) > 90)
     need = _scene_secs(sc)
     names = proper_names(q)
+    entries = [e for e in entries if e.get("id") and e.get("id") not in used
+               and not (names and not any(nm in (e.get("title") or "").lower() for nm in names))
+               and not BANNED_TITLE.search((e.get("title") or "").lower())]
     for e in entries:
         vid, dur = e.get("id"), e.get("duration")
         title = (e.get("title") or "").lower()
