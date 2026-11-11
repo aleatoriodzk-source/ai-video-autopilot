@@ -43,22 +43,25 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
     setItems(out);
   }
   useEffect(() => { void load(); }, []);
-  async function upload(files: FileList | null) {
+  async function upload(input: HTMLInputElement) {
+    const files = input.files;
     if (!files?.length) return;
+    let ok = 0;
     setBusy(true);
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Entre novamente na sua conta");
       for (const file of Array.from(files)) {
-        if (!(folder === "fontes" ? /\.(ttf|otf)$/i : /\.(mp3|wav)$/i).test(file.name)) { toast.error(`${file.name}: formato inválido`); continue; }
+        if (!(folder === "fontes" ? /\.(ttf|otf)$/i : /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|mp4|3gp|amr|webm|wma)$/i).test(file.name)) { toast.error(`${file.name}: formato inválido`); continue; }
         if (file.size > 50 * 1024 * 1024) { toast.error(`${file.name}: máximo 50 MB`); continue; }
         const safe = file.name.replace(/[^\w.\-]+/g, "_");
-        const up = await supabase.storage.from("media").upload(`${u.user.id}/biblioteca/${folder}/${Date.now()}-${safe}`, file, { contentType: file.type || (folder === "fontes" ? "font/ttf" : "audio/mpeg") });
+        const up = await supabase.storage.from("media").upload(`${u.user.id}/biblioteca/${folder}/${Date.now()}-${safe}`, file, { contentType: file.type || (folder === "fontes" ? "font/ttf" : "audio/mpeg"), upsert: true });
         if (up.error) throw up.error;
+        ok++;
       }
-      toast.success("Áudio guardado na Biblioteca");
+      if (ok) toast.success(ok === 1 ? "Arquivo guardado na Biblioteca" : `${ok} arquivos guardados na Biblioteca`);
       await load();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); input.value = ""; }
   }
   async function remove(a: Audio) {
     await supabase.storage.from("media").remove([a.path]);
@@ -69,8 +72,8 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
         <label className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
-          {busy ? "Enviando..." : folder === "fontes" ? "Enviar TTF/OTF" : "Enviar MP3/WAV"}
-          <input type="file" accept={folder === "fontes" ? ".ttf,.otf" : ".mp3,.wav,audio/mpeg,audio/wav"} multiple className="hidden" disabled={busy} onChange={(e) => upload(e.target.files)} />
+          {busy ? "Enviando..." : folder === "fontes" ? "Enviar TTF/OTF" : "Enviar áudio"}
+          <input type="file" accept={folder === "fontes" ? ".ttf,.otf" : "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.opus,.flac,.mp4,.3gp,.amr,.webm"} multiple className="hidden" disabled={busy} onChange={(e) => upload(e.currentTarget)} />
         </label>
       </div>
       {items.length === 0 ? (
