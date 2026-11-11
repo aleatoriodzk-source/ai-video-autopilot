@@ -50,7 +50,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Entre novamente na sua conta");
       for (const file of Array.from(files)) {
-        if (!/\.(mp3|wav)$/i.test(file.name)) { toast.error(`${file.name}: envie MP3 ou WAV`); continue; }
+        if (!(folder === "fontes" ? /\.(ttf|otf)$/i : /\.(mp3|wav)$/i).test(file.name)) { toast.error(`${file.name}: formato inválido`); continue; }
         if (file.size > 50 * 1024 * 1024) { toast.error(`${file.name}: máximo 50 MB`); continue; }
         const safe = file.name.replace(/[^\w.\-]+/g, "_");
         const up = await supabase.storage.from("media").upload(`${u.user.id}/biblioteca/${folder}/${Date.now()}-${safe}`, file, { contentType: file.type || (folder === "fontes" ? "font/ttf" : "audio/mpeg") });
@@ -69,7 +69,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
         <label className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
-          {busy ? "Enviando..." : "Enviar MP3/WAV"}
+          {busy ? "Enviando..." : folder === "fontes" ? "Enviar TTF/OTF" : "Enviar MP3/WAV"}
           <input type="file" accept={folder === "fontes" ? ".ttf,.otf" : ".mp3,.wav,audio/mpeg,audio/wav"} multiple className="hidden" disabled={busy} onChange={(e) => upload(e.target.files)} />
         </label>
       </div>
