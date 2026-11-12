@@ -459,7 +459,7 @@ class Runner:
         mix = [f for f in (ps.get("frame_mix") or []) if f in media.FRAME_RATIOS]
         if not mix and ctx["h"] > ctx["w"]:
             mix = ["9:16", "9:16", "3:4", "9:16", "1:1"]  # sem tira 16:9 minúscula  # sem DNA de proporções: alterna para não ficar monótono
-        frame = sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
+        frame = (ps.get("scene_frames") or {}).get(str(sc.get("idx"))) or sc.get("frame") or (mix[sc["idx"] % len(mix)] if mix else None)
         if vid.exists():
             cut = float(ps.get("cut_seconds") or 0)
             if self._plan(ctx)["profile_used"]:
