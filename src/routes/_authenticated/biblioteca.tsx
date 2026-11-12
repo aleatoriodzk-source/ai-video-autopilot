@@ -69,8 +69,9 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
     const ext = a.path.match(/\.[^./]+$/)?.[0] ?? "";
     const dir = a.path.slice(0, a.path.lastIndexOf("/"));
     const dest = `${dir}/${Date.now()}-${novo.replace(/[^\wÀ-ú.\- ]+/g, "_").replace(/\s+/g, "-")}${ext}`;
-    const { error } = await supabase.storage.from("media").move(a.path, dest);
+    const { error } = await supabase.storage.from("media").copy(a.path, dest);
     if (error) { toast.error(error.message); return; }
+    await supabase.storage.from("media").remove([a.path]);
     toast.success("Nome atualizado");
     await load();
   }
