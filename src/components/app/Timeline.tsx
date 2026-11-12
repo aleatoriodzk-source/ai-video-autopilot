@@ -91,7 +91,7 @@ export function Timeline({ productionId }: { productionId: string }) {
               {scenes.map((sc, i) => { const d = durs[i] ?? 1; return (
                 <div key={sc.id} className={block} style={{ left: pct(starts[i] ?? 0), width: pct(d) }} title={`Cena ${i + 1}`}>
                   {name === "Vídeo" && (sc.thumb ? <img src={sc.thumb} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-secondary" />)}
-                  {name === "Legenda" && <div className="line-clamp-2 whitespace-normal bg-accent px-1 leading-[3.5rem] text-accent-foreground">{sc.caption || sc.narration}</div>}
+                  {name === "Legenda" && <div className="line-clamp-3 h-full whitespace-normal bg-accent px-1 py-1 leading-tight text-accent-foreground">{sc.caption || sc.narration}</div>}
                   {name === "Voz" && <div className="mx-px mt-4 h-6 rounded bg-primary/70" style={{ width: `${Math.min(100, ((sc.audio_duration_s ?? d) / d) * 100)}%` }} />}
                   {name === "SFX" && sc.sfx && <div className="truncate px-1 leading-[3.5rem] text-foreground">♪ {sc.sfx}</div>}
                 </div>
