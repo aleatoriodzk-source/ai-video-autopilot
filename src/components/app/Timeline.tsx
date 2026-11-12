@@ -42,7 +42,7 @@ export function Timeline({ productionId }: { productionId: string }) {
   const setFrame = async (idx: number, f: string) => {
     const { data } = await supabase.from("productions").select("settings").eq("id", productionId).single();
     const st = (data?.settings ?? {}) as Record<string, unknown>;
-    const sf = { ...((st.scene_frames as Record<string, string>) ?? {}), [String(idx)]: f };
+    const sf = { ...((st["scene_frames"] as Record<string, string>) ?? {}), [String(idx)]: f };
     await supabase.from("productions").update({ settings: { ...st, scene_frames: sf } as never }).eq("id", productionId);
     qc.setQueryData(["scene_frames", productionId], sf);
   };
