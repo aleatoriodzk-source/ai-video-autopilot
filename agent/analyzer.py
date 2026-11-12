@@ -75,7 +75,7 @@ def _ytdlp(args: list[str]) -> str:
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"yt-dlp: passou de {lim}s sem terminar (rede lenta); pulando")
 
-    p = go(["yt-dlp", *base, *net, *extra, *args])
+    p = go(["yt-dlp", "--socket-timeout", "15", "--retries", "2", *base, *net, *extra, *args])
     if p.returncode != 0 and extra:
         # cookie vencido não pode travar tudo: tenta sem a conta
         p = go(["yt-dlp", *base, *net, *args])

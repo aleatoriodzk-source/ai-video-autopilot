@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-type Scene = { id: string; idx: number; caption: string | null; narration: string; sfx: string | null; duration_s: number | null; audio_duration_s: number | null; asset_id: string | null; thumb?: string | undefined };
+type Scene = { id: string; idx: number; caption: string | null; narration: string; sfx: string | null; duration_s: number | null; audio_duration_s: number | null; asset_id: string | null; audio_path?: string | null; thumb?: string | undefined; audio?: string | undefined };
 
 /** Linha do tempo multifaixa: vídeo (miniaturas), legenda, voz e SFX, com player e agulha. */
 export function Timeline({ productionId }: { productionId: string }) {
@@ -11,7 +11,7 @@ export function Timeline({ productionId }: { productionId: string }) {
     queryKey: ["timeline", productionId],
     refetchInterval: 8000,
     queryFn: async () => {
-      const { data } = await supabase.from("scenes").select("id, idx, caption, narration, sfx, duration_s, audio_duration_s, asset_id").eq("production_id", productionId).order("idx");
+      const { data } = await supabase.from("scenes").select("id, idx, caption, narration, sfx, duration_s, audio_duration_s, asset_id, audio_path").eq("production_id", productionId).order("idx");
       const list = (data ?? []) as Scene[];
       const ids = list.map((s) => s.asset_id).filter(Boolean) as string[];
       if (ids.length) {
@@ -21,6 +21,12 @@ export function Timeline({ productionId }: { productionId: string }) {
         const urls = paths.size ? (await supabase.storage.from("media").createSignedUrls([...paths.values()], 3600)).data ?? [] : [];
         const byPath = new Map(urls.map((u) => [u.path, u.signedUrl]));
         for (const s of list) { const p = s.asset_id && paths.get(s.asset_id); if (p) s.thumb = byPath.get(p) ?? undefined; }
+      }
+      const aps = list.map((s) => s.audio_path).filter(Boolean) as string[];
+      if (aps.length) {
+        const au = (await supabase.storage.from("media").createSignedUrls(aps, 3600)).data ?? [];
+        const m = new Map(au.map((u) => [u.path, u.signedUrl]));
+        for (const s of list) if (s.audio_path) s.audio = m.get(s.audio_path) ?? undefined;
       }
       return list;
     },
@@ -41,24 +47,37 @@ export function Timeline({ productionId }: { productionId: string }) {
     return () => cancelAnimationFrame(raf.current);
   }, [playing, total]);
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastScene = useRef(-1);
+  useEffect(() => {
+    if (!playing) { audioRef.current?.pause(); lastScene.current = -1; return; }
+    let a = 0; let idx = 0;
+    durs.forEach((d, i) => { if (a <= t) idx = i; a += d; });
+    if (idx === lastScene.current) return;
+    lastScene.current = idx;
+    const url = scenes[idx]?.audio;
+    audioRef.current?.pause();
+    if (url) { const el = new Audio(url); audioRef.current = el; void el.play().catch(() => {}); }
+  }, [t, playing, scenes, durs]);
+
   if (!scenes.length) return null;
   let acc = 0;
   const starts = durs.map((d) => { const s = acc; acc += d; return s; });
   let cur = 0; starts.forEach((v, i) => { if (v <= t) cur = i; });
   const s = scenes[cur];
   const pct = (x: number) => `${(x / total) * 100}%`;
-  const track = "relative h-10 rounded bg-muted";
+  const track = "relative h-14 rounded bg-muted";
   const block = "absolute top-0 h-full overflow-hidden border-r border-background";
 
   return (
-    <div className="space-y-2 rounded-md border border-border p-3 text-xs">
+    <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-xs">
       <div className="flex items-center gap-3">
-        <div className="flex aspect-[9/16] h-40 items-center justify-center overflow-hidden rounded bg-muted">
+        <div className="flex aspect-[9/16] h-72 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
           {s?.thumb ? <img src={s.thumb} alt={`Cena ${cur + 1}`} className="h-full w-full object-cover" /> : <span className="text-muted-foreground">Cena {cur + 1}</span>}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="font-medium">Cena {cur + 1} de {scenes.length} · {t.toFixed(1)}s / {total.toFixed(0)}s</div>
-          <div className="line-clamp-3 text-muted-foreground">{s?.narration}</div>
+          <div className="font-medium"><span className="text-base">Cena {cur + 1} de {scenes.length}</span> · {t.toFixed(1)}s / {total.toFixed(0)}s</div>
+          <div className="line-clamp-4 text-sm text-muted-foreground">{s?.narration}</div>
           <button className="inline-flex items-center gap-1 rounded border px-2 py-1" onClick={() => { if (t >= total) setT(0); setPlaying(!playing); }}>
             {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}{playing ? "Pausar" : "Tocar"}
           </button>
@@ -72,9 +91,9 @@ export function Timeline({ productionId }: { productionId: string }) {
               {scenes.map((sc, i) => { const d = durs[i] ?? 1; return (
                 <div key={sc.id} className={block} style={{ left: pct(starts[i] ?? 0), width: pct(d) }} title={`Cena ${i + 1}`}>
                   {name === "Vídeo" && (sc.thumb ? <img src={sc.thumb} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-secondary" />)}
-                  {name === "Legenda" && <div className="truncate bg-accent px-1 leading-10 text-accent-foreground">{sc.caption || sc.narration}</div>}
-                  {name === "Voz" && <div className="mx-px mt-3 h-4 rounded bg-primary/70" style={{ width: `${Math.min(100, ((sc.audio_duration_s ?? d) / d) * 100)}%` }} />}
-                  {name === "SFX" && sc.sfx && <div className="truncate px-1 leading-10 text-foreground">♪ {sc.sfx}</div>}
+                  {name === "Legenda" && <div className="line-clamp-3 h-full whitespace-normal bg-accent px-1 py-1 leading-tight text-accent-foreground">{sc.caption || sc.narration}</div>}
+                  {name === "Voz" && <div className="mx-px mt-4 h-6 rounded bg-primary/70" style={{ width: `${Math.min(100, ((sc.audio_duration_s ?? d) / d) * 100)}%` }} />}
+                  {name === "SFX" && sc.sfx && <div className="truncate px-1 leading-[3.5rem] text-foreground">♪ {sc.sfx}</div>}
                 </div>
               ); })}
             </div>

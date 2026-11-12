@@ -191,7 +191,7 @@ function AgentePage() {
               try {
                 const res = await fetch("/downloads/agente-estudio-windows.zip", { cache: "no-store" });
                 const type = res.headers.get("content-type") ?? "";
-                if (!res.ok || !type.includes("zip")) throw new Error(`resposta ${res.status}`);
+                if (!res.ok || type.includes("text/html")) throw new Error(`resposta ${res.status}`);
                 const blob = await res.blob();
                 if (blob.size < 1000) throw new Error("arquivo vazio");
                 const url = URL.createObjectURL(blob);

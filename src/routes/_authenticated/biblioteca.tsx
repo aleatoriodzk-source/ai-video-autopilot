@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/app/ui";
 import { cn } from "@/lib/utils";
@@ -63,6 +63,18 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
       await load();
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); input.value = ""; }
   }
+  async function rename(a: Audio) {
+    const novo = window.prompt("Novo nome", a.name)?.trim();
+    if (!novo || novo === a.name) return;
+    const ext = a.path.match(/\.[^./]+$/)?.[0] ?? "";
+    const dir = a.path.slice(0, a.path.lastIndexOf("/"));
+    const dest = `${dir}/${Date.now()}-${novo.replace(/[^\wÀ-ú.\- ]+/g, "_").replace(/\s+/g, "-")}${ext}`;
+    const { error } = await supabase.storage.from("media").copy(a.path, dest);
+    if (error) { toast.error(error.message); return; }
+    await supabase.storage.from("media").remove([a.path]);
+    toast.success("Nome atualizado");
+    await load();
+  }
   async function remove(a: Audio) {
     await supabase.storage.from("media").remove([a.path]);
     await load();
@@ -84,6 +96,7 @@ function MeusAudios({ folder, title }: { folder: "sfx" | "musica" | "fontes"; ti
             <div key={a.path} className="flex items-center gap-2 rounded-lg border p-2">
               <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
               {folder === "fontes" ? null : <audio controls preload="none" src={a.url} className="h-8 max-w-[220px]" />}
+              <button className="rounded border px-2 py-1 text-xs" onClick={() => rename(a)} aria-label={`Renomear ${a.name}`}><Pencil className="h-3 w-3" /></button>
               <button className="rounded border px-2 py-1 text-xs" onClick={() => remove(a)} aria-label={`Excluir ${a.name}`}><Trash2 className="h-3 w-3" /></button>
             </div>
           ))}
