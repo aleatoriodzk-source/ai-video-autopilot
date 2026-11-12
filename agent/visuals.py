@@ -52,6 +52,8 @@ def vision_ok(runner, job, path: Path, sc: dict, prod: dict) -> bool:
             if max(f.mean() for f in frames) < 18:
                 runner.log(job, f"cena {sc['idx'] + 1}: clipe escuro/tela preta — descartado localmente", "info", "visuals")
                 return False
+        if path.suffix == ".mp4" and not runner.cfg.get("cloud_vision_videos", False):
+            return True  # V3: vídeo julgado localmente (movimento/brilho), sem tribunal de print na nuvem
         if frames:
             import cv2, numpy as np
             fs = [cv2.resize(f, (256, 144)) for f in (frames + frames * 3)[:4]]
@@ -294,7 +296,7 @@ def proper_names(q: str) -> list[str]:
 _YT_CACHE: dict = {}
 import re as _re
 BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
-_NEG = "-toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
+_NEG = "-gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
 
 
 def _yt_searches(q: str) -> list:
