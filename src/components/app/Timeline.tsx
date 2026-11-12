@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -31,6 +31,21 @@ export function Timeline({ productionId }: { productionId: string }) {
       return list;
     },
   });
+  const qc = useQueryClient();
+  const { data: frames = {} } = useQuery({
+    queryKey: ["scene_frames", productionId],
+    queryFn: async () => {
+      const { data } = await supabase.from("productions").select("settings").eq("id", productionId).single();
+      return ((data?.settings as { scene_frames?: Record<string, string> } | null)?.scene_frames ?? {}) as Record<string, string>;
+    },
+  });
+  const setFrame = async (idx: number, f: string) => {
+    const { data } = await supabase.from("productions").select("settings").eq("id", productionId).single();
+    const st = (data?.settings ?? {}) as Record<string, unknown>;
+    const sf = { ...((st.scene_frames as Record<string, string>) ?? {}), [String(idx)]: f };
+    await supabase.from("productions").update({ settings: { ...st, scene_frames: sf } as never }).eq("id", productionId);
+    qc.setQueryData(["scene_frames", productionId], sf);
+  };
   const durs = scenes.map((s) => Math.max(1, Number(s.duration_s ?? s.audio_duration_s ?? 4)));
   const total = durs.reduce((a, b) => a + b, 0) || 1;
   const [t, setT] = useState(0);
