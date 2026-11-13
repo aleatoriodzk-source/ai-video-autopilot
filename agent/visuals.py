@@ -395,7 +395,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         raw = out.with_name(f"{out.stem}_scan{k}.mp4")
         raw.unlink(missing_ok=True)
         try:
-            _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+            _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
                     "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
                     "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
         except Exception as ex:
@@ -773,7 +773,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             out = work / f"master_{i}.mp4"
             try:
                 out.unlink(missing_ok=True)
-                _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+                _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
                         "--no-playlist", "-o", str(out), link])
             except Exception as ex:
                 runner.log(job, f"vídeo base {i + 1}: não baixou ({str(ex)[:120]})", "warn", "visuals")
@@ -817,7 +817,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
                 continue
             try:
                 out.unlink(missing_ok=True)
-                _ytdlp(["-f", "bv*[height>=720]+ba/b[height>=720]/bv*+ba/b", "--merge-output-format", "mp4",
+                _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
                         "--no-playlist", "-o", str(out), f"https://www.youtube.com/watch?v={vid}"])
             except Exception as ex:
                 runner.log(job, f"vídeo-mestre {vid}: {str(ex)[:120]}", "warn", "visuals")
