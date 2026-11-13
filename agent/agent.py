@@ -397,7 +397,28 @@ class Runner:
             if slice_from_reference(self, job, ctx, ref):
                 return
         from visuals import pick_visuals
-        pick_visuals(self, job, ctx)
+        sm = {str(k): v for k, v in (ps.get("scene_media") or {}).items() if v}
+        if len(sm) < len(ctx["scenes"]):
+            pick_visuals(self, job, ctx)
+        self._apply_scene_media(job, ctx, sm)
+
+    def _apply_scene_media(self, job, ctx, sm):
+        """Trocar Mídia: o arquivo que o usuário escolheu na linha do tempo substitui a cena (vence a busca)."""
+        for sc in ctx["scenes"]:
+            path = sm.get(str(sc["idx"]))
+            if not path:
+                continue
+            try:
+                url = self.api.call("download_url", path=path)["url"]
+                data = requests.get(url, timeout=300).content
+                img, vid = ctx["work"] / f"img_{sc['idx']:03d}.jpg", ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
+                if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    vid.unlink(missing_ok=True); img.write_bytes(data)
+                else:
+                    img.unlink(missing_ok=True); vid.write_bytes(data)
+                self.log(job, f"cena {sc['idx'] + 1}: mídia trocada pelo usuário", step="visuals")
+            except Exception as e:
+                self.log(job, f"cena {sc['idx'] + 1}: falha ao usar mídia trocada: {e}", "warn", "visuals")
 
     def step_scenes(self, job, ctx):
         """Monta os clipes em paralelo e reaproveita os que não mudaram desde a última renderização."""
