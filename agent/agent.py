@@ -352,11 +352,16 @@ class Runner:
                 except Exception as e:
                     self.log(job, f"cena {sc['idx'] + 1}: clonagem falhou ({e}); usando Edge", "warn", step="narration")
             if not done and use_edge:
-                try:
-                    media.edge_tts(sc["narration"], edge_voice, raw, edge_rate)
-                    done = True
-                except media.MediaError as e:
-                    self.log(job, f"Voz Edge falhou ({e}); usando Piper", "warn", step="narration")
+                for _try in range(3):
+                    try:
+                        media.edge_tts(sc["narration"], edge_voice, raw, edge_rate)
+                        done = True
+                        break
+                    except media.MediaError as e:
+                        if _try < 2:
+                            time.sleep(0.5 * (_try + 1))
+                            continue
+                        self.log(job, f"Voz Edge falhou 3x ({e}); usando Piper", "warn", step="narration")
             if not done:
                 media.piper_tts(sc["narration"], voice, raw, v["length_scale"], v["noise_scale"], v["sentence_silence"])
             speech = media.duration(raw)
