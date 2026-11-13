@@ -107,7 +107,7 @@ export function Timeline({ productionId }: { productionId: string }) {
     <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-xs">
       <div className="flex items-center gap-3">
         <div className="flex aspect-[9/16] h-72 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-          {s && swapped[s.idx] ? <video src={swapped[s.idx]} muted autoPlay loop playsInline className="h-full w-full object-cover" /> : s?.thumb ? <img src={s.thumb} alt={`Cena ${cur + 1}`} className="h-full w-full object-cover" /> : <span className="text-muted-foreground">Cena {cur + 1}</span>}
+          {s && swapped[s.idx] ? <video src={swapped[s.idx]} poster={swapped[s.idx]} muted autoPlay loop playsInline className="h-full w-full object-cover" /> : s?.thumb ? <img src={s.thumb} alt={`Cena ${cur + 1}`} className="h-full w-full object-cover" /> : <span className="text-muted-foreground">Cena {cur + 1}</span>}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="font-medium"><span className="text-base">Cena {cur + 1} de {scenes.length}</span> · {t.toFixed(1)}s / {total.toFixed(0)}s</div>
@@ -115,6 +115,12 @@ export function Timeline({ productionId }: { productionId: string }) {
           <button className="inline-flex items-center gap-1 rounded border px-2 py-1" onClick={() => { if (t >= total) setT(0); setPlaying(!playing); }}>
             {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}{playing ? "Pausar" : "Tocar"}
           </button>
+          {s && (
+            <label className="ml-2 inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-1">
+              <Replace className="h-3 w-3" />{swapping ? "Enviando..." : swapped[s.idx] ? "Mídia trocada ✓ (trocar de novo)" : "Trocar mídia desta cena"}
+              <input type="file" accept="video/*,image/*" className="hidden" disabled={swapping} onChange={(e) => { const f = e.target.files?.[0]; if (f) void swapMedia(s.idx, f); }} />
+            </label>
+          )}
         </div>
       </div>
       <div className="relative space-y-1" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setT(((e.clientX - r.left) / r.width) * total); }}>
