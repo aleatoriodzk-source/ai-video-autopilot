@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, Replace } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 type Scene = { id: string; idx: number; caption: string | null; narration: string; sfx: string | null; duration_s: number | null; audio_duration_s: number | null; asset_id: string | null; audio_path?: string | null; thumb?: string | undefined; audio?: string | undefined };
@@ -46,6 +46,25 @@ export function Timeline({ productionId }: { productionId: string }) {
     await supabase.from("productions").update({ settings: { ...st, scene_frames: sf } as never }).eq("id", productionId);
     qc.setQueryData(["scene_frames", productionId], sf);
   };
+  const [swapped, setSwapped] = useState<Record<number, string>>({});
+  const [swapping, setSwapping] = useState(false);
+  const swapMedia = async (idx: number, file: File) => {
+    setSwapping(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const path = `${u.user.id}/swap/${productionId}/${idx}-${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
+      if (up.error) throw up.error;
+      const { data } = await supabase.from("productions").select("settings").eq("id", productionId).single();
+      const st = (data?.settings ?? {}) as Record<string, unknown>;
+      const sm = { ...((st["scene_media"] as Record<string, string>) ?? {}), [String(idx)]: path };
+      await supabase.from("productions").update({ settings: { ...st, scene_media: sm } as never }).eq("id", productionId);
+      setSwapped((m) => ({ ...m, [idx]: URL.createObjectURL(file) }));
+    } catch (e) { alert("Não deu para trocar a mídia: " + (e as Error).message); }
+    finally { setSwapping(false); }
+  };
   const durs = scenes.map((s) => Math.max(1, Number(s.duration_s ?? s.audio_duration_s ?? 4)));
   const total = durs.reduce((a, b) => a + b, 0) || 1;
   const [t, setT] = useState(0);
@@ -88,7 +107,7 @@ export function Timeline({ productionId }: { productionId: string }) {
     <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-xs">
       <div className="flex items-center gap-3">
         <div className="flex aspect-[9/16] h-72 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-          {s?.thumb ? <img src={s.thumb} alt={`Cena ${cur + 1}`} className="h-full w-full object-cover" /> : <span className="text-muted-foreground">Cena {cur + 1}</span>}
+          {s && swapped[s.idx] ? <video src={swapped[s.idx]} poster={swapped[s.idx]} muted autoPlay loop playsInline className="h-full w-full object-cover" /> : s?.thumb ? <img src={s.thumb} alt={`Cena ${cur + 1}`} className="h-full w-full object-cover" /> : <span className="text-muted-foreground">Cena {cur + 1}</span>}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="font-medium"><span className="text-base">Cena {cur + 1} de {scenes.length}</span> · {t.toFixed(1)}s / {total.toFixed(0)}s</div>
@@ -96,6 +115,12 @@ export function Timeline({ productionId }: { productionId: string }) {
           <button className="inline-flex items-center gap-1 rounded border px-2 py-1" onClick={() => { if (t >= total) setT(0); setPlaying(!playing); }}>
             {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}{playing ? "Pausar" : "Tocar"}
           </button>
+          {s && (
+            <label className="ml-2 inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-1">
+              <Replace className="h-3 w-3" />{swapping ? "Enviando..." : swapped[s.idx] ? "Mídia trocada ✓ (trocar de novo)" : "Trocar mídia desta cena"}
+              <input type="file" accept="video/*,image/*" className="hidden" disabled={swapping} onChange={(e) => { const f = e.target.files?.[0]; if (f) void swapMedia(s.idx, f); }} />
+            </label>
+          )}
         </div>
       </div>
       <div className="relative space-y-1" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setT(((e.clientX - r.left) / r.width) * total); }}>

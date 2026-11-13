@@ -13,7 +13,8 @@ const EDGE = [
 /** Converts the chosen options into production settings understood by the PC agent. */
 export function optsToSettings(o: VideoOpts, kitMusicPath?: string | null) {
   const voice = o.voice.startsWith("clone:") ? { voice_id: o.voice.slice(6) } : { voice: o.voice, voice_rate: o.voice_rate };
-  const music = o.music === "kit" && kitMusicPath ? { music_path: kitMusicPath, music_mood: "auto" } : { music_mood: o.music === "kit" ? "auto" : o.music };
+  const music = o.music.startsWith("lib:") ? { music_path: o.music.slice(4), music_mood: "auto" }
+    : o.music === "kit" && kitMusicPath ? { music_path: kitMusicPath, music_mood: "auto" } : { music_mood: o.music === "none" ? "none" : "auto" };
   return { ...voice, ...music, caption_style: o.caption_style, sfx: o.sfx };
 }
 
@@ -23,6 +24,16 @@ export function VideoOptions({ value, onChange, kitMusic }: { value: VideoOpts; 
   const { data: clones } = useQuery({
     queryKey: ["ready-voices"],
     queryFn: async () => (await supabase.from("voices").select("id,name").eq("status", "ready").order("created_at", { ascending: false })).data ?? [],
+  });
+  const { data: tracks } = useQuery({
+    queryKey: ["lib-music"],
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return [];
+      const dir = `${u.user.id}/biblioteca/musica`;
+      const { data } = await supabase.storage.from("media").list(dir);
+      return (data ?? []).filter((f) => f.name && !f.name.startsWith(".")).map((f) => ({ path: `${dir}/${f.name}`, name: f.name.replace(/^\d+-/, "").replace(/\.[^.]+$/, "") }));
+    },
   });
   const set = (k: keyof VideoOpts, v: string) => onChange({ ...value, [k]: v });
   return (
@@ -46,7 +57,9 @@ export function VideoOptions({ value, onChange, kitMusic }: { value: VideoOpts; 
       <label className="space-y-1 text-xs text-muted-foreground">Música de fundo
         <select className={sel} value={value.music} onChange={(e) => set("music", e.target.value)}>
           {kitMusic && <option value="kit">Música isolada do vídeo de referência</option>}
-          <option value="auto">Automática pelo clima</option><option value="suspense">Suspense</option><option value="epico">Épica</option><option value="alegre">Alegre</option><option value="triste">Triste</option><option value="none">Sem música</option>
+          <option value="auto">Automática pelo clima do vídeo</option>
+          {(tracks ?? []).map((t) => <option key={t.path} value={`lib:${t.path}`}>Minha trilha: {t.name}</option>)}
+          <option value="none">Sem música</option>
         </select>
       </label>
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
