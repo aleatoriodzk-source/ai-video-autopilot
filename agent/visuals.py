@@ -1043,10 +1043,12 @@ def pick_visuals(runner, job, ctx) -> None:
             _single = len(set(proper_names(topic))) <= 1 and len(_cnt) <= 3
             if _pop and _single:
                 master = _master_pack(runner, job, _hero or topic, work) or False
+                if master:
+                    master["hero"] = _hero
             else:
                 master = False
         # Cena de "ruptura": cita alguém que não está no tema → busca fora do mestre.
-        off_topic = not (master and master.get("user")) and any(nm not in topic.lower() for nm in proper_names(q0))
+        off_topic = not (master and master.get("user")) and any(nm not in (topic + " " + str((master or {}).get("hero") or "")).lower() for nm in proper_names(q0))
         if master and not off_topic:
             c = _master_clip(runner, job, master, sc, work / f"vid_{sc['idx']:03d}.mp4", prod)
             if c:
