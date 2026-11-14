@@ -593,15 +593,10 @@ class Runner:
         else:
             trans = [sc.get("transition") or "cut" for sc in ctx["scenes"]]
         fx.transitions(clips, durs, trans, ctx["work"] / "video.mp4", ctx["settings"]["export"]["fps"], ctx["settings"]["export"]["crf"])
+        # Filtro de cor vai na mesma passada da legenda (um re-encode a menos).
         grade = media.COLOR_GRADES.get(kps.get("color_grade") or "none")
         if grade:
-            try:
-                g = ctx["work"] / "video_graded.mp4"
-                media.run(["ffmpeg", "-y", "-i", str(ctx["work"] / "video.mp4"), "-vf", grade, "-c:v", "libx264", "-preset", "veryfast", "-crf", str(ctx["settings"]["export"]["crf"]), "-pix_fmt", "yuv420p", "-an", str(g)])
-                g.replace(ctx["work"] / "video.mp4")
-                self.log(job, f"filtro de cor clonado da referência: {kps['color_grade']}", step="render")
-            except media.MediaError as err:
-                self.log(job, f"filtro de cor ignorado: {err}", "warn", step="render")
+            self.log(job, f"filtro de cor: {kps['color_grade']}", step="render")
         cache = Path(self.cfg.get("cache_dir") or ROOT / "cache")
         sfx = None
         if ((ctx["prod"].get("settings") or {}).get("sfx") or "on") == "off":
@@ -644,7 +639,7 @@ class Runner:
         if music:
             self.log(job, f"música: {Path(music).name}", step="render")
         e = ctx["settings"]["export"]
-        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass" if (ctx["work"] / "subs.ass").exists() else None, tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"], sfx)
+        media.final_mix(ctx["work"] / "video.mp4", ctx["work"] / "voice.wav", "subs.ass" if (ctx["work"] / "subs.ass").exists() else None, tmp, ctx["work"], Path(music) if music else None, e["music_volume_db"], e["voice_target_lufs"], e["crf"], sfx, grade)
         final = out_dir / f"{safe} - {ctx['prod']['aspect'].replace(':', 'x')} - {time.strftime('%Y%m%d-%H%M')}.mp4"
         final.write_bytes(tmp.read_bytes())
         ctx["final"] = final
