@@ -71,7 +71,7 @@ function Producoes() {
   }, []);
   function salvarCanal() {
     if (!canal) return;
-    let lib: Record<string, string> = {};
+    let lib: { color?: string; caption?: string } = {};
     try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); } catch { /* vazio */ }
     const all = JSON.parse(localStorage.getItem("canal-look") || "{}");
     all[canal] = { voice, voiceId, rate, color: lib.color, caption: lib.caption };
