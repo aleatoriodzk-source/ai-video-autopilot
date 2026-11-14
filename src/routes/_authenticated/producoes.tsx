@@ -1,4 +1,5 @@
 import { Timeline } from "@/components/app/Timeline";
+import { pullChannels, pushChannels } from "@/lib/channels";
 import { VoicePicker } from "@/components/app/VideoOptions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,11 +64,11 @@ function Producoes() {
   const [canal, setCanal] = useState("");
   const [soCanal, setSoCanal] = useState(true);
   useEffect(() => {
-    try {
+    void pullChannels().then(() => { try {
       const c = localStorage.getItem("canal-atual") || ""; setCanal(c);
       const look = JSON.parse(localStorage.getItem("canal-look") || "{}")[c];
       if (look?.voice) setVoice(look.voice); if (look?.voiceId) setVoiceId(look.voiceId); if (look?.rate) setRate(look.rate);
-    } catch { /* sem canal */ }
+    } catch { /* sem canal */ } });
   }, []);
   function salvarCanal() {
     if (!canal) return;
@@ -75,7 +76,7 @@ function Producoes() {
     try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); } catch { /* vazio */ }
     const all = JSON.parse(localStorage.getItem("canal-look") || "{}");
     all[canal] = { voice, voiceId, rate, color: lib.color, caption: lib.caption };
-    localStorage.setItem("canal-look", JSON.stringify(all)); toast.success(`Voz, legenda e filtro salvos para ${canal}`);
+    localStorage.setItem("canal-look", JSON.stringify(all)); void pushChannels(); toast.success(`Voz, legenda e filtro salvos para ${canal}`);
   }
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
