@@ -20,6 +20,7 @@ import { Route as AuthenticatedContasRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedLaboratorioRouteImport } from './routes/_authenticated/laboratorio'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedProducoesRouteImport } from './routes/_authenticated/producoes'
+import { Route as AuthenticatedRadarRouteImport } from './routes/_authenticated/radar'
 import { Route as AuthenticatedReferenciasRouteImport } from './routes/_authenticated/referencias'
 import { Route as AuthenticatedVozesRouteImport } from './routes/_authenticated/vozes'
 import { Route as ApiPublicAgentRouteImport } from './routes/api/public/agent'
@@ -80,6 +81,11 @@ const AuthenticatedProducoesRoute = AuthenticatedProducoesRouteImport.update({
   path: '/producoes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRadarRoute = AuthenticatedRadarRouteImport.update({
+  id: '/radar',
+  path: '/radar',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedReferenciasRoute =
   AuthenticatedReferenciasRouteImport.update({
     id: '/referencias',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
+  '/radar': typeof AuthenticatedRadarRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
   '/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/producoes': typeof AuthenticatedProducoesRoute
+  '/radar': typeof AuthenticatedRadarRoute
   '/referencias': typeof AuthenticatedReferenciasRoute
   '/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/_authenticated/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/producoes': typeof AuthenticatedProducoesRoute
+  '/_authenticated/radar': typeof AuthenticatedRadarRoute
   '/_authenticated/referencias': typeof AuthenticatedReferenciasRoute
   '/_authenticated/vozes': typeof AuthenticatedVozesRoute
   '/api/public/agent': typeof ApiPublicAgentRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/laboratorio'
     | '/painel'
     | '/producoes'
+    | '/radar'
     | '/referencias'
     | '/vozes'
     | '/api/public/agent'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/laboratorio'
     | '/painel'
     | '/producoes'
+    | '/radar'
     | '/referencias'
     | '/vozes'
     | '/api/public/agent'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authenticated/laboratorio'
     | '/_authenticated/painel'
     | '/_authenticated/producoes'
+    | '/_authenticated/radar'
     | '/_authenticated/referencias'
     | '/_authenticated/vozes'
     | '/api/public/agent'
@@ -279,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProducoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/radar': {
+      id: '/_authenticated/radar'
+      path: '/radar'
+      fullPath: '/radar'
+      preLoaderRoute: typeof AuthenticatedRadarRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/referencias': {
       id: '/_authenticated/referencias'
       path: '/referencias'
@@ -312,6 +331,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLaboratorioRoute: typeof AuthenticatedLaboratorioRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedProducoesRoute: typeof AuthenticatedProducoesRoute
+  AuthenticatedRadarRoute: typeof AuthenticatedRadarRoute
   AuthenticatedReferenciasRoute: typeof AuthenticatedReferenciasRoute
   AuthenticatedVozesRoute: typeof AuthenticatedVozesRoute
 }
@@ -325,6 +345,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLaboratorioRoute: AuthenticatedLaboratorioRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedProducoesRoute: AuthenticatedProducoesRoute,
+  AuthenticatedRadarRoute: AuthenticatedRadarRoute,
   AuthenticatedReferenciasRoute: AuthenticatedReferenciasRoute,
   AuthenticatedVozesRoute: AuthenticatedVozesRoute,
 }

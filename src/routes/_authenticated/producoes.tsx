@@ -2,7 +2,7 @@ import { Timeline } from "@/components/app/Timeline";
 import { VoicePicker } from "@/components/app/VideoOptions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
@@ -33,6 +33,7 @@ const btn = "rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent
 function Producoes() {
   const qc = useQueryClient();
   const [topic, setTopic] = useState("");
+  useEffect(() => { const v = localStorage.getItem("radar-pauta"); if (v) { setTopic(v); localStorage.removeItem("radar-pauta"); } }, []);
   const [aspect, setAspect] = useState("9:16");
   const [mode, setMode] = useState("auto");
   const [minutes, setMinutes] = useState("1");
