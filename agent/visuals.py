@@ -728,9 +728,18 @@ _STOP = set("o a os as um uma de do da dos das e em no na nos nas com por para q
 _VAGUE = set("expressao expressão chocado chocada anunciando dramatico dramático olhando cena momento close tensao tensão misterioso misteriosa sombrio epico épico conceito simbolizando representando enquanto frente".split())
 
 
+def _anchor(sc: dict) -> str:
+    """Âncora no protagonista: se a busca não cita ninguém, injeta o nome real citado na fala (nunca metáfora solta)."""
+    q = sc.get("visual_query") or sc.get("narration", "")[:60]
+    if proper_names(q):
+        return q
+    nm = list(dict.fromkeys(re.findall(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕ][\wÀ-ú'-]{2,}(?: [A-ZÁÉÍÓÚÂÊÔÃÕ][\wÀ-ú'-]{2,})*", (sc.get("narration") or "")[1:])))
+    return (" ".join(nm[:2]) + " " + q).strip() if nm else q
+
+
 def _clean_q(q: str, topic: str = "") -> str:
     """Busca concreta: nomes próprios + até 3 substantivos; nada de frase poética da narração."""
-    names = proper_names(q)
+    names = proper_names(q) or proper_names(topic)[:2]
     q = re.sub(r"\b(19|20)\d{2}\b", " ", q)  # anos poluem a busca
     words = [w for w in re.sub(r"[^\wÀ-ÿ ]", " ", q).split() if not w.isdigit() if w.lower() not in _STOP and w.lower() not in _VAGUE and len(w) > 2]
     rest = [w for w in words if not any(w.lower() in n.lower() for n in names)][:3 if not names else 2]
@@ -958,13 +967,13 @@ def pick_visuals(runner, job, ctx) -> None:
     total = len(ctx["scenes"])
     try:
         runner.update(job, wait_reason="Buscando fotos de 8 cenas ao mesmo tempo…")
-        prefetch_web_images([_clean_q(x.get("visual_query") or x["narration"][:60], topic) for x in ctx["scenes"]])
+        prefetch_web_images([_clean_q(_anchor(x), topic) for x in ctx["scenes"]])
     except Exception as e:
         runner.log(job, f"busca paralela de fotos: {str(e)[:100]}", "warn", "visuals")
     if not image_only:
         try:
             runner.update(job, wait_reason="Pesquisando vídeos de 4 cenas ao mesmo tempo…")
-            prefetch_youtube_searches([_clean_q(x.get("visual_query") or x["narration"][:60], topic) for x in ctx["scenes"]])
+            prefetch_youtube_searches([_clean_q(_anchor(x), topic) for x in ctx["scenes"]])
         except Exception as e:
             runner.log(job, f"busca paralela de vídeos: {str(e)[:100]}", "warn", "visuals")
     for n_sc, sc in enumerate(ctx["scenes"], 1):
@@ -986,7 +995,7 @@ def pick_visuals(runner, job, ctx) -> None:
             recent.append(mine["id"])
             runner.log(job, f"cena {sc['idx'] + 1}: usando mídia escolhida por você", step="visuals")
             continue
-        q0 = _clean_q(sc.get("visual_query") or sc["narration"][:60], topic)
+        q0 = _clean_q(_anchor(sc), topic)
         links = [u for u in ((prod.get("settings") or {}).get("source_urls") or []) if u][:2]
         if master is None and links:
             master = _master_pack(runner, job, topic, work, links) or False
