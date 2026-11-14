@@ -631,7 +631,7 @@ def concat(files: list[Path], out: Path, workdir: Path, audio: bool) -> None:
 
 
 def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdir: Path, music: Path | None,
-              music_db: float = -20, lufs: float = -16, crf: int = 20, sfx: Path | None = None) -> None:
+              music_db: float = -20, lufs: float = -16, crf: int = 20, sfx: Path | None = None, grade: str | None = None) -> None:
     """Queima legendas, normaliza a voz, aplica ducking na música e soma a faixa de efeitos sonoros."""
     inputs = ["-i", str(video), "-i", str(voice)]
     fd = ""
@@ -642,7 +642,8 @@ def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdi
             fd = ":fontsdir=fonts"
         except OSError:
             fd = ""
-    vf = f"[0:v]subtitles={subs_name}{fd}[v]" if subs_name else "[0:v]null[v]"
+    g = f"{grade}," if grade else ""
+    vf = f"[0:v]{g}subtitles={subs_name}{fd}[v]" if subs_name else f"[0:v]{grade or 'null'}[v]"
     af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11"
     mix, n = [], 2
     if music and music.exists():
