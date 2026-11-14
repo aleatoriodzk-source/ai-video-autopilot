@@ -6,7 +6,7 @@ export type RadarItem = { id: string; title: string; views: number; url: string;
 
 // "8,7 mil visualizações" / "1,2 mi de visualizações" / "532 visualizações" -> número
 export function parseViews(t: string): number {
-  const m = t.match(/([\d.,]+)\s*(mil|mi|bi|k|m|b)?\w*\s*(de\s+)?(visualiza|views)/i);
+  const m = t.match(/(\d[\d.,]*)\s*(mil|mi|bi|k|m|b)?\w*\s*(de\s+)?(visualiza|views)/i);
   if (!m) return 0;
   const n = parseFloat(m[1]!.replace(/\./g, "").replace(",", "."));
   const u = (m[2] ?? "").toLowerCase();
