@@ -61,7 +61,51 @@ COLOR_GRADES = {
 }
 
 
+_GPU: list = []
+
+
+def _gpu_encoder() -> str | None:
+    """Detecta uma vez um encoder de GPU que funcione (Nvidia/AMD/Intel)."""
+    if _GPU:
+        return _GPU[0]
+    found = None
+    for enc in ("h264_nvenc", "h264_amf", "h264_qsv"):
+        try:
+            t = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.2",
+                                "-c:v", enc, "-f", "null", "-"], capture_output=True, timeout=15)
+            if t.returncode == 0:
+                found = enc
+                break
+        except Exception:
+            pass
+    _GPU.append(found)
+    return found
+
+
+def _to_gpu(cmd: list[str], enc: str) -> list[str]:
+    out, i = [], 0
+    while i < len(cmd):
+        a = cmd[i]
+        if a == "-c:v" and i + 1 < len(cmd) and cmd[i + 1] == "libx264":
+            out += ["-c:v", enc]; i += 2; continue
+        if a == "-preset" and i + 1 < len(cmd):
+            out += ["-preset", "p4"] if enc == "h264_nvenc" else []; i += 2; continue
+        if a == "-crf" and i + 1 < len(cmd):
+            q = cmd[i + 1]
+            out += ["-cq", q, "-b:v", "0"] if enc == "h264_nvenc" else (["-qp_i", q, "-qp_p", q] if enc == "h264_amf" else ["-global_quality", q])
+            i += 2; continue
+        out.append(a); i += 1
+    return out
+
+
 def run(cmd: list[str], cwd: Path | None = None) -> str:
+    # Render acelerado: troca libx264 pela GPU quando existir; se falhar, refaz na CPU.
+    if cmd and Path(cmd[0]).name.startswith("ffmpeg") and "libx264" in cmd:
+        enc = _gpu_encoder()
+        if enc:
+            g = subprocess.run(_to_gpu(cmd, enc), cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if g.returncode == 0:
+                return g.stdout
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:
         raise MediaError(f"{Path(cmd[0]).name} falhou ({p.returncode}): {p.stderr[-1500:]}")
