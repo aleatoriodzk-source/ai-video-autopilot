@@ -309,6 +309,23 @@ def _yt_searches(q: str) -> list:
 _BW_SCORE: dict = {}
 
 
+def _stream_slice(vid: str, start: float, secs: float, raw: Path) -> bool:
+    """Stream Slicing: pega o link direto do vídeo (sem baixar) e o FFmpeg puxa só os segundos da cena."""
+    from analyzer import _ytdlp
+    try:
+        urls = _ytdlp(["-g", "-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]", "--no-playlist",
+                       f"https://www.youtube.com/watch?v={vid}"]).strip().splitlines()
+        if not urls or not urls[0].startswith("http"):
+            return False
+        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start}", "-i", urls[0],
+                        "-t", f"{secs:.2f}", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                        str(raw)], capture_output=True, timeout=25)
+        return raw.exists() and raw.stat().st_size > 20000
+    except Exception:
+        raw.unlink(missing_ok=True)
+        return False
+
+
 def _best_window(raw: Path, need: float) -> float | None:
     """'Olho' local do V3: assiste o trecho baixado a 4 fps e escolhe a janela com mais ação,
     sem tela preta e sem imagem congelada. Roda no notebook em <1 s, sem IA."""
@@ -394,12 +411,13 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         e, vid, start, extra = pl
         raw = out.with_name(f"{out.stem}_scan{k}.mp4")
         raw.unlink(missing_ok=True)
-        try:
-            _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
-                    "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
-                    "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
-        except Exception as ex:
-            return pl, raw, str(ex)[:150], None
+        if not _stream_slice(vid, start, need + extra, raw):
+            try:
+                _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
+                        "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
+                        "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
+            except Exception as ex:
+                return pl, raw, str(ex)[:150], None
         if not (raw.exists() and raw.stat().st_size > 20000):
             return pl, raw, "arquivo vazio", None
         return pl, raw, None, _best_window(raw, need)
