@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/ui";
-import { radarSearch, type RadarItem } from "@/lib/radar.functions";
+import { radarSearch, radarInsight, type RadarItem, type RadarInsight } from "@/lib/radar.functions";
 
 export const Route = createFileRoute("/_authenticated/radar")({
   head: () => ({
@@ -25,6 +25,30 @@ function Radar() {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<RadarItem[]>([]);
   const nav = useNavigate();
+  const [ins, setIns] = useState<RadarInsight | null>(null);
+  const [busyIns, setBusyIns] = useState(false);
+  const [channels, setChannels] = useState<{ name: string; niche: string }[]>([]);
+  const [cur, setCur] = useState("");
+  useEffect(() => {
+    try { setChannels(JSON.parse(localStorage.getItem("canais-dark") || "[]")); setCur(localStorage.getItem("canal-atual") || ""); } catch { /* vazio */ }
+  }, []);
+  function pick(name: string) {
+    setCur(name); localStorage.setItem("canal-atual", name);
+    const c = channels.find((x) => x.name === name); if (c) setQ(c.niche);
+  }
+  function addChannel() {
+    const name = prompt("Nome do canal (ex.: Canal Marvel)")?.trim(); if (!name) return;
+    const niche = prompt("Nicho do canal (ex.: curiosidades Marvel)", q)?.trim() || "";
+    const next = [...channels.filter((x) => x.name !== name), { name, niche }];
+    setChannels(next); localStorage.setItem("canais-dark", JSON.stringify(next)); pick(name); setQ(niche);
+  }
+  async function analisar() {
+    setBusyIns(true);
+    try {
+      const r = await radarInsight({ data: { niche: q, items: items.slice(0, 6) } });
+      if (r.ok) setIns(r.insight); else toast.error(r.error);
+    } catch (e) { toast.error((e as Error).message); } finally { setBusyIns(false); }
+  }
   async function go() {
     setBusy(true);
     try {
@@ -44,6 +68,33 @@ function Radar() {
         <input className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ex.: curiosidades Marvel, fortunas famosos, mistérios" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50" disabled={busy || !q.trim()}>{busy ? "Buscando…" : "Espiar"}</button>
       </form>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Canal:</span>
+        {channels.map((c) => (
+          <button key={c.name} onClick={() => pick(c.name)} className={`rounded-full border px-3 py-1 ${cur === c.name ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}>{c.name}</button>
+        ))}
+        <button onClick={addChannel} className="rounded-full border border-dashed border-border px-3 py-1 hover:bg-accent">+ Novo canal</button>
+        {items.length ? <button onClick={() => void analisar()} disabled={busyIns} className="ml-auto rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50">{busyIns ? "Analisando capas…" : "Analisar capas e títulos"}</button> : null}
+      </div>
+      {ins ? (
+        <div className="grid gap-3 rounded-lg border border-border bg-card p-4 text-sm md:grid-cols-2">
+          <div><p className="mb-1 font-semibold">Padrão das capas</p><ul className="list-disc pl-4 text-muted-foreground">{ins.thumb_patterns.map((t) => <li key={t}>{t}</li>)}</ul></div>
+          <div><p className="mb-1 font-semibold">Padrão dos títulos</p><ul className="list-disc pl-4 text-muted-foreground">{ins.title_patterns.map((t) => <li key={t}>{t}</li>)}</ul></div>
+          <div className="md:col-span-2"><p className="mb-1 font-semibold">Títulos para testar</p>
+            {ins.titles.map((t) => (
+              <div key={t.title} className="flex items-center gap-2 border-t border-border py-1.5">
+                <span className="w-10 font-bold text-primary">{Math.round(t.score)}</span>
+                <span className="flex-1">{t.title} <span className="text-muted-foreground">· {t.trigger}</span></span>
+                <button className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent" onClick={() => { localStorage.setItem("radar-pauta", t.title); nav({ to: "/producoes" }); }}>Usar</button>
+              </div>
+            ))}
+          </div>
+          <div className="md:col-span-2"><p className="mb-1 font-semibold">Comentário para fixar</p>
+            <p className="text-muted-foreground">{ins.pinned_comment} <button className="ml-2 underline" onClick={() => { void navigator.clipboard.writeText(ins.pinned_comment); toast.success("Copiado"); }}>copiar</button></p>
+            <p className="mt-2 text-muted-foreground">{ins.hashtags.join(" ")}</p>
+          </div>
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((it, i) => (
           <div key={it.id} className="overflow-hidden rounded-lg border border-border bg-card">
