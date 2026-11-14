@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
+import { LabXray } from "@/components/app/LabXray";
 import { DnaView } from "@/components/app/DnaView";
 import { channelIdeas, generateScript } from "@/lib/ai.functions";
 import { enqueueJobs } from "@/lib/jobs";
@@ -156,6 +157,7 @@ function Lab() {
   return (
     <div>
       <PageHeader title="Laboratório" subtitle="Envie 1 vídeo viral. O laboratório desmonta tudo: mede o ritmo da fala, a legenda, os cortes, as proporções, os filtros, o clima da música e os efeitos. Fica separado do resto — só entra numa produção quando você escolher." />
+      <LabXray />
       <div className="panel mb-6 space-y-3 p-4">
         <input className={input} placeholder="Nome do kit (ex.: Curiosidades estilo X)" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={input} placeholder="Link do TikTok/YouTube (ou envie o arquivo abaixo)" value={link} onChange={(e) => setLink(e.target.value)} disabled={!!file} />
