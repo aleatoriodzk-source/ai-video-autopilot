@@ -294,6 +294,28 @@ def proper_names(q: str) -> list[str]:
 
 
 _YT_CACHE: dict = {}
+# V6: buscas do YouTube guardadas no PC por 7 dias — personagem repetido não espera busca de novo.
+import threading as _th, time as _tm
+_YT_FILE = Path(__file__).parent / "cache" / "yt_search.json"
+_YT_LOCK = _th.Lock()
+try:
+    _YT_DISK = {k: v for k, v in json.loads(_YT_FILE.read_text(encoding="utf-8")).items() if _tm.time() - v.get("t", 0) < 7 * 86400}
+except Exception:
+    _YT_DISK = {}
+_YT_CACHE.update({k: v["e"] for k, v in _YT_DISK.items()})
+
+
+def _yt_remember(search: str, entries: list) -> None:
+    _YT_CACHE[search] = entries
+    if not entries:
+        return
+    with _YT_LOCK:
+        _YT_DISK[search] = {"t": _tm.time(), "e": [{k: e.get(k) for k in ("id", "title", "duration")} for e in entries]}
+        try:
+            _YT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _YT_FILE.write_text(json.dumps(_YT_DISK), encoding="utf-8")
+        except OSError:
+            pass
 import re as _re
 BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
 _NEG = "-gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
@@ -360,7 +382,7 @@ def prefetch_youtube_searches(queries: list, workers: int = 4) -> None:
 
     def one(search):
         try:
-            _YT_CACHE[search] = json.loads(_ytdlp(["--flat-playlist", "-J", search])).get("entries") or []
+            _yt_remember(search, json.loads(_ytdlp(["--flat-playlist", "-J", search])).get("entries") or [])
         except Exception:
             pass
     todo = list(dict.fromkeys(s for q in queries if q for s in _yt_searches(q)))
@@ -380,6 +402,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
                 continue
             data = json.loads(_ytdlp(["--flat-playlist", "-J", search]))
             entries += data.get("entries") or []
+            _yt_remember(search, data.get("entries") or [])
         except Exception as e:
             runner.log(job, f"YouTube busca: {str(e)[:150]}", "warn", "visuals")
     if not entries:

@@ -24,6 +24,7 @@ export const CAPTIONS: CaptionPreset[] = [
   { id: "capcut-italic", name: "Montserrat Black Itálico", desc: "Estilo esporte/edit", font: "Montserrat", color: "#FFFFFF", highlight: "#00E5FF", box: false, upper: true },
   { id: "capcut-archivo", name: "Archivo Black", desc: "Pesada estilo CoreSans", font: "Archivo Black", color: "#FFFFFF", highlight: "#7CFF4F", box: false, upper: false },
   { id: "capcut-oswald", name: "Oswald Doc", desc: "Documentário dark", font: "Oswald", color: "#F5F5F5", highlight: "#FFB300", box: true, upper: true },
+  { id: "karaoke", name: "Karaokê palavra por palavra", desc: "Cada palavra acende quando é falada", font: "Montserrat", color: "#FFFFFF", highlight: "#FFC800", box: false, upper: true },
   { id: "neon", name: "Neon", desc: "Brilho ciano", font: "Bebas Neue", color: "#E8FFFF", highlight: "#00F0FF", box: false, upper: true },
 ];
 
