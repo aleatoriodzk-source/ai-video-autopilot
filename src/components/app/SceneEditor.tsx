@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { rerenderProduction } from "@/lib/jobs";
 import { rewriteScene } from "@/lib/ai.functions";
 import { CAPTIONS, COLORS } from "@/lib/library-presets";
+import { StudioStatus } from "./StudioStatus";
+import { download, toDraft, toSrt } from "@/lib/capcut-export";
 
 type Draft = {
   id?: string;
@@ -155,6 +157,13 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
 
+  function exportCapcut() {
+    const sc = draft.map((d) => ({ narration: d.narration, caption: d.caption, duration: est(d), media: d.asset_id }));
+    download("legendas.srt", toSrt(sc));
+    download("rascunho-capcut.json", JSON.stringify(toDraft(sc, prod?.aspect ?? "9:16", "Estúdio"), null, 2), "application/json");
+    toast.success("Baixados: legendas.srt e o rascunho. No CapCut: Texto → Legendas → Importar o .srt; depois arraste o vídeo final.");
+  }
+
   async function rerender() {
     if (dirty && !(await save())) return;
     setBusy(true);
@@ -219,6 +228,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         <span className="font-semibold text-foreground">Estúdio</span>
         <span className="text-muted-foreground">{draft.length} cenas · {fmt(total)}</span>
         {dirty && <span className="text-warning">Alterações não salvas</span>}
+        <StudioStatus productionId={productionId} />
         <span className="flex-1" />
         <select aria-label="Filtro de cor" className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={look["color_grade"] ?? "natural"} onChange={(e) => saveLook("color_grade", e.target.value)}>
           {COLORS.map((c) => <option key={c.id} value={c.id}>Cor: {c.name}</option>)}
@@ -230,6 +240,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar</button>
         <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar vídeo</button>
         <button className={btn} onClick={runAudit}>Auditar viralidade</button>
+        <button className={btn} onClick={exportCapcut}>Exportar para CapCut</button>
       </div>
       {audit && (
         <div className="border-b border-border px-3 py-2 text-xs">
