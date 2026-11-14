@@ -186,6 +186,22 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     if (error) toast.error(error.message);
     else qc.invalidateQueries({ queryKey: ["prod-aspect", productionId] });
   }
+  const [audit, setAudit] = useState<null | { score: number; hook: string; issues: { i: number; msg: string }[] }>(null);
+  function runAudit() {
+    const issues: { i: number; msg: string }[] = [];
+    let score = 100;
+    const h = draft[0];
+    const hookTxt = (h?.narration ?? "").toLowerCase();
+    let hook = "Gancho forte";
+    if (!h || est(h) > 3.5) { score -= 15; hook = "Gancho lento: a 1ª cena passa de 3s"; issues.push({ i: 0, msg: "Encurte a 1ª fala para caber em 3 segundos" }); }
+    if (h && !/[?!]|\d|nunca|ninguém|segredo|verdade|por que|como/.test(hookTxt)) { score -= 10; issues.push({ i: 0, msg: "Gancho sem curiosidade: use pergunta, número ou revelação" }); }
+    draft.forEach((d, i) => {
+      if (est(d) > 4.5) { score -= 4; issues.push({ i, msg: `Cena longa (${est(d).toFixed(1)}s) — risco de rolagem, divida em 2` }); }
+      if (!d.asset_id) { score -= 3; issues.push({ i, msg: "Sem mídia escolhida" }); }
+      if (i > 0 && d.motion === "static" && draft[i - 1]!.motion === "static") { score -= 3; issues.push({ i, msg: "Duas cenas paradas seguidas — adicione movimento" }); }
+    });
+    setAudit({ score: Math.max(0, Math.min(100, score)), hook, issues });
+  }
   const fmt = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
 
   return (
@@ -199,7 +215,21 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         <button className={btn} onClick={() => setPanel((v) => !v)}>{panel ? "Esconder painel" : "Mostrar painel"}</button>
         <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar</button>
         <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar vídeo</button>
+        <button className={btn} onClick={runAudit}>Auditar viralidade</button>
       </div>
+      {audit && (
+        <div className="border-b border-border px-3 py-2 text-xs">
+          <div className="flex items-center gap-3">
+            <span className={"text-lg font-bold " + (audit.score >= 80 ? "text-primary" : audit.score >= 60 ? "text-warning" : "text-destructive")}>{audit.score}/100</span>
+            <span className="text-muted-foreground">{audit.hook} · {audit.issues.length} pontos de fuga</span>
+            <span className="flex-1" />
+            <button className={btn} onClick={() => setAudit(null)}>Fechar</button>
+          </div>
+          <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto">
+            {audit.issues.map((x, k) => <li key={k}><button className="text-left hover:underline" onClick={() => { setSel(x.i); setT(starts[x.i] ?? 0); }}><span className="text-destructive">● Cena {x.i + 1}:</span> {x.msg}</button></li>)}
+          </ul>
+        </div>
+      )}
 
       <div className={"grid gap-0 " + (panel ? "lg:grid-cols-[1fr_340px]" : "")}>
         {/* Player central */}
