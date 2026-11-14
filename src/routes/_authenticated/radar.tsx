@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { pullChannels, pushChannels } from "@/lib/channels";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/ui";
@@ -30,17 +31,17 @@ function Radar() {
   const [channels, setChannels] = useState<{ name: string; niche: string }[]>([]);
   const [cur, setCur] = useState("");
   useEffect(() => {
-    try { setChannels(JSON.parse(localStorage.getItem("canais-dark") || "[]")); setCur(localStorage.getItem("canal-atual") || ""); } catch { /* vazio */ }
+    void pullChannels().finally(() => { try { setChannels(JSON.parse(localStorage.getItem("canais-dark") || "[]")); setCur(localStorage.getItem("canal-atual") || ""); } catch { /* vazio */ } });
   }, []);
   function pick(name: string) {
-    setCur(name); localStorage.setItem("canal-atual", name);
+    setCur(name); localStorage.setItem("canal-atual", name); void pushChannels();
     const c = channels.find((x) => x.name === name); if (c) setQ(c.niche);
   }
   function addChannel() {
     const name = prompt("Nome do canal (ex.: Canal Marvel)")?.trim(); if (!name) return;
     const niche = prompt("Nicho do canal (ex.: curiosidades Marvel)", q)?.trim() || "";
     const next = [...channels.filter((x) => x.name !== name), { name, niche }];
-    setChannels(next); localStorage.setItem("canais-dark", JSON.stringify(next)); pick(name); setQ(niche);
+    setChannels(next); localStorage.setItem("canais-dark", JSON.stringify(next)); pick(name); void pushChannels(); setQ(niche);
   }
   async function analisar() {
     setBusyIns(true);
@@ -92,6 +93,13 @@ function Radar() {
           <div className="md:col-span-2"><p className="mb-1 font-semibold">Comentário para fixar</p>
             <p className="text-muted-foreground">{ins.pinned_comment} <button className="ml-2 underline" onClick={() => { void navigator.clipboard.writeText(ins.pinned_comment); toast.success("Copiado"); }}>copiar</button></p>
             <p className="mt-2 text-muted-foreground">{ins.hashtags.join(" ")}</p>
+          </div>
+          <div className="md:col-span-2"><p className="mb-1 font-semibold">Ideias de capa</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(ins.covers ?? []).map((c, k) => (
+                <div key={k} className="rounded border border-border p-2"><p className="font-bold uppercase">{c.text}</p><p className="text-xs text-muted-foreground">{c.layout}</p><p className="text-xs text-muted-foreground">Cores: {c.colors}</p></div>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}

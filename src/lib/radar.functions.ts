@@ -58,6 +58,7 @@ export type RadarInsight = {
   titles: { title: string; score: number; trigger: string }[];
   pinned_comment: string;
   hashtags: string[];
+  covers: { text: string; layout: string; colors: string }[];
 };
 
 const S = { type: "string" } as const;
@@ -69,6 +70,7 @@ const insightSchema = obj({
   titles: { type: "array", items: obj({ title: S, score: N, trigger: S }) },
   pinned_comment: S,
   hashtags: { type: "array", items: S },
+  covers: { type: "array", items: obj({ text: S, layout: S, colors: S }) },
 });
 
 async function toDataUrl(u: string): Promise<string | null> {
@@ -105,7 +107,7 @@ export const radarInsight = createServerFn({ method: "POST" })
         user:
           `Nicho: "${data.niche}". Estes são os Shorts mais vistos da semana (as imagens são as capas na mesma ordem):\n` +
           data.items.map((x, k) => `${k + 1}. "${x.title}" — ${x.views} views`).join("\n") +
-          `\nTarefas: thumb_patterns = 3 a 5 padrões visuais das capas (contraste, cores, texto na capa, close, expressão) para copiar. title_patterns = 3 a 5 padrões dos títulos (gatilhos, tamanho, números, nomes). titles = 3 títulos NOVOS para um vídeo original do nicho, com nota 0-100 de curiosidade e o gatilho usado (mistério, contradição, urgência, número). pinned_comment = um comentário para fixar que provoca respostas. hashtags = 5 hashtags.`,
+          `\nTarefas: thumb_patterns = 3 a 5 padrões visuais das capas (contraste, cores, texto na capa, close, expressão) para copiar. title_patterns = 3 a 5 padrões dos títulos (gatilhos, tamanho, números, nomes). titles = 3 títulos NOVOS para um vídeo original do nicho, com nota 0-100 de curiosidade e o gatilho usado (mistério, contradição, urgência, número). pinned_comment = um comentário para fixar que provoca respostas. hashtags = 5 hashtags. covers = 3 capas para o vídeo novo copiando o padrão vencedor: text = texto curto na capa (máx 4 palavras), layout = o que aparece e onde (personagem, close, seta, círculo), colors = cores principais.`,
       });
       return { ok: true as const, insight: JSON.parse(JSON.stringify(r.data)) as RadarInsight };
     } catch (e) {
