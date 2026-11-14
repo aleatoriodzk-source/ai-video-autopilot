@@ -62,3 +62,58 @@ export const xrayVideo = createServerFn({ method: "POST" })
       return { ok: false as const, error: (e as Error).message };
     }
   });
+
+export type ChannelFormula = { summary: string; cuts_per_min: number; avg_scene_s: number; hook_pattern: string; content_mix: string; music: string; sfx: string; captions: string; rules: string[] };
+
+const channelSchema = obj({ summary: S, cuts_per_min: N, avg_scene_s: N, hook_pattern: S, content_mix: S, music: S, sfx: S, captions: S, rules: { type: "array", items: S } });
+
+/** Cruza até 5 Raio-X do mesmo canal e extrai a Fórmula de Ouro comum. */
+export const crossFormula = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { items: { title: string; duration: number; xray: Xray }[] }) => ({
+    items: (Array.isArray(i.items) ? i.items : []).slice(0, 5).map((x) => ({ title: String(x.title).slice(0, 120), duration: Number(x.duration) || 0, xray: x.xray })),
+  }))
+  .handler(async ({ data, context }) => {
+    try {
+      if (data.items.length < 2) throw new Error("Escolha pelo menos 2 Raio-X");
+      const { aiJson } = await import("@/server/ai.server");
+      const { loadKeys } = await import("@/server/tasks.server");
+      const keys = await loadKeys(context.userId);
+      const brief = data.items.map((it, k) => {
+        const x = it.xray;
+        return `VÍDEO ${k + 1} "${it.title}" (${it.duration.toFixed(0)}s, viral ${x.virality}, gancho ${x.hook.score}): gancho=${x.hook.visual} / ${x.hook.trigger}; DNA=${JSON.stringify(x.dna)}; cenas=${x.scenes.map((s) => `${s.shot} (energia ${s.energy})`).join(" | ").slice(0, 1500)}; regras=${x.formula.join(" ; ")}`;
+      }).join("\n\n");
+      const r = await aiJson<ChannelFormula>({
+        keys, schemaName: "channel_formula", schema: channelSchema,
+        system: "Você é um editor sênior de canais dark. Cruza análises de vários vídeos do mesmo canal e extrai SÓ o que se repete (o padrão real), em números e regras objetivas. PT-BR.",
+        user: `${brief}\n\nExtraia a Fórmula de Ouro do canal: médias de cortes/min e duração de cena, padrão de gancho, mistura de conteúdo (ex: 60% ação), música, SFX, legenda, e 6 a 10 regras objetivas para copiar o canal trocando só o tema.`,
+      });
+      return { ok: true as const, formula: JSON.parse(JSON.stringify(r.data)) as ChannelFormula };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  });
+
+export type ClonedCaption = { name: string; font: string; color: string; highlight: string; outline: string; box: boolean; upper: boolean; italic: boolean; position: string; words_per_block: number };
+const capSchema = obj({ name: S, font: S, color: S, highlight: S, outline: S, box: { type: "boolean" }, upper: { type: "boolean" }, italic: { type: "boolean" }, position: S, words_per_block: N });
+
+/** Lê o print de uma legenda e devolve um preset pronto. */
+export const cloneCaption = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { img: string }) => ({ img: String(i.img).slice(0, 2_000_000) }))
+  .handler(async ({ data, context }) => {
+    try {
+      if (!data.img.startsWith("data:image")) throw new Error("Envie uma imagem");
+      const { aiJson } = await import("@/server/ai.server");
+      const { loadKeys } = await import("@/server/tasks.server");
+      const keys = await loadKeys(context.userId);
+      const r = await aiJson<ClonedCaption>({
+        keys, schemaName: "caption_clone", schema: capSchema, images: [data.img],
+        system: "Você é especialista em tipografia de vídeos virais (CapCut/TikTok/Reels).",
+        user: "Analise a legenda deste print. Devolva: name (nome curto do estilo), font (a fonte Google Fonts mais parecida, ex: Bebas Neue, Anton, Montserrat, Poppins, Oswald, Archivo Black), color (hex do texto), highlight (hex da palavra em destaque ou igual a color), outline (hex da borda/sombra), box (tem tarja atrás?), upper (caixa alta?), italic, position (topo|meio|base), words_per_block (1 a 5).",
+      });
+      return { ok: true as const, caption: JSON.parse(JSON.stringify(r.data)) as ClonedCaption };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  });

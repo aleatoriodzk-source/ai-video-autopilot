@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { xrayVideo, type Xray } from "@/lib/lab.functions";
+import { xrayVideo, crossFormula, type Xray, type ChannelFormula } from "@/lib/lab.functions";
 import { generateScript } from "@/lib/ai.functions";
 
 type Saved = { id: string; title: string; duration: number; at: number; xray: Xray };
@@ -70,6 +70,18 @@ export function LabXray() {
   const [topic, setTopic] = useState("");
   const [now, setNow] = useState(0);
   const player = useRef<HTMLVideoElement>(null);
+  const [sel, setSel] = useState<string[]>([]);
+  const [channel, setChannel] = useState<ChannelFormula | null>(null);
+
+  async function cross() {
+    setBusy(true);
+    try {
+      const r = await crossFormula({ data: { items: saved.filter((s) => sel.includes(s.id)).map((s) => ({ title: s.title, duration: s.duration, xray: s.xray })) } });
+      if (!r.ok) throw new Error(r.error);
+      setChannel(r.formula); localStorage.setItem("lab-formula-canal", JSON.stringify(r.formula));
+      toast.success("Fórmula do canal pronta");
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
 
   useEffect(() => { try { setSaved(JSON.parse(localStorage.getItem(KEY) ?? "[]")); } catch { /* vazio */ } }, []);
   const persist = (l: Saved[]) => { setSaved(l); localStorage.setItem(KEY, JSON.stringify(l.slice(0, 30))); };
@@ -112,7 +124,7 @@ export function LabXray() {
       const uid = (await supabase.auth.getUser()).data.user!.id;
       const short = cur.duration <= 75;
       const x = cur.xray;
-      const settings = { target_seconds: short ? 65 : Math.round(cur.duration), lab_formula: x.formula, lab_hook: `${x.hook.visual} — ${x.hook.trigger}`, ...(x.dna.avg_scene_s > 0 ? { cut_seconds: Math.round(x.dna.avg_scene_s * 10) / 10 } : {}) };
+      const settings = { target_seconds: short ? 65 : Math.round(cur.duration), lab_formula: channel ? [...channel.rules, ...x.formula].slice(0, 14) : x.formula, lab_hook: `${x.hook.visual} — ${x.hook.trigger}`, ...(x.dna.avg_scene_s > 0 ? { cut_seconds: Math.round(x.dna.avg_scene_s * 10) / 10 } : {}) };
       const { data: p, error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: short ? "9:16" : "16:9", mode: "auto", settings }).select("id").single();
       if (error) throw error;
       toast.info("Escrevendo o roteiro com a fórmula…");
@@ -122,6 +134,7 @@ export function LabXray() {
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
 
+  useEffect(() => { try { const v = localStorage.getItem("lab-formula-canal"); if (v) setChannel(JSON.parse(v)); } catch { /* vazio */ } }, []);
   const x = cur?.xray;
   const ranking = [...saved].sort((a, b) => b.xray.hook.score - a.xray.hook.score).slice(0, 6);
 
@@ -189,6 +202,30 @@ export function LabXray() {
             <input className="min-w-60 flex-1 rounded-md border border-input bg-background px-3 py-2" placeholder="Tema do novo vídeo com esta fórmula" value={topic} onChange={(e) => setTopic(e.target.value)} />
             <button className={btn} disabled={busy} onClick={create}>Criar produção a partir desta análise</button>
           </div>
+        </div>
+      )}
+
+      {saved.length > 1 && (
+        <div className="mt-6 rounded-md border border-border p-3 text-sm">
+          <h3 className="mb-1 font-semibold">Fórmula do canal (cruzar até 5 vídeos)</h3>
+          <p className="mb-2 text-muted-foreground">Marque os Raio-X do mesmo canal; a IA acha o padrão que se repete. Ele passa a guiar os próximos roteiros criados aqui.</p>
+          <div className="mb-2 flex flex-wrap gap-2">
+            {saved.slice(0, 15).map((s) => (
+              <label key={s.id} className="flex items-center gap-1 rounded-md border border-border px-2 py-1">
+                <input type="checkbox" checked={sel.includes(s.id)} disabled={!sel.includes(s.id) && sel.length >= 5} onChange={(e) => setSel(e.target.checked ? [...sel, s.id] : sel.filter((i) => i !== s.id))} />
+                <span className="max-w-48 truncate">{s.title}</span>
+              </label>
+            ))}
+          </div>
+          <button className={btn} disabled={busy || sel.length < 2} onClick={cross}>{busy ? "Cruzando…" : `Cruzar ${sel.length} vídeos`}</button>
+          {channel && (
+            <div className="mt-3 space-y-1">
+              <p>{channel.summary}</p>
+              <p>Cortes/min: <b>{channel.cuts_per_min}</b> · Cena média: <b>{channel.avg_scene_s}s</b></p>
+              <p>Gancho: {channel.hook_pattern}</p><p>Conteúdo: {channel.content_mix}</p><p>Música: {channel.music} · SFX: {channel.sfx}</p><p>Legenda: {channel.captions}</p>
+              <ol className="list-decimal pl-5">{channel.rules.map((r, k) => <li key={k}>{r}</li>)}</ol>
+            </div>
+          )}
         </div>
       )}
 
