@@ -436,6 +436,18 @@ def scene_clip(image: Path, dur: float, w: int, h: int, fps: int, motion: str, o
         tmp.unlink(missing_ok=True)
         return
     n = max(1, int(round(dur * fps)))
+    if motion == "parallax" and not white_background(image):
+        # V4: Parallax 2.5D leve — fundo desfocado desliza para um lado, foto principal aproxima e desliza para o outro.
+        fw, fh = int(w * 0.86) // 2 * 2, int(h * 0.86) // 2 * 2
+        fc = (f"[0:v]split[a][b];"
+              f"[a]scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},boxblur=20:2,"
+              f"zoompan=z='1.25':x='(iw-iw/zoom)*on/{n}':y='(ih-ih/zoom)/2':d={n}:s={w}x{h}:fps={fps},eq=brightness=-0.08[bg];"
+              f"[b]scale={fw * 2}:{fh * 2}:force_original_aspect_ratio=increase,crop={fw * 2}:{fh * 2}:(iw-ow)/2:(ih-oh)*0.2,"
+              f"zoompan=z='1+0.12*on/{n}':x='(iw-iw/zoom)*(1-on/{n})':y='(ih-ih/zoom)/2':d={n}:s={fw}x{fh}:fps={fps}[fg];"
+              f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]")
+        run(["ffmpeg", "-y", "-i", str(image), "-filter_complex", fc, "-map", "[v]", "-frames:v", str(n), "-r", str(fps),
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
+        return
     z, x, y = MOTIONS.get(motion or "zoom_in", MOTIONS["zoom_in"])
     rate = 0.25 / n
     z, x, y = (s.format(r=f"{rate:.6f}", n=n) for s in (z, x, y))
@@ -583,7 +595,7 @@ def video_clip(src: Path, dur: float, w: int, h: int, fps: int, out: Path, crf: 
         for p in parts:
             p.unlink(missing_ok=True)
         return [n / fps for n in frames], why
-    _video_part(src, 0, dur, w, h, fps, out, crf, total, frame)
+    _video_part(src, 0, dur, w, h, fps, out, crf, total, frame, ramp=dur >= 2.5 and total >= dur * 1.05)
     return pieces, why
 
 
@@ -615,8 +627,10 @@ def _anti_reuse(seed: str, w: int, h: int) -> str:
     return f"scale={zw}:{zh},crop={w}:{h}:{ox}:{oy},eq=brightness={br:.3f}:saturation={sat:.3f},noise=alls=3:allf=t,"
 
 
-def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float, frame: str | None = None) -> None:
+def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float, frame: str | None = None, ramp: bool = False) -> None:
     n = max(1, int(round(dur * fps)))
+    # V4 Speed Ramp: 70% da cena a 1.15x e o clímax final a 0.65x — mesma duração total, voz continua em sincronia.
+    sp = f"setpts='if(lt(T,{dur * 0.805:.3f}),T/1.15,{dur * 0.7:.3f}+(T-{dur * 0.805:.3f})/0.65)/TB'," if ramp else ""
     try:
         st = next(x for x in probe(src)["streams"] if x.get("codec_type") == "video")
         sw, sh = int(st["width"]), int(st["height"])
@@ -629,7 +643,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         pre = f"crop={cw}:{ch}:{cxo}:{cyo},"
         sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
+    vf = f"{sp}{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-vf", vf + ",tpad=stop_mode=clone:stop_duration=60", "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
