@@ -44,7 +44,7 @@ async function watch(src: string, onP: (p: number) => void) {
     const d = tc.getImageData(0, 0, 24, 24).data;
     let cut = false;
     if (prev) {
-      let s = 0; for (let k = 0; k < d.length; k += 4) s += Math.abs(d[k] - prev[k]) + Math.abs(d[k + 1] - prev[k + 1]) + Math.abs(d[k + 2] - prev[k + 2]);
+      let s = 0; for (let k = 0; k < d.length; k += 4) s += Math.abs(d[k]! - prev[k]!) + Math.abs(d[k + 1]! - prev[k + 1]!) + Math.abs(d[k + 2]! - prev[k + 2]!);
       if (s / (576 * 3) > 38) { cuts.push(t); cut = true; }
     }
     prev = d;
@@ -132,7 +132,7 @@ export function LabXray() {
       <div className="flex flex-wrap gap-2">
         <select className="rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="" onChange={(e) => pickRef(e.target.value)}>
           <option value="" disabled>Escolher vídeo já enviado…</option>
-          {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? r.urls[0].split("/").pop()}</option>)}
+          {refs?.map((r) => <option key={r.id} value={r.id}>{r.title ?? (r.urls[0] ?? "").split("/").pop()}</option>)}
         </select>
         <label className={ghost + " cursor-pointer"}>Enviar MP4
           <input type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setSrc(URL.createObjectURL(f)); setTitle(f.name); setCur(null); } }} />
