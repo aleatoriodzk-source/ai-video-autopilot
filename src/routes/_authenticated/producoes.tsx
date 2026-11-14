@@ -60,6 +60,23 @@ function Producoes() {
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
   const [kit, setKit] = useState<string | null>(null);
+  const [canal, setCanal] = useState("");
+  const [soCanal, setSoCanal] = useState(true);
+  useEffect(() => {
+    try {
+      const c = localStorage.getItem("canal-atual") || ""; setCanal(c);
+      const look = JSON.parse(localStorage.getItem("canal-look") || "{}")[c];
+      if (look?.voice) setVoice(look.voice); if (look?.voiceId) setVoiceId(look.voiceId); if (look?.rate) setRate(look.rate);
+    } catch { /* sem canal */ }
+  }, []);
+  function salvarCanal() {
+    if (!canal) return;
+    let lib: { color?: string; caption?: string } = {};
+    try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); } catch { /* vazio */ }
+    const all = JSON.parse(localStorage.getItem("canal-look") || "{}");
+    all[canal] = { voice, voiceId, rate, color: lib.color, caption: lib.caption };
+    localStorage.setItem("canal-look", JSON.stringify(all)); toast.success(`Voz, legenda e filtro salvos para ${canal}`);
+  }
 
   const { data: refs } = useQuery({ queryKey: ["refs"], queryFn: async () => (await supabase.from("reference_sources").select("id,title,urls")).data ?? [] });
   const { data: voices } = useQuery({ queryKey: ["voices"], queryFn: async () => (await supabase.from("voices").select("id,name,status")).data ?? [] });
@@ -89,12 +106,12 @@ function Producoes() {
       srcId = r.id; qc.invalidateQueries({ queryKey: ["refs"] });
     }
     let lib: { color?: string; caption?: string } = {};
-    try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); } catch { /* sem escolha */ }
+    try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); const cl = JSON.parse(localStorage.getItem("canal-look") || "{}")[canal]; if (cl) lib = { color: cl.color ?? lib.color, caption: cl.caption ?? lib.caption }; } catch { /* sem escolha */ }
     const settings = {
       ...(lib.color && lib.color !== "natural" ? { color_grade: lib.color } : {}),
       ...(lib.caption && captionStyle === "auto" ? { caption_resolved: lib.caption } : {}),
       target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule, sfx: sfxOn, base_captions: baseCaps,
-      source_mode: sourceMode, ...(voiceId ? { voice_id: voiceId } : {}),
+      source_mode: sourceMode, ...(canal ? { channel: canal } : {}), ...(voiceId ? { voice_id: voiceId } : {}),
       ...(sourceMode === "reference" && srcId ? { scenes_reference_id: srcId } : {}),
       ...(scriptMode === "ready" ? { ready_script: readyScript.trim() } : {}),
       ...(aiProvider ? { ai_provider: aiProvider } : {}), ...(sc ? { scene_count: sc } : {}),
@@ -256,12 +273,13 @@ function Producoes() {
             </select>
           </label>
         </div>
+        {canal ? <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground md:col-span-2">Canal: <b className="text-foreground">{canal}</b><button type="button" className={btn} onClick={salvarCanal}>Salvar voz, legenda e filtro como padrão do canal</button><label className="flex items-center gap-1"><input type="checkbox" checked={soCanal} onChange={(e) => setSoCanal(e.target.checked)} />Mostrar só produções deste canal</label></div> : null}
         <button onClick={create} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground md:col-span-2">Criar produção</button>
       </div>
 
       {!prods?.length ? <Empty>Nenhuma produção ainda.</Empty> : (
         <div className="space-y-2">
-          {prods.map((p) => {
+          {prods.filter((p) => !canal || !soCanal || ((p.settings as Record<string, unknown> | null)?.["channel"] ?? canal) === canal).map((p) => {
             const s = p.script as { title?: string; scenes?: unknown[] } | null;
             const b = busy === p.id;
             return (
