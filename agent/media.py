@@ -604,6 +604,17 @@ def detect_black_bars(src: Path, start: float, sw: int, sh: int):
         return None
 
 
+def _anti_reuse(seed: str, w: int, h: int) -> str:
+    """V7: micro-variação invisível por clipe (zoom 2-4%, deslocamento, cor e grão sutis) contra 'conteúdo reutilizado'."""
+    import hashlib
+    b = hashlib.md5(seed.encode()).digest()
+    z = 1.02 + b[0] / 255 * 0.02
+    zw, zh = int(w * z) // 2 * 2, int(h * z) // 2 * 2
+    ox, oy = int((zw - w) * b[1] / 255), int((zh - h) * b[2] / 255)
+    br, sat = (b[3] / 255 - 0.5) * 0.03, 1 + (b[4] / 255 - 0.5) * 0.06
+    return f"scale={zw}:{zh},crop={w}:{h}:{ox}:{oy},eq=brightness={br:.3f}:saturation={sat:.3f},noise=alls=3:allf=t,"
+
+
 def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, out: Path, crf: int, total: float, frame: str | None = None) -> None:
     n = max(1, int(round(dur * fps)))
     try:
@@ -618,7 +629,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         pre = f"crop={cw}:{ch}:{cxo}:{cyo},"
         sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{pre}{reframe_filter(sw, sh, w, h, cx, frame)},fps={fps},format=yuv420p,setsar=1"
+    vf = f"{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-vf", vf + ",tpad=stop_mode=clone:stop_duration=60", "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
