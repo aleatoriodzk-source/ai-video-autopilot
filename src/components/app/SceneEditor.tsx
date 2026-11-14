@@ -53,6 +53,7 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const [playing, setPlaying] = useState(false);
   const [t, setT] = useState(0);
   const [trims, setTrims] = useState<Record<string, { in: number }>>({});
+  const [audit, setAudit] = useState<null | { score: number; hook: string; issues: { i: number; msg: string }[] }>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   useEffect(() => { setTrims(((prod?.settings as Record<string, unknown> | null)?.["scene_trim"] as Record<string, { in: number }>) ?? {}); }, [prod]);
   // Reprodução: avança a agulha e troca a cena sozinha.
@@ -203,7 +204,6 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     else { toast.success("Estilo salvo — vale no próximo render"); qc.invalidateQueries({ queryKey: ["prod-aspect", productionId] }); }
   }
   const look = (prod?.settings as Record<string, string> | null) ?? {};
-  const [audit, setAudit] = useState<null | { score: number; hook: string; issues: { i: number; msg: string }[] }>(null);
   function runAudit() {
     const issues: { i: number; msg: string }[] = [];
     let score = 100;
