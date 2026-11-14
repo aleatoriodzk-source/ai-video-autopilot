@@ -291,6 +291,19 @@ CAPTION_STYLES = {
 }
 
 
+# Presets CapCut da Biblioteca: (estilo base, fonte, cor principal, destaque)
+LIB_CAPTIONS = {
+    "capcut-bebas": ("hormozi", "Bebas Neue", "#FFFFFF", "#FFE600"),
+    "capcut-anton": ("hormozi", "Anton", "#FFFFFF", "#FF2E2E"),
+    "capcut-italic": ("hormozi", "Montserrat", "#FFFFFF", "#00E5FF"),
+    "capcut-archivo": ("hormozi", "Archivo Black", "#FFFFFF", "#7CFF4F"),
+    "capcut-oswald": ("box", "Oswald", "#F5F5F5", "#FFB300"),
+    "dossie": ("box", "Oswald", "#FFFFFF", "#FF3B3B"),
+    "minimal": ("clean", "Montserrat", "#FFFFFF", "#FFFFFF"),
+}
+FONTS_DIR = Path(__file__).parent / "fonts"
+
+
 def _ass_color(hx: str, default: str) -> str:
     m = re.fullmatch(r"#?([0-9a-fA-F]{6})", (hx or "").strip())
     if not m:
@@ -302,7 +315,12 @@ def _ass_color(hx: str, default: str) -> str:
 def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Black", style: str = "hormozi", clone: dict | None = None) -> None:
     """Legenda estilo TikTok: zona segura inferior (não cobre rostos), caixa alta, 1-3 palavras, pulso de entrada e palavra-chave colorida.
     Com `clone`, usa cores, posição, caixa alta e animação medidas no vídeo de referência."""
+    lib = LIB_CAPTIONS.get(style)
+    if lib:
+        style, font = lib[0], lib[1]
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
+    if lib:
+        main, hi = _ass_color(lib[2], main), _ass_color(lib[3], hi)
     vertical = h > w
     fs = int(h * (0.046 if vertical else 0.06))  # menor: não cobre a cena
     align, margin_v = (2, int(h * 0.20)) if vertical else (2, int(h * 0.08))
@@ -616,7 +634,15 @@ def final_mix(video: Path, voice: Path, subs_name: str | None, out: Path, workdi
               music_db: float = -20, lufs: float = -16, crf: int = 20, sfx: Path | None = None) -> None:
     """Queima legendas, normaliza a voz, aplica ducking na música e soma a faixa de efeitos sonoros."""
     inputs = ["-i", str(video), "-i", str(voice)]
-    vf = f"[0:v]subtitles={subs_name}[v]" if subs_name else "[0:v]null[v]"
+    fd = ""
+    if subs_name and FONTS_DIR.exists():
+        try:
+            import shutil
+            shutil.copytree(FONTS_DIR, workdir / "fonts", dirs_exist_ok=True)
+            fd = ":fontsdir=fonts"
+        except OSError:
+            fd = ""
+    vf = f"[0:v]subtitles={subs_name}{fd}[v]" if subs_name else "[0:v]null[v]"
     af = f"[1:a]loudnorm=I={lufs}:TP=-1.5:LRA=11"
     mix, n = [], 2
     if music and music.exists():
