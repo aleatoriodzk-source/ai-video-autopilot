@@ -58,6 +58,13 @@ COLOR_GRADES = {
     "cold": "colorbalance=rs=-0.06:bs=0.1,eq=contrast=1.05",
     "vintage": "curves=preset=vintage,vignette=PI/6",
     "vivid": "eq=saturation=1.35:contrast=1.08",
+    # Filtros da Biblioteca (mesmos ids do painel)
+    "sharp4k": "unsharp=5:5:1.0,eq=contrast=1.08:saturation=1.08",
+    "noir": "hue=s=0,eq=contrast=1.3",
+    "teal": "colorbalance=rs=-0.1:bs=0.12:rh=0.12:bh=-0.1,eq=saturation=1.2",
+    "moody": "eq=brightness=-0.06:contrast=1.2:saturation=0.8",
+    "bleach": "eq=saturation=0.45:contrast=1.35",
+    "pop": "eq=saturation=1.55:contrast=1.06",
 }
 
 
