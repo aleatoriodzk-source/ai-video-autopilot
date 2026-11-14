@@ -70,7 +70,10 @@ function Referencias() {
 
   async function makeProduction(refId: string, platform: string, idea: { title: string; hook: string; angle: string }) {
     const { data: u } = await supabase.auth.getUser();
-    const auto = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "");
+    // Trava Shorts: referência de até 75s (ex.: MP4 vertical enviado direto) vira Short 9:16.
+    const { data: an } = await supabase.from("analyses").select("report").eq("reference_id", refId).eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const refSecs = Number((an?.report as { measured?: { avg_duration_s?: number } } | null)?.measured?.avg_duration_s ?? 0);
+    const auto = platform === "tiktok" || /\/shorts/.test(refs?.find((x) => x.id === refId)?.urls[0] ?? "") || (refSecs > 0 && refSecs <= 75);
     const short = format === "short" ? true : format === "long" ? false : auto;
     const settings = { ...(short ? { target_seconds: 65 } : format === "long" ? { target_seconds: 600 } : {}), style: short ? "tiktok" : "youtube", media_rule: "auto", ...optsToSettings(opts), base_captions: "hide", source_mode: "search" };
     const topic = `${idea.title}. Gancho: ${idea.hook}. Ângulo: ${idea.angle}`.slice(0, 480);

@@ -406,6 +406,24 @@ class Runner:
         if len(sm) < len(ctx["scenes"]):
             pick_visuals(self, job, ctx)
         self._apply_scene_media(job, ctx, sm)
+        self._apply_scene_trim(job, ctx, ps.get("scene_trim") or {})
+
+    def _apply_scene_trim(self, job, ctx, trims):
+        """Trim do editor: começa o clipe da cena no segundo escolhido pelo usuário (corte sem reencode pesado)."""
+        for sc in ctx["scenes"]:
+            t = trims.get(str(sc["idx"])) or {}
+            start = float(t.get("in") or 0)
+            vid = ctx["work"] / f"vid_{sc['idx']:03d}.mp4"
+            if start <= 0.05 or not vid.exists():
+                continue
+            tmp = vid.with_name(vid.stem + "_trim.mp4")
+            try:
+                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(vid), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(tmp)], check=True, timeout=120)
+                tmp.replace(vid)
+                self.log(job, f"cena {sc['idx'] + 1}: começa em {start:.1f}s (trim do editor)", step="visuals")
+            except Exception as e:
+                tmp.unlink(missing_ok=True)
+                self.log(job, f"cena {sc['idx'] + 1}: falha no trim: {e}", "warn", "visuals")
 
     def _apply_scene_media(self, job, ctx, sm):
         """Trocar Mídia: o arquivo que o usuário escolheu na linha do tempo substitui a cena (vence a busca)."""
