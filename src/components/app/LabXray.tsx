@@ -112,7 +112,7 @@ export function LabXray() {
       const uid = (await supabase.auth.getUser()).data.user!.id;
       const short = cur.duration <= 75;
       const x = cur.xray;
-      const settings = { target_seconds: short ? 65 : Math.round(cur.duration), lab_formula: x.formula, lab_hook: `${x.hook.visual} — ${x.hook.trigger}`, ...(x.dna.avg_scene_s > 0 ? { cut_seconds: Math.round(x.dna.avg_scene_s * 10) / 10 } : {}), music: "none" };
+      const settings = { target_seconds: short ? 65 : Math.round(cur.duration), lab_formula: x.formula, lab_hook: `${x.hook.visual} — ${x.hook.trigger}`, ...(x.dna.avg_scene_s > 0 ? { cut_seconds: Math.round(x.dna.avg_scene_s * 10) / 10 } : {}) };
       const { data: p, error } = await supabase.from("productions").insert({ user_id: uid, title: topic.trim().slice(0, 80), topic: topic.trim(), aspect: short ? "9:16" : "16:9", mode: "auto", settings }).select("id").single();
       if (error) throw error;
       toast.info("Escrevendo o roteiro com a fórmula…");
