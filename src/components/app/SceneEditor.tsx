@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { rerenderProduction } from "@/lib/jobs";
 import { rewriteScene } from "@/lib/ai.functions";
+import { CAPTIONS, COLORS } from "@/lib/library-presets";
 
 type Draft = {
   id?: string;
@@ -186,6 +187,13 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     if (error) toast.error(error.message);
     else qc.invalidateQueries({ queryKey: ["prod-aspect", productionId] });
   }
+  async function saveLook(key: "color_grade" | "caption_resolved", v: string) {
+    const st = { ...((prod?.settings as Record<string, unknown> | null) ?? {}), [key]: v };
+    const { error } = await supabase.from("productions").update({ settings: st as never }).eq("id", productionId);
+    if (error) toast.error(error.message);
+    else { toast.success("Estilo salvo — vale no próximo render"); qc.invalidateQueries({ queryKey: ["prod-aspect", productionId] }); }
+  }
+  const look = (prod?.settings as Record<string, string> | null) ?? {};
   const [audit, setAudit] = useState<null | { score: number; hook: string; issues: { i: number; msg: string }[] }>(null);
   function runAudit() {
     const issues: { i: number; msg: string }[] = [];
@@ -212,6 +220,12 @@ export function SceneEditor({ productionId }: { productionId: string }) {
         <span className="text-muted-foreground">{draft.length} cenas · {fmt(total)}</span>
         {dirty && <span className="text-warning">Alterações não salvas</span>}
         <span className="flex-1" />
+        <select aria-label="Filtro de cor" className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={look["color_grade"] ?? "natural"} onChange={(e) => saveLook("color_grade", e.target.value)}>
+          {COLORS.map((c) => <option key={c.id} value={c.id}>Cor: {c.name}</option>)}
+        </select>
+        <select aria-label="Estilo da legenda" className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={look["caption_resolved"] ?? "hormozi"} onChange={(e) => saveLook("caption_resolved", e.target.value)}>
+          {CAPTIONS.map((c) => <option key={c.id} value={c.id}>Legenda: {c.name}</option>)}
+        </select>
         <button className={btn} onClick={() => setPanel((v) => !v)}>{panel ? "Esconder painel" : "Mostrar painel"}</button>
         <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar</button>
         <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar vídeo</button>
