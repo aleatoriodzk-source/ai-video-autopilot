@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { rerenderProduction } from "@/lib/jobs";
@@ -43,9 +43,21 @@ export function SceneEditor({ productionId }: { productionId: string }) {
   const [pick, setPick] = useState(false);
   const { data: prod } = useQuery({
     queryKey: ["prod-aspect", productionId],
-    queryFn: async () => (await supabase.from("productions").select("aspect").eq("id", productionId).maybeSingle()).data,
+    queryFn: async () => (await supabase.from("productions").select("aspect, settings").eq("id", productionId).maybeSingle()).data,
   });
   const wide = prod?.aspect === "16:9";
+  const [panel, setPanel] = useState(true);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const [trims, setTrims] = useState<Record<string, { in: number }>>({});
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setTrims(((prod?.settings as Record<string, unknown> | null)?.["scene_trim"] as Record<string, { in: number }>) ?? {}); }, [prod]);
+  // Reprodução: avança a agulha e troca a cena sozinha.
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => setT((x) => x + 0.1), 100);
+    return () => clearInterval(id);
+  }, [playing]);
 
   useEffect(() => {
     if (!data || dirty) return;
@@ -152,90 +164,146 @@ export function SceneEditor({ productionId }: { productionId: string }) {
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
 
+  const starts = draft.reduce<number[]>((a, d, i) => [...a, i ? a[i - 1]! + est(draft[i - 1]!) : 0], []);
+  const PX = 34; // pixels por segundo na linha do tempo
+  if (playing) {
+    const i = starts.findIndex((st, k) => t >= st && t < st + est(draft[k]!));
+    if (i === -1) { setPlaying(false); setT(0); }
+    else if (i !== sel) setSel(i);
+  }
+  const seek = (x: number) => {
+    const sec = Math.max(0, Math.min(total - 0.01, x / PX));
+    setT(sec);
+    const i = starts.findIndex((st, k) => sec >= st && sec < st + est(draft[k]!));
+    if (i >= 0) setSel(i);
+  };
+  const trimIn = trims[String(sel)]?.in ?? 0;
+  async function saveTrim(v: number) {
+    const next = { ...trims, [String(sel)]: { in: Math.max(0, Math.round(v * 10) / 10) } };
+    setTrims(next);
+    const st = { ...((prod?.settings as Record<string, unknown> | null) ?? {}), scene_trim: next };
+    const { error } = await supabase.from("productions").update({ settings: st as never }).eq("id", productionId);
+    if (error) toast.error(error.message);
+    else qc.invalidateQueries({ queryKey: ["prod-aspect", productionId] });
+  }
+  const fmt = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+
   return (
-    <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{draft.length} cenas · ~{Math.round(total)}s</span>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      {/* Barra superior */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs">
+        <span className="font-semibold text-foreground">Estúdio</span>
+        <span className="text-muted-foreground">{draft.length} cenas · {fmt(total)}</span>
         {dirty && <span className="text-warning">Alterações não salvas</span>}
-      </div>
-
-      {/* Timeline */}
-      <div className="flex gap-1 overflow-x-auto pb-2">
-        {draft.map((d, i) => (
-          <button
-            key={d.id ?? `new-${i}`}
-            onClick={() => setSel(i)}
-            style={{ minWidth: `${Math.max(88, est(d) * 22)}px` }}
-            className={"flex h-28 flex-col justify-between gap-0.5 rounded-md border p-1.5 text-left text-[10px] leading-tight transition-colors " + (i === sel ? "border-primary bg-primary/15" : "border-border bg-background hover:bg-accent")}
-          >
-            <span className="flex justify-between font-medium"><span>#{i + 1}</span><span className="text-muted-foreground">{est(d).toFixed(1)}s</span></span>
-            <SceneThumb assetId={d.asset_id} />
-            <span className="line-clamp-2 text-muted-foreground">{d.narration || "(sem fala)"}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Inspector em 2 colunas: narrativa à esquerda, prévia e mídia à direita */}
-      <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-        <div className="min-w-0 space-y-2">
-          <label className="block text-xs text-muted-foreground">
-            <span className="flex justify-between"><span>Fala da cena {sel + 1}</span><span>{cur.narration.split(/\s+/).filter(Boolean).length} palavras · ~{est(cur).toFixed(1)}s</span></span>
-            <textarea rows={3} value={cur.narration} onChange={(e) => edit({ narration: e.target.value })} className={field + " mt-1"} />
-          </label>
-          <label className="block text-xs text-muted-foreground">Legenda curta (texto em destaque)
-            <input value={cur.caption} onChange={(e) => edit({ caption: e.target.value })} className={field + " mt-1"} />
-          </label>
-          <label className="block text-xs text-muted-foreground">O que aparece na tela (descreva em português)
-            <textarea rows={2} value={cur.visual_description} onChange={(e) => edit({ visual_description: e.target.value })} placeholder="Ex.: Peter Parker vestindo o traje caseiro no quarto" className={field + " mt-1"} />
-          </label>
-          <label className="block text-xs text-muted-foreground">Palavras de busca (personagem primeiro, ex.: Peter Parker homemade suit)
-            <input value={cur.visual_query} onChange={(e) => edit({ visual_query: e.target.value })} className={field + " mt-1"} />
-          </label>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <label className="text-xs text-muted-foreground">Câmera
-              <select value={cur.motion} onChange={(e) => edit({ motion: e.target.value })} className={field + " mt-1"}>{MOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            </label>
-            <label className="text-xs text-muted-foreground">Passagem
-              <select value={cur.transition} onChange={(e) => edit({ transition: e.target.value })} className={field + " mt-1"}>{TRANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            </label>
-            <label className="text-xs text-muted-foreground">Respiro depois
-              <select value={PAUSES.reduce((b, p) => (Math.abs(p[0] - cur.pause_after_ms) < Math.abs(b[0] - cur.pause_after_ms) ? p : b))[0]} onChange={(e) => edit({ pause_after_ms: Number(e.target.value) })} className={field + " mt-1"}>{PAUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-2 text-xs text-muted-foreground md:w-72">
-          <div className="font-medium text-foreground">Prévia da cena {sel + 1} {wide ? "(YouTube 16:9)" : "(celular 9:16)"}</div>
-          <PhonePreview assetId={cur.asset_id} text={cur.caption || cur.narration} wide={wide} />
-          <SceneMedia assetId={cur.asset_id} />
-          <div className="font-medium text-foreground">Trocar mídia</div>
-          <div className="flex flex-wrap gap-2">
-            <button className={btn} onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cur.visual_query || cur.visual_description || cur.narration.slice(0, 60))}`, "_blank")}>Pesquisar no YouTube</button>
-            <label className={btn + " cursor-pointer"}>Subir do PC<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
-            <button className={btn} onClick={() => setPick((p) => !p)}>Pegar do acervo</button>
-            {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Voltar para automática</button>}
-          </div>
-          {pick && <LibraryPicker onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
-          <div className="flex gap-2">
-            <button className={btn} disabled={sel === 0} onClick={() => setSel(sel - 1)}>← Anterior</button>
-            <button className={btn} disabled={sel === draft.length - 1} onClick={() => setSel(sel + 1)}>Próxima →</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Pedido para a IA (opcional), ex.: mais suspense" className={field + " min-w-0 flex-1"} />
-        <button className={btn} disabled={busy} onClick={rewrite}>{busy ? "Aguarde…" : "Refazer esta cena com IA"}</button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button className={btn} disabled={sel === 0} onClick={() => move(-1)}>← Mover</button>
-        <button className={btn} disabled={sel === draft.length - 1} onClick={() => move(1)}>Mover →</button>
-        <button className={btn} onClick={addAfter}>+ Cena depois</button>
-        <button className={btn + " text-destructive"} onClick={remove}>Excluir cena</button>
         <span className="flex-1" />
-        <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar cenas</button>
-        <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar novamente</button>
+        <button className={btn} onClick={() => setPanel((v) => !v)}>{panel ? "Esconder painel" : "Mostrar painel"}</button>
+        <button className={btn} disabled={busy || !dirty} onClick={save}>Salvar</button>
+        <button className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={busy} onClick={rerender}>Renderizar vídeo</button>
       </div>
+
+      <div className={"grid gap-0 " + (panel ? "lg:grid-cols-[1fr_340px]" : "")}>
+        {/* Player central */}
+        <div className="flex flex-col items-center justify-center gap-3 bg-muted/40 p-4">
+          <div className={wide ? "w-full max-w-3xl" : "w-full max-w-[300px]"}>
+            <PhonePreview assetId={cur.asset_id} text={cur.caption || cur.narration} wide={wide} big />
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <button className={btn} disabled={sel === 0} onClick={() => { setSel(sel - 1); setT(starts[sel - 1] ?? 0); }}>⏮</button>
+            <button className="rounded-full bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground" onClick={() => { if (!playing && t >= total - 0.1) setT(0); setPlaying((v) => !v); }}>{playing ? "❚❚ Pausar" : "▶ Assistir"}</button>
+            <button className={btn} disabled={sel === draft.length - 1} onClick={() => { setSel(sel + 1); setT(starts[sel + 1] ?? 0); }}>⏭</button>
+            <span className="tabular-nums text-muted-foreground">{fmt(t)} / {fmt(total)}</span>
+          </div>
+          <p className="text-center text-[11px] text-muted-foreground">Prévia sem voz: a narração e a música entram no vídeo renderizado.</p>
+        </div>
+
+        {/* Painel lateral retrátil */}
+        {panel && (
+          <div className="max-h-[640px] space-y-3 overflow-y-auto border-l border-border p-3 text-xs">
+            <div className="flex items-center justify-between font-semibold text-foreground"><span>Cena {sel + 1}</span><span className="text-muted-foreground">{est(cur).toFixed(1)}s</span></div>
+            <div className="space-y-2">
+              <div className="font-medium text-foreground">Mídia</div>
+              <SceneMedia assetId={cur.asset_id} />
+              <div className="flex flex-wrap gap-2">
+                <label className={btn + " cursor-pointer"}>Trocar mídia<input type="file" accept="image/*,video/*" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) swapMedia(f); }} /></label>
+                <button className={btn} onClick={() => setPick((p) => !p)}>Do acervo</button>
+                <button className={btn} onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(cur.visual_query || cur.visual_description || cur.narration.slice(0, 60))}`, "_blank")}>YouTube</button>
+                {cur.asset_id && <button className={btn} onClick={() => edit({ asset_id: null })}>Automática</button>}
+              </div>
+              {pick && <LibraryPicker onPick={(id) => { edit({ asset_id: id }); setPick(false); toast.success(`Mídia do acervo na cena ${sel + 1}. Salve e renderize para aplicar.`); }} />}
+            </div>
+            <label className="block text-muted-foreground">Cortar início do clipe: <b className="text-foreground">{trimIn.toFixed(1)}s</b>
+              <input type="range" min={0} max={20} step={0.5} value={trimIn} onChange={(e) => setTrims((m) => ({ ...m, [String(sel)]: { in: Number(e.target.value) } }))} onMouseUp={(e) => saveTrim(Number((e.target as HTMLInputElement).value))} onTouchEnd={(e) => saveTrim(Number((e.target as HTMLInputElement).value))} className="mt-1 w-full accent-primary" />
+            </label>
+            <label className="block text-muted-foreground">
+              <span className="flex justify-between"><span>Fala</span><span>{cur.narration.split(/\s+/).filter(Boolean).length} palavras</span></span>
+              <textarea rows={3} value={cur.narration} onChange={(e) => edit({ narration: e.target.value })} className={field + " mt-1"} />
+            </label>
+            <label className="block text-muted-foreground">Legenda em destaque
+              <input value={cur.caption} onChange={(e) => edit({ caption: e.target.value })} className={field + " mt-1"} />
+            </label>
+            <label className="block text-muted-foreground">Busca da mídia (nome da pessoa primeiro)
+              <input value={cur.visual_query} onChange={(e) => edit({ visual_query: e.target.value })} className={field + " mt-1"} />
+            </label>
+            <label className="block text-muted-foreground">O que aparece na tela
+              <textarea rows={2} value={cur.visual_description} onChange={(e) => edit({ visual_description: e.target.value })} className={field + " mt-1"} />
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="text-muted-foreground">Câmera<select value={cur.motion} onChange={(e) => edit({ motion: e.target.value })} className={field + " mt-1"}>{MOTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+              <label className="text-muted-foreground">Passagem<select value={cur.transition} onChange={(e) => edit({ transition: e.target.value })} className={field + " mt-1"}>{TRANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+              <label className="text-muted-foreground">Respiro<select value={PAUSES.reduce((b, p) => (Math.abs(p[0] - cur.pause_after_ms) < Math.abs(b[0] - cur.pause_after_ms) ? p : b))[0]} onChange={(e) => edit({ pause_after_ms: Number(e.target.value) })} className={field + " mt-1"}>{PAUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            </div>
+            <div className="flex gap-2">
+              <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Pedido à IA, ex.: mais suspense" className={field + " min-w-0 flex-1"} />
+              <button className={btn} disabled={busy} onClick={rewrite}>{busy ? "…" : "Refazer"}</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className={btn} disabled={sel === 0} onClick={() => move(-1)}>← Mover</button>
+              <button className={btn} disabled={sel === draft.length - 1} onClick={() => move(1)}>Mover →</button>
+              <button className={btn} onClick={addAfter}>+ Cena</button>
+              <button className={btn + " text-destructive"} onClick={remove}>Excluir</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Linha do tempo multifaixa */}
+      <div className="border-t border-border bg-background p-2">
+        <div ref={trackRef} className="relative overflow-x-auto pb-1" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(e.clientX - r.left + e.currentTarget.scrollLeft - 56); }}>
+          <div className="relative space-y-1" style={{ width: total * PX + 64 }}>
+            {/* régua */}
+            <div className="ml-14 flex h-4 text-[9px] text-muted-foreground">
+              {Array.from({ length: Math.ceil(total / 5) + 1 }, (_, k) => <span key={k} style={{ width: 5 * PX }} className="shrink-0 border-l border-border pl-0.5">{fmt(k * 5)}</span>)}
+            </div>
+            <Track label="Vídeo">
+              {draft.map((d, i) => (
+                <button key={d.id ?? `v-${i}`} onClick={(e) => { e.stopPropagation(); setSel(i); setT(starts[i]!); }} style={{ width: est(d) * PX }} className={"relative h-14 shrink-0 overflow-hidden rounded border-2 " + (i === sel ? "border-primary" : "border-transparent")}>
+                  <SceneThumb assetId={d.asset_id} tall />
+                  <span className="absolute left-0.5 top-0.5 rounded bg-background/80 px-1 text-[9px]">{i + 1}</span>
+                  {(trims[String(i)]?.in ?? 0) > 0 && <span className="absolute bottom-0.5 right-0.5 rounded bg-primary px-1 text-[9px] text-primary-foreground">✂ {trims[String(i)]!.in}s</span>}
+                  {i === sel && <><span className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize bg-primary" /><span className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-primary" /></>}
+                </button>
+              ))}
+            </Track>
+            <Track label="Legenda">
+              {draft.map((d, i) => <div key={d.id ?? `c-${i}`} style={{ width: est(d) * PX }} className={"h-6 shrink-0 truncate rounded px-1 text-[9px] leading-6 " + (i === sel ? "bg-primary/30 text-foreground" : "bg-accent text-muted-foreground")}>{d.caption || d.narration}</div>)}
+            </Track>
+            <Track label="Voz">
+              {draft.map((d, i) => <div key={d.id ?? `a-${i}`} style={{ width: est(d) * PX }} className="h-5 shrink-0 rounded bg-secondary [background-image:repeating-linear-gradient(90deg,hsl(var(--primary)/.35)_0_2px,transparent_2px_5px)]" />)}
+            </Track>
+            {/* agulha */}
+            <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-destructive" style={{ left: 56 + t * PX }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Track({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      <span className="w-14 shrink-0 text-[10px] text-muted-foreground">{label}</span>
+      {children}
     </div>
   );
 }
@@ -281,7 +349,7 @@ function LibraryThumb({ asset, onPick }: { asset: { id: string; kind: string; st
   );
 }
 /** Miniatura da mídia da cena na linha do tempo (mesma consulta da prévia). */
-function SceneThumb({ assetId }: { assetId: string | null }) {
+function SceneThumb({ assetId, tall }: { assetId: string | null; tall?: boolean }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
@@ -295,8 +363,9 @@ function SceneThumb({ assetId }: { assetId: string | null }) {
       return { ...a, kind: a.storage_path ? a.kind : "image", url };
     },
   });
-  if (!assetId || !data?.url) return <div className="flex h-10 w-full items-center justify-center rounded bg-muted text-[9px] text-muted-foreground">{assetId ? "…" : "auto"}</div>;
-  return data.kind === "video" ? <video src={data.url + "#t=0.5"} muted preload="metadata" className="h-10 w-full rounded object-cover" /> : <img src={data.url} alt="" className="h-10 w-full rounded object-cover" />;
+  const h = tall ? "h-full" : "h-10";
+  if (!assetId || !data?.url) return <div className={h + " flex w-full items-center justify-center rounded bg-muted text-[9px] text-muted-foreground"}>{assetId ? "…" : "auto"}</div>;
+  return data.kind === "video" ? <video src={data.url + "#t=0.5"} muted preload="metadata" className={h + " w-full rounded object-cover"} /> : <img src={data.url} alt="" className={h + " w-full rounded object-cover"} />;
 }
 
 function SceneMedia({ assetId }: { assetId: string | null }) {
@@ -324,7 +393,7 @@ function SceneMedia({ assetId }: { assetId: string | null }) {
 }
 
 /** Prévia vertical 9:16: mídia sobre fundo desfocado + legenda animada. */
-function PhonePreview({ assetId, text, wide }: { assetId: string | null; text: string; wide?: boolean }) {
+function PhonePreview({ assetId, text, wide, big }: { assetId: string | null; text: string; wide?: boolean; big?: boolean }) {
   const { data } = useQuery({
     queryKey: ["asset-preview", assetId],
     enabled: !!assetId,
@@ -341,7 +410,7 @@ function PhonePreview({ assetId, text, wide }: { assetId: string | null; text: s
   const url = assetId ? data?.url : null;
   const isVid = data?.kind === "video";
   return (
-    <div className={"relative shrink-0 overflow-hidden rounded-lg border border-border bg-muted " + (wide ? "aspect-video w-full" : "aspect-[9/16] w-40")}>
+    <div className={"relative shrink-0 overflow-hidden rounded-lg border border-border bg-muted " + (wide ? "aspect-video w-full" : big ? "aspect-[9/16] w-full" : "aspect-[9/16] w-40")}>
       {url ? (
         <>
           {isVid ? <video src={url} muted autoPlay loop playsInline className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" /> : <img src={url} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg" />}
@@ -350,13 +419,13 @@ function PhonePreview({ assetId, text, wide }: { assetId: string | null; text: s
       ) : (
         <div className="absolute inset-0 flex items-center justify-center p-2 text-center text-[10px] text-muted-foreground">Mídia automática</div>
       )}
-      <div className={"absolute inset-x-1 " + (wide ? "bottom-[8%]" : "bottom-[22%]")}><CaptionPreview text={text} compact /></div>
+      <div className={"absolute inset-x-1 " + (wide ? "bottom-[8%]" : "bottom-[22%]")}><CaptionPreview text={text} compact big={big} /></div>
     </div>
   );
 }
 
 /** Prévia de como a legenda aparece palavra por palavra (estilo CapCut). */
-function CaptionPreview({ text, compact }: { text: string; compact?: boolean }) {
+function CaptionPreview({ text, compact, big }: { text: string; compact?: boolean; big?: boolean }) {
   const words = text.split(/\s+/).filter(Boolean);
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -368,7 +437,7 @@ function CaptionPreview({ text, compact }: { text: string; compact?: boolean }) 
   if (!words.length) return null;
   const start = Math.floor(i / 3) * 3;
   if (compact) return (
-    <div className="text-center text-sm font-black uppercase leading-tight text-background [text-shadow:0_0_3px_hsl(0_0%_0%),0_0_3px_hsl(0_0%_0%)]">
+    <div className={"text-center font-black uppercase " + (big ? "text-2xl" : "text-sm") + " leading-tight text-background [text-shadow:0_0_3px_hsl(0_0%_0%),0_0_3px_hsl(0_0%_0%)]"}>
       {words.slice(start, start + 3).map((w, k) => <span key={k} className={start + k === i ? "text-primary" : ""}>{w} </span>)}
     </div>
   );
