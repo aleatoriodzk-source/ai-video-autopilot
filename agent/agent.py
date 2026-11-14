@@ -535,7 +535,7 @@ class Runner:
             mv = sp["motion"]["value"]
         elif not sc.get("motion") and not km.get("main_move"):
             # Sem fórmula da referência: alterna o movimento para nenhuma foto parecer slide.
-            mv = ("zoom_in", "pan_right", "zoom_out", "pan_left")[sc["idx"] % 4]
+            mv = ("zoom_in", "pan_right", "parallax", "zoom_out", "pan_left")[sc["idx"] % 5]
         media.scene_clip(img, dur, ctx["w"], ctx["h"], fps, mv, out, crf, frame)
 
     def step_captions(self, job, ctx):
