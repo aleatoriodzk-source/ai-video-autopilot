@@ -408,7 +408,7 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     if not entries:
         return None
     # Clipes curtos primeiro: em vídeos longos um corte cai quase sempre no momento errado.
-    entries.sort(key=lambda e: (e.get("duration") or 180) > 90)
+    entries.sort(key=lambda e: (0 if (e.get("duration") or 999) <= 60 else 1 if (e.get("duration") or 180) <= 90 else 2))
     need = _scene_secs(sc)
     names = proper_names(q)
     entries = [e for e in entries if e.get("id") and e.get("id") not in used
@@ -434,7 +434,15 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
         e, vid, start, extra = pl
         raw = out.with_name(f"{out.stem}_scan{k}.mp4")
         raw.unlink(missing_ok=True)
-        if not _stream_slice(vid, start, need + extra, raw):
+        full = bool(e.get("duration")) and float(e["duration"]) <= 60
+        if full:
+            # Clipe curto: baixa inteiro (poucos MB, 2-3 s) e corta local — o YouTube não estrangula.
+            try:
+                _ytdlp(["-f", "bv*[height>=720][height<=1080][ext=mp4]/bv*[height>=720][height<=1080]/b[height>=720]",
+                        "--no-playlist", "-o", str(raw), f"https://www.youtube.com/watch?v={vid}"])
+            except Exception as ex:
+                return pl, raw, str(ex)[:150], None
+        elif not _stream_slice(vid, start, need + extra, raw):
             try:
                 _ytdlp(["-f", "bv*[height>=720][ext=mp4]/bv*[height>=720]/b[height>=720]", "--merge-output-format", "mp4",
                         "--download-sections", f"*{start}-{start + need + extra}", "--force-keyframes-at-cuts",
@@ -448,7 +456,8 @@ def youtube_clip(runner, job, q: str, sc: dict, out: Path, used: set) -> dict | 
     plans = [x for x in (plan(e) for e in entries) if x]
     # Downloads em paralelo: baixa 3 candidatos ao mesmo tempo e fica com a tomada de melhor nota.
     with ThreadPoolExecutor(max_workers=3) as ex:
-        for i in range(0, min(len(plans), 9), 3):
+        # Uma rodada só (3 candidatos): mais que isso aciona bloqueio do YouTube e trava a Etapa 5.
+        for i in range(0, min(len(plans), 3), 3):
             res = list(ex.map(lambda t: fetch(*t), [(pl, i + j) for j, pl in enumerate(plans[i:i + 3])]))
             good = []
             for pl, raw, err, off in res:
@@ -1024,10 +1033,22 @@ def pick_visuals(runner, job, ctx) -> None:
         if master is None and links:
             master = _master_pack(runner, job, topic, work, links) or False
         # Vídeo-mestre só para personagem único; listas/vários nomes buscam cena a cena.
-        if master is None and not image_only and is_pop(topic, topic) and runner.cfg.get("master_video", True) and len(set(proper_names(topic))) <= 1 and len({n for x in ctx["scenes"] for n in proper_names(x.get("visual_query") or "")}) <= 3:
-            master = _master_pack(runner, job, topic, work) or False
+        if master is None and not image_only and runner.cfg.get("master_video", True):
+            # Protagonista lido do roteiro (corrige tema digitado errado, ex.: "deadpol" -> Deadpool).
+            from collections import Counter
+            _cnt = Counter(n for x in ctx["scenes"] for n in set(proper_names(x.get("visual_query") or "")))
+            _scene_txt = " ".join((x.get("visual_query") or "") for x in ctx["scenes"])
+            _hero = _cnt.most_common(1)[0][0] if _cnt else ""
+            _pop = is_pop(topic, topic) or is_pop(_scene_txt, _hero)
+            _single = len(set(proper_names(topic))) <= 1 and len(_cnt) <= 3
+            if _pop and _single:
+                master = _master_pack(runner, job, _hero or topic, work) or False
+                if master:
+                    master["hero"] = _hero
+            else:
+                master = False
         # Cena de "ruptura": cita alguém que não está no tema → busca fora do mestre.
-        off_topic = not (master and master.get("user")) and any(nm not in topic.lower() for nm in proper_names(q0))
+        off_topic = not (master and master.get("user")) and any(nm not in (topic + " " + str((master or {}).get("hero") or "")).lower() for nm in proper_names(q0))
         if master and not off_topic:
             c = _master_clip(runner, job, master, sc, work / f"vid_{sc['idx']:03d}.mp4", prod)
             if c:
