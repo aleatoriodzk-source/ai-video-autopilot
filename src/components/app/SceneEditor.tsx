@@ -419,7 +419,7 @@ function PhonePreview({ assetId, text, wide, big }: { assetId: string | null; te
       ) : (
         <div className="absolute inset-0 flex items-center justify-center p-2 text-center text-[10px] text-muted-foreground">Mídia automática</div>
       )}
-      <div className={"absolute inset-x-1 " + (wide ? "bottom-[8%]" : "bottom-[22%]")}><CaptionPreview text={text} compact big={big} /></div>
+      <div className={"absolute inset-x-1 " + (wide ? "bottom-[8%]" : "bottom-[22%]")}><CaptionPreview text={text} compact big={!!big} /></div>
     </div>
   );
 }
