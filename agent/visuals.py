@@ -855,7 +855,8 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
         entries = []
         for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} edit", f"{ent} cenas hd", f"{ent} melhores momentos"):
             try:
-                entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q}"])).get("entries") or []
+                entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q} {_NEG}"])).get("entries") or []
+                entries = [x for x in entries if not BANNED_TITLE.search(x.get("title") or "")]
             except Exception as e:
                 runner.log(job, f"vídeo-mestre: busca '{q}' falhou ({str(e)[:100]})", "warn", "visuals")
             if len(entries) >= 4:
