@@ -364,6 +364,17 @@ class Runner:
                         self.log(job, f"Voz Edge falhou 3x ({e}); usando Piper", "warn", step="narration")
             if not done:
                 media.piper_tts(sc["narration"], voice, raw, v["length_scale"], v["noise_scale"], v["sentence_silence"])
+            tight = raw.with_name(raw.stem + "_tight.wav")
+            if not tight.exists():
+                try:  # corta micro-silêncios (>0,25s) para ritmo de canal dark
+                    media.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(raw), "-af",
+                               "silenceremove=start_periods=1:start_threshold=-45dB:stop_periods=-1:stop_duration=0.25:stop_threshold=-45dB", str(tight)])
+                    if media.duration(tight) < 0.5:
+                        tight.unlink(missing_ok=True)
+                except Exception:
+                    tight.unlink(missing_ok=True)
+            if tight.exists():
+                raw = tight
             speech = media.duration(raw)
             total = media.scene_audio(raw, wav, sc.get("pause_after_ms") or 0)
             timings = media.aligned_timings(media.clean_tts(sc["narration"]), wav)
