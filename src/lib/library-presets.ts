@@ -19,6 +19,11 @@ export const CAPTIONS: CaptionPreset[] = [
   { id: "hormozi", name: "Hormozi Pop", desc: "Palavra ativa em destaque", font: "Montserrat", color: "#FFFFFF", highlight: "#FFE600", box: false, upper: true },
   { id: "dossie", name: "Dossiê / Doc", desc: "Tarja sólida séria", font: "Roboto Condensed", color: "#FFFFFF", highlight: "#FF3B3B", box: true, upper: false },
   { id: "minimal", name: "Minimalista", desc: "Limpo e elegante", font: "Inter", color: "#FFFFFF", highlight: "#FFFFFF", box: false, upper: false },
+  { id: "capcut-bebas", name: "CapCut Bebas", desc: "Fonte viral de Shorts", font: "Bebas Neue", color: "#FFFFFF", highlight: "#FFE600", box: false, upper: true },
+  { id: "capcut-anton", name: "CapCut Anton", desc: "Grossa e impactante", font: "Anton", color: "#FFFFFF", highlight: "#FF2E2E", box: false, upper: true },
+  { id: "capcut-italic", name: "Montserrat Black Itálico", desc: "Estilo esporte/edit", font: "Montserrat", color: "#FFFFFF", highlight: "#00E5FF", box: false, upper: true },
+  { id: "capcut-archivo", name: "Archivo Black", desc: "Pesada estilo CoreSans", font: "Archivo Black", color: "#FFFFFF", highlight: "#7CFF4F", box: false, upper: false },
+  { id: "capcut-oswald", name: "Oswald Doc", desc: "Documentário dark", font: "Oswald", color: "#F5F5F5", highlight: "#FFB300", box: true, upper: true },
   { id: "neon", name: "Neon", desc: "Brilho ciano", font: "Bebas Neue", color: "#E8FFFF", highlight: "#00F0FF", box: false, upper: true },
 ];
 

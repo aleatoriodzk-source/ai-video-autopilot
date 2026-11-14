@@ -5,6 +5,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/app/ui";
 import { cn } from "@/lib/utils";
+import { cloneCaption, type ClonedCaption } from "@/lib/lab.functions";
 import { CAPTIONS, COLORS, DEFAULT_CHOICE, type LibraryChoice } from "@/lib/library-presets";
 
 export const Route = createFileRoute("/_authenticated/biblioteca")({
@@ -22,6 +23,63 @@ export const Route = createFileRoute("/_authenticated/biblioteca")({
 });
 
 const KEY = "biblioteca-escolha";
+const CLONES = "legendas-clonadas";
+
+async function toDataUrl(f: File): Promise<string> {
+  const img = await createImageBitmap(f);
+  const sc = Math.min(1, 1280 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = img.width * sc; c.height = img.height * sc;
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+function ClonarLegenda({ active, onPick }: { active: string; onPick: (id: string) => void }) {
+  const [list, setList] = useState<(ClonedCaption & { id: string })[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { try { setList(JSON.parse(localStorage.getItem(CLONES) ?? "[]")); } catch { /* vazio */ } }, []);
+  const save = (l: typeof list) => { setList(l); localStorage.setItem(CLONES, JSON.stringify(l)); };
+  async function go(input: HTMLInputElement) {
+    const f = input.files?.[0]; if (!f) return;
+    setBusy(true);
+    try {
+      const r = await cloneCaption({ data: { img: await toDataUrl(f) } });
+      if (!r.ok) throw new Error(r.error);
+      const item = { ...r.caption, id: `clone-${Date.now()}` };
+      save([item, ...list]); onPick(item.id);
+      toast.success(`Legenda clonada: ${item.name} (${item.font})`);
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); input.value = ""; }
+  }
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Clonar legenda por print</h2>
+        <label className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
+          {busy ? "Lendo o print..." : "Enviar print"}
+          <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => go(e.currentTarget)} />
+        </label>
+      </div>
+      <p className="text-sm text-muted-foreground">Mande o print de uma legenda do CapCut, TikTok ou Reels: a IA copia fonte, cores, borda, caixa alta e posição.</p>
+      {list.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {list.map((p) => (
+            <div key={p.id} className={cn("rounded-lg border p-3", active === p.id ? "border-primary ring-2 ring-primary" : "border-border")}>
+              <button className="w-full text-left" onClick={() => onPick(p.id)}>
+                <div className="mb-2 flex aspect-video items-center justify-center rounded bg-muted">
+                  <span className="px-2 py-1 text-base font-extrabold" style={{ fontFamily: p.font, color: p.color, fontStyle: p.italic ? "italic" : undefined, background: p.box ? "rgba(0,0,0,.75)" : undefined, textShadow: p.box ? undefined : `0 0 3px ${p.outline}, 0 2px 4px ${p.outline}`, textTransform: p.upper ? "uppercase" : undefined }}>
+                    isso <span style={{ color: p.highlight }}>mudou</span> tudo
+                  </span>
+                </div>
+                <div className="text-sm font-medium">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{p.font} · {p.position} · {p.words_per_block} palavra(s)</div>
+              </button>
+              <button className="mt-1 text-xs text-muted-foreground underline" onClick={() => save(list.filter((x) => x.id !== p.id))}>Excluir</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 type Audio = { name: string; path: string; url: string };
 
@@ -148,6 +206,8 @@ function Biblioteca() {
           ))}
         </div>
       </section>
+
+      <ClonarLegenda active={c.caption} onPick={(id) => save({ ...c, caption: id })} />
 
       <MeusAudios folder="sfx" title="Meus efeitos sonoros" />
       <MeusAudios folder="musica" title="Minhas trilhas de fundo" />
