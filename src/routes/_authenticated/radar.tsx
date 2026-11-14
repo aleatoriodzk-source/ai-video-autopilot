@@ -97,7 +97,7 @@ function Radar() {
           <div className="md:col-span-2"><p className="mb-1 font-semibold">Ideias de capa</p>
             <div className="grid gap-2 sm:grid-cols-3">
               {(ins.covers ?? []).map((c, k) => (
-                <div key={k} className="rounded border border-border p-2"><p className="font-bold uppercase">{c.text}</p><p className="text-xs text-muted-foreground">{c.layout}</p><p className="text-xs text-muted-foreground">Cores: {c.colors}</p></div>
+                <div key={k} className="rounded border border-border p-2"><p className="font-bold uppercase">{c.text}</p><p className="text-xs text-muted-foreground">{c.layout}</p><p className="text-xs text-muted-foreground">Cores: {c.colors}</p><div className="mt-2 flex gap-2"><button onClick={() => baixarCapa(c.text, true)} className="rounded border border-border px-2 py-1 text-xs hover:bg-accent">Baixar Short</button><button onClick={() => baixarCapa(c.text, false)} className="rounded border border-border px-2 py-1 text-xs hover:bg-accent">Baixar longo</button></div></div>
               ))}
             </div>
           </div>
@@ -117,4 +117,20 @@ function Radar() {
       </div>
     </div>
   );
+}
+
+function baixarCapa(text: string, short: boolean) {
+  const w = short ? 1080 : 1280, h = short ? 1920 : 720;
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const g = cv.getContext("2d"); if (!g) return;
+  const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, "#111"); bg.addColorStop(1, "#000");
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const words = text.toUpperCase().split(/\s+/); const size = short ? 150 : 110;
+  g.font = `${size}px "Bebas Neue", Anton, Impact, sans-serif`; g.textAlign = "center";
+  const lines: string[] = []; let cur = "";
+  for (const wd of words) { const t = cur ? cur + " " + wd : wd; if (g.measureText(t).width > w * 0.88 && cur) { lines.push(cur); cur = wd; } else cur = t; }
+  if (cur) lines.push(cur);
+  const y0 = h / 2 - ((lines.length - 1) * size * 1.05) / 2;
+  lines.forEach((l, i) => { const y = y0 + i * size * 1.05; g.lineWidth = size / 8; g.strokeStyle = "#000"; g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 20; g.strokeText(l, w / 2, y); g.shadowBlur = 0; g.fillStyle = i === lines.length - 1 ? "#FFD400" : "#FFF"; g.fillText(l, w / 2, y); });
+  const a = document.createElement("a"); a.download = `capa-${short ? "short" : "longo"}.png`; a.href = cv.toDataURL("image/png"); a.click();
 }
