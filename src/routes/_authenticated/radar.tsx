@@ -39,7 +39,7 @@ function Radar() {
   }
   return (
     <div className="space-y-4">
-      <PageHeader title="Radar de Virais" description="Shorts desta semana no seu nicho, do mais visto para o menos visto." />
+      <PageHeader title="Radar de Virais" subtitle="Shorts desta semana no seu nicho, do mais visto para o menos visto." />
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void go(); }}>
         <input className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ex.: curiosidades Marvel, fortunas famosos, mistérios" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50" disabled={busy || !q.trim()}>{busy ? "Buscando…" : "Espiar"}</button>
