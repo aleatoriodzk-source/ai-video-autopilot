@@ -87,10 +87,11 @@ function Producoes() {
       if (e) { toast.error(e.message); return; }
       srcId = r.id; qc.invalidateQueries({ queryKey: ["refs"] });
     }
-    let lib: { color?: string } = {};
+    let lib: { color?: string; caption?: string } = {};
     try { lib = JSON.parse(localStorage.getItem("biblioteca-escolha") || "{}"); } catch { /* sem escolha */ }
     const settings = {
       ...(lib.color && lib.color !== "natural" ? { color_grade: lib.color } : {}),
+      ...(lib.caption && captionStyle === "auto" ? { caption_resolved: lib.caption } : {}),
       target_seconds: Math.round(min * 60), style, voice, voice_rate: rate, music_mood: mood, caption_style: captionStyle, media_rule: mediaRule, sfx: sfxOn, base_captions: baseCaps,
       source_mode: sourceMode, ...(voiceId ? { voice_id: voiceId } : {}),
       ...(sourceMode === "reference" && srcId ? { scenes_reference_id: srcId } : {}),
