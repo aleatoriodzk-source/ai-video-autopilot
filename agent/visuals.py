@@ -317,8 +317,8 @@ def _yt_remember(search: str, entries: list) -> None:
         except OSError:
             pass
 import re as _re
-BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
-_NEG = "-gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
+BANNED_TITLE = _re.compile(r"(?i)\b(cartoon|animated|animation|animada|desenho|anime|interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
+_NEG = "-cartoon -animated -animation -animada -desenho -anime -lego -gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
 
 
 def _yt_searches(q: str) -> list:
@@ -862,7 +862,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
     for qi in range(2):
         ent = ents[qi % len(ents)]
         entries = []
-        for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} edit", f"{ent} cenas hd", f"{ent} melhores momentos"):
+        for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} movie scenes live action", f"{ent} filme cenas", f"{ent} live action edit"):
             try:
                 entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q} {_NEG}"])).get("entries") or []
                 entries = [x for x in entries if not BANNED_TITLE.search(x.get("title") or "")]
@@ -873,7 +873,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
         out = work / f"master_{len(pages)}.mp4"
         for e in entries:
             vid, dur = e.get("id"), e.get("duration") or 0
-            if not vid or vid in got or (dur and (dur < 20 or dur > 900)):
+            if not vid or vid in got or (dur and (dur < 45 or dur > 180)):
                 continue
             try:
                 out.unlink(missing_ok=True)
@@ -891,6 +891,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             d = int(dm[1]) * 3600 + int(dm[2]) * 60 + float(dm[3]) if dm else float(dur or (cuts[-1] if cuts else 0))
             pts = [0.0] + cuts
             shots = [(out, a, b) for a, b in zip(pts, pts[1:] + [d]) if b - a >= 1.0 and a > d * 0.03 and b < d * 0.97]
+            shots = _gold_rank(out, shots)[:60]
             if not shots:
                 continue
             got.add(vid)

@@ -643,7 +643,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         pre = f"crop={cw}:{ch}:{cxo}:{cyo},"
         sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{sp}{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
+    vf = f"setpts=PTS-STARTPTS,{sp}{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-vf", vf + ",tpad=stop_mode=clone:stop_duration=60", "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 
