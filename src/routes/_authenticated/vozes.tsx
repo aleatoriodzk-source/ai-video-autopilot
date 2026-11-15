@@ -94,6 +94,7 @@ function Vozes() {
   return (
     <div>
       <PageHeader title="Banco de Vozes" subtitle="O agente baixa o vídeo, separa a voz da música e dos efeitos, mede o ritmo e as pausas e guarda uma amostra limpa. Depois é só escolher a voz na produção." />
+      <VoiceStudio />
       <div className="panel mb-4 space-y-2 p-4 text-xs text-muted-foreground">
         <p><b className="text-foreground">Para clonar de verdade no seu PC:</b> rode uma vez o <b>install_voice_clone.bat</b> (vem no ZIP do agente). Ele instala o separador de voz e o clonador. São alguns GB; com placa de vídeo NVIDIA fica bem mais rápido.</p>
         <p>Sem isso instalado, o sistema avisa no registro e narra com a voz da Microsoft na mesma velocidade da voz original — ele não finge que clonou.</p>
