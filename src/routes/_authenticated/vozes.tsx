@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { VoiceStudio } from "@/components/app/VoiceStudio";
 import { PageHeader, StatusBadge, Empty } from "@/components/app/ui";
 
 export const Route = createFileRoute("/_authenticated/vozes")({
