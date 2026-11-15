@@ -168,6 +168,8 @@ def piper_tts(text: str, voice_path: Path, out_wav: Path, length_scale=1.0, nois
     if not voice_path.exists():
         raise MediaError(f"Voz Piper não encontrada: {voice_path}. Rode install_windows.bat para baixá-la.")
     text = clean_tts(text)
+    # evita silêncios de 400ms: pontos entre frases muito curtas viram vírgulas
+    text = re.sub(r"(\b\w+(?:\s+\w+){0,3})\.\s+(?=[a-zà-ú])", r"\1, ", text)
     if not text:
         raise MediaError("narração ficou vazia depois da limpeza de símbolos")
     cmd = [sys.executable, "-m", "piper", "-m", str(voice_path), "-f", str(out_wav),
@@ -318,6 +320,8 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
     lib = LIB_CAPTIONS.get(style)
     if lib:
         style, font = lib[0], lib[1]
+    elif font == "Arial Black":
+        font = "Anton"  # fonte TTF profissional embarcada em vez do Arial Black genérico
     main, hi, outline = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
     if lib:
         main, hi = _ass_color(lib[2], main), _ass_color(lib[3], hi)
@@ -337,7 +341,7 @@ def write_ass(cues: list[dict], w: int, h: int, out: Path, font: str = "Arial Bl
         upper = bool(clone.get("uppercase", True))
         anim = clone.get("animation") or "pop"
         if clone.get("font_weight") == "regular":
-            font = "Arial"
+            font = "Montserrat"
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -643,7 +647,7 @@ def _video_part(src: Path, start: float, dur: float, w: int, h: int, fps: int, o
         pre = f"crop={cw}:{ch}:{cxo}:{cyo},"
         sw, sh = cw, ch
     cx = subject_center_x(src, total) if sw / max(1, sh) > (w / h) * 1.15 else None
-    vf = f"{sp}{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
+    vf = f"setpts=PTS-STARTPTS,{sp}{pre}{reframe_filter(sw, sh, w, h, cx, frame)},{_anti_reuse(out.stem, w, h)}fps={fps},format=yuv420p,setsar=1"
     run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-vf", vf + ",tpad=stop_mode=clone:stop_duration=60", "-frames:v", str(n), "-r", str(fps),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-an", str(out)])
 

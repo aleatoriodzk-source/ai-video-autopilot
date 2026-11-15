@@ -12,6 +12,28 @@ import requests
 import media
 
 
+def _gold_rank(src, shots):
+    """Cena Ouro: nota por brilho, contraste, nitidez e movimento; descarta escuras/paradas."""
+    scored = []
+    for sh in shots[:120]:
+        _, a, b = sh
+        try:
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-ss", f"{(a + b) / 2:.2f}", "-i", str(src), "-frames:v", "2", "-vf",
+                                "scale=160:-2,signalstats,metadata=print", "-an", "-f", "null", "-"], capture_output=True, text=True, timeout=8)
+            yavg = [float(x) for x in re.findall(r"YAVG=([\d.]+)", r.stderr)] or [60]
+            ydif = [float(x) for x in re.findall(r"YDIF=([\d.]+)", r.stderr)] or [0]
+            yr = [float(h) - float(l) for l, h in re.findall(r"YLOW=([\d.]+).*?YHIGH=([\d.]+)", r.stderr, re.S)] or [100]
+            lum = sum(yavg) / len(yavg)
+            score = min(lum, 140) / 14 * 0.4 + min(max(yr), 200) / 20 * 0.3 + min(max(ydif), 20) / 2 * 0.3
+            if lum < 35:
+                score -= 5
+        except Exception:
+            score = 5
+        scored.append((score, sh))
+    scored.sort(key=lambda x: -x[0])
+    return [sh for sc, sh in scored if sc > 3] or [sh for _, sh in scored]
+
+
 def _download(url: str, out: Path) -> None:
     r = requests.get(url, timeout=60)
     r.raise_for_status()
@@ -317,8 +339,8 @@ def _yt_remember(search: str, entries: list) -> None:
         except OSError:
             pass
 import re as _re
-BANNED_TITLE = _re.compile(r"(?i)\b(interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
-_NEG = "-gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
+BANNED_TITLE = _re.compile(r"(?i)\b(cartoon|animated|animation|animada|desenho|anime|interview|entrevista|podcast|cortes?|react|reaction|reação|legendado|subtitles?|lyrics?|toys?|brinquedos?|unboxing|figures?|boneco|action figure|lego|review|gameplay|walkthrough|ps5|ps4|xbox|fortnite|mod|cam|camrip|gaming|playthrough|minecraft|roblox|gta|fan ?made|ai generated)\b")
+_NEG = "-cartoon -animated -animation -animada -desenho -anime -lego -gaming -walkthrough -interview -entrevista -podcast -toy -unboxing -figure -review -gameplay -podcast -reaction -game -ps5 -fortnite -walkthrough -mod"
 
 
 def _yt_searches(q: str) -> list:
@@ -862,7 +884,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
     for qi in range(2):
         ent = ents[qi % len(ents)]
         entries = []
-        for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} edit", f"{ent} cenas hd", f"{ent} melhores momentos"):
+        for q in ((" ".join(topic.split()[:8]) if qi == 0 else ent), f"{ent} movie scenes live action", f"{ent} filme cenas", f"{ent} live action edit"):
             try:
                 entries += json.loads(_ytdlp(["--flat-playlist", "-J", f"ytsearch8:{q} {_NEG}"])).get("entries") or []
                 entries = [x for x in entries if not BANNED_TITLE.search(x.get("title") or "")]
@@ -873,7 +895,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
         out = work / f"master_{len(pages)}.mp4"
         for e in entries:
             vid, dur = e.get("id"), e.get("duration") or 0
-            if not vid or vid in got or (dur and (dur < 20 or dur > 900)):
+            if not vid or vid in got or (dur and (dur < 45 or dur > 180)):
                 continue
             try:
                 out.unlink(missing_ok=True)
@@ -891,6 +913,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
             d = int(dm[1]) * 3600 + int(dm[2]) * 60 + float(dm[3]) if dm else float(dur or (cuts[-1] if cuts else 0))
             pts = [0.0] + cuts
             shots = [(out, a, b) for a, b in zip(pts, pts[1:] + [d]) if b - a >= 1.0 and a > d * 0.03 and b < d * 0.97]
+            shots = _gold_rank(out, shots)[:60]
             if not shots:
                 continue
             got.add(vid)
