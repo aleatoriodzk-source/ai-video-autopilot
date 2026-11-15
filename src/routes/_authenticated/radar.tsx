@@ -3,7 +3,7 @@ import { pullChannels, pushChannels } from "@/lib/channels";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/ui";
-import { radarSearch, radarInsight, type RadarItem, type RadarInsight } from "@/lib/radar.functions";
+import { radarSearch, radarChannels, radarInsight, type RadarItem, type RadarInsight } from "@/lib/radar.functions";
 
 export const Route = createFileRoute("/_authenticated/radar")({
   head: () => ({
@@ -24,6 +24,8 @@ const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} mi` : n >= 1e3 ?
 function Radar() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [long, setLong] = useState(true);
+  const [spy, setSpy] = useState(false);
   const [items, setItems] = useState<RadarItem[]>([]);
   const nav = useNavigate();
   const [ins, setIns] = useState<RadarInsight | null>(null);
@@ -53,18 +55,33 @@ function Radar() {
   async function go() {
     setBusy(true);
     try {
-      const r = await radarSearch({ data: { q } });
+      const r = await radarSearch({ data: { q, long } });
       setItems(r.items);
       if (r.error) toast.error(r.error);
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
+  async function espiar() {
+    setSpy(true);
+    try {
+      const r = await radarChannels({ data: { maxHours: 168 } });
+      setItems(r.items);
+      if (r.error) toast.error(r.error);
+    } catch (e) { toast.error((e as Error).message); } finally { setSpy(false); }
+  }
+  useEffect(() => { void espiar(); }, []);
   function usar(it: RadarItem) {
     localStorage.setItem("radar-pauta", `${it.title} (inspirado em vídeo viral: ${it.url})`);
     nav({ to: "/producoes" });
   }
   return (
     <div className="space-y-4">
-      <PageHeader title="Radar de Virais" subtitle="Shorts desta semana no seu nicho, do mais visto para o menos visto." />
+      <PageHeader title="Radar de Virais" subtitle="Espia sozinho seus canais de referência e mostra o que mais acelera (views por hora) nos últimos 7 dias." />
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <button onClick={() => void espiar()} disabled={spy} className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground disabled:opacity-50">{spy ? "Espiando canais…" : "Espiar meus canais de referência"}</button>
+        <span className="ml-2 text-muted-foreground">Busca por nicho:</span>
+        <button onClick={() => setLong(true)} className={`rounded-full border px-3 py-1 ${long ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>Longos 16:9</button>
+        <button onClick={() => setLong(false)} className={`rounded-full border px-3 py-1 ${!long ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>Shorts 9:16</button>
+      </div>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void go(); }}>
         <input className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ex.: curiosidades Marvel, fortunas famosos, mistérios" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50" disabled={busy || !q.trim()}>{busy ? "Buscando…" : "Espiar"}</button>

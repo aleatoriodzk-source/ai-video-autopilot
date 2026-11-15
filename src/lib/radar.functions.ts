@@ -2,7 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export type RadarItem = { id: string; title: string; views: number; url: string; thumb: string };
+export type RadarItem = { id: string; title: string; views: number; url: string; thumb: string; age?: string; hours?: number; velocity?: number; channel?: string };
 
 // "8,7 mil visualizações" / "1,2 mi de visualizações" / "532 visualizações" -> número
 export function parseViews(t: string): number {
@@ -34,12 +34,73 @@ export function extractShorts(html: string): RadarItem[] {
   return out;
 }
 
+// "há 3 horas" / "2 days ago" -> horas
+export function ageHours(t: string): number {
+  const m = t.match(/(\d+)\s*(segundo|second|minuto|minute|hora|hour|dia|day|semana|week|m[eê]s|month|ano|year)/i);
+  if (!m) return 0;
+  const n = +m[1]!; const u = m[2]!.toLowerCase();
+  const k = /^seg|^sec/.test(u) ? 1 / 3600 : /^min/.test(u) ? 1 / 60 : /^hor|^hou/.test(u) ? 1 : /^d/.test(u) ? 24 : /^se|^w/.test(u) ? 168 : /^m/.test(u) ? 720 : 8760;
+  return n * k;
+}
+
+// vídeos longos (videoRenderer) com idade e velocidade de views por hora
+export function extractLong(html: string, channel?: string): RadarItem[] {
+  const m = html.match(/var ytInitialData = (\{.*?\});<\/script>/s);
+  if (!m) return [];
+  const out: RadarItem[] = [];
+  const txt = (x: any): string => String(x?.simpleText ?? (x?.runs ?? []).map((r: any) => r.text).join("") ?? "");
+  const walk = (o: unknown): void => {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== "object") return;
+    const r = o as Record<string, any>;
+    const v = r["videoRenderer"];
+    if (v?.videoId) {
+      const age = txt(v.publishedTimeText); const hours = ageHours(age); const views = parseViews(txt(v.viewCountText) + " visualizações");
+      out.push({ id: v.videoId, title: txt(v.title), views, url: `https://www.youtube.com/watch?v=${v.videoId}`, thumb: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+        age, hours, velocity: hours ? Math.round(views / Math.max(1, hours)) : 0, channel: channel ?? txt(v.ownerText) });
+      return;
+    }
+    Object.values(r).forEach(walk);
+  };
+  walk(JSON.parse(m[1]!));
+  return out;
+}
+
+const YT_HEADERS = { "Accept-Language": "pt-BR,pt;q=0.9", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36", Cookie: "CONSENT=YES+1" };
+
+// Radar V8 automático: lê os canais de referência do usuário e mostra o que mais acelera (views/hora) nos últimos dias.
+export const radarChannels = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { maxHours?: number }) => ({ maxHours: Math.min(720, Math.max(24, Number(i?.maxHours) || 168)) }))
+  .handler(async ({ data, context }) => {
+    const { data: refs } = await context.supabase.from("reference_sources").select("urls,title").eq("kind", "channel").limit(15);
+    const chans = [...new Set((refs ?? []).flatMap((r: any) => (r.urls as string[]) ?? []).filter((u) => /youtube\.com\/(@|channel\/|c\/)/.test(u)))]
+      .map((u) => u.replace(/\/(videos|shorts|streams|featured)\/?$/, "").replace(/\/$/, ""));
+    if (!chans.length) return { items: [] as RadarItem[], error: "Cadastre canais do YouTube na aba Referências para o Radar espiar sozinho" };
+    const all = (await Promise.all(chans.map(async (c) => {
+      try {
+        const r = await fetch(`${c}/videos`, { headers: YT_HEADERS });
+        return extractLong(await r.text(), c.split("/").pop()).slice(0, 12);
+      } catch { return []; }
+    }))).flat();
+    const items = all.filter((x) => x.hours && x.hours <= data.maxHours).sort((a, b) => (b.velocity ?? 0) - (a.velocity ?? 0)).slice(0, 30);
+    return { items, error: items.length ? null : "Nenhum vídeo novo nesses canais no período escolhido" };
+  });
+
 // Radar V8: Shorts desta semana do nicho, ordenados por visualizações.
 export const radarSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { q: string }) => ({ q: String(i?.q ?? "").trim().slice(0, 100) }))
+  .inputValidator((i: { q: string; long?: boolean }) => ({ q: String(i?.q ?? "").trim().slice(0, 100), long: !!i?.long }))
   .handler(async ({ data }) => {
     if (!data.q) return { items: [] as RadarItem[], error: "Digite um nicho" };
+    if (data.long) {
+      try {
+        const r = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(data.q)}&sp=EgQIBBAB`, { headers: YT_HEADERS });
+        const seen = new Set<string>();
+        const items = extractLong(await r.text()).filter((x) => !seen.has(x.id) && seen.add(x.id)).sort((a, b) => (b.velocity ?? 0) - (a.velocity ?? 0)).slice(0, 24);
+        return { items, error: items.length ? null : "O YouTube não devolveu resultados agora; tente outro termo" };
+      } catch (e) { return { items: [] as RadarItem[], error: `Falha ao consultar o YouTube: ${(e as Error).message}` }; }
+    }
     try {
       const r = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(data.q + " #shorts")}&sp=EgIIAw%253D%253D`, {
         headers: { "Accept-Language": "pt-BR,pt;q=0.9", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36", Cookie: "CONSENT=YES+1" },
