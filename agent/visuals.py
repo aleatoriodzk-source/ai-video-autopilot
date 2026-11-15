@@ -12,6 +12,28 @@ import requests
 import media
 
 
+def _gold_rank(src, shots):
+    """Cena Ouro: nota por brilho, contraste, nitidez e movimento; descarta escuras/paradas."""
+    scored = []
+    for sh in shots[:120]:
+        _, a, b = sh
+        try:
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-ss", f"{(a + b) / 2:.2f}", "-i", str(src), "-frames:v", "2", "-vf",
+                                "scale=160:-2,signalstats,metadata=print", "-an", "-f", "null", "-"], capture_output=True, text=True, timeout=8)
+            yavg = [float(x) for x in re.findall(r"YAVG=([\d.]+)", r.stderr)] or [60]
+            ydif = [float(x) for x in re.findall(r"YDIF=([\d.]+)", r.stderr)] or [0]
+            yr = [float(h) - float(l) for l, h in re.findall(r"YLOW=([\d.]+).*?YHIGH=([\d.]+)", r.stderr, re.S)] or [100]
+            lum = sum(yavg) / len(yavg)
+            score = min(lum, 140) / 14 * 0.4 + min(max(yr), 200) / 20 * 0.3 + min(max(ydif), 20) / 2 * 0.3
+            if lum < 35:
+                score -= 5
+        except Exception:
+            score = 5
+        scored.append((score, sh))
+    scored.sort(key=lambda x: -x[0])
+    return [sh for sc, sh in scored if sc > 3] or [sh for _, sh in scored]
+
+
 def _download(url: str, out: Path) -> None:
     r = requests.get(url, timeout=60)
     r.raise_for_status()

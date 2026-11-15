@@ -248,7 +248,8 @@ export async function runScript(db: DB, userId: string, productionId: string, jo
   const refPlatform = refRow ? (refRow.platform === "tiktok" || /tiktok/.test(refRow.urls?.[0] ?? "") ? "tiktok" : refRow.platform === "youtube" || /youtu/.test(refRow.urls?.[0] ?? "") ? "youtube" : "other") : null;
   let { data, usage } = await ai<ScriptOut>({
     system:
-      ETHICS +
+      "Escreva sempre em português do Brasil. Não invente números nem datas. Nunca cite desenhos/animações/jogos nos visual_query: só filmes e séries live action." +
+      " Estilo canal dark: narrativo, visceral, rápido, com nomes próprios reais, sem tom acadêmico, sem ressalvas e sem pontos finais a cada 3 palavras (use vírgulas para fluir a narração)." +
       " Você é um roteirista profissional de canais virais do YouTube brasileiro. Escreve como gente fala: frases curtas, ritmo, curiosidade, viradas e exemplos concretos. Proibido: clichês ('você sabia que', 'neste vídeo', 'fique até o final', 'incrível', 'nos dias de hoje'), frases vazias, repetição de ideias, enrolação, fatos inventados ou números sem base. Cada cena precisa entregar uma informação nova ou avançar a história.",
     user:
       (ready
