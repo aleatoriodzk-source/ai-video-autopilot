@@ -126,7 +126,7 @@ function Radar() {
             <a href={it.url} target="_blank" rel="noreferrer"><img src={it.thumb} alt={it.title} className="aspect-[3/4] w-full object-cover" loading="lazy" /></a>
             <div className="space-y-2 p-2 text-xs">
               <p className="line-clamp-2 font-medium text-foreground">{it.title}</p>
-              <p className="text-muted-foreground">#{i + 1} · {fmt(it.views)} views nesta semana</p>
+              <p className="text-muted-foreground">#{i + 1} · {fmt(it.views)} views{it.age ? ` · ${it.age}` : ""}{it.velocity ? ` · 🔥 ${fmt(it.velocity)}/h` : ""}{it.channel ? ` · ${it.channel}` : ""}</p>
               <button className="w-full rounded-md border border-border px-2 py-1.5 hover:bg-accent" onClick={() => usar(it)}>Usar como pauta</button>
             </div>
           </div>
