@@ -57,7 +57,16 @@ export const xrayVideo = createServerFn({ method: "POST" })
           `\n5) formula: 5 a 8 regras objetivas para replicar este vídeo trocando só o tema.` +
           `\n6) virality: nota 0-100 de potencial viral. 7) weak_points: momentos fracos com o segundo.`,
       });
-      return { ok: true as const, xray: JSON.parse(JSON.stringify(r.data)) as Xray };
+      const x = JSON.parse(JSON.stringify(r.data)) as Xray;
+      // Nota estável: 70% métricas objetivas (cortes/min, corte nos 2s iniciais) + 30% IA, arredondada de 5 em 5.
+      const cpm = (data.cuts.length / data.duration) * 60;
+      const cutScore = cpm >= 15 && cpm <= 45 ? 100 : cpm < 15 ? (cpm / 15) * 100 : Math.max(50, 100 - (cpm - 45) * 2);
+      const early = data.cuts.some((c) => c > 0.2 && c <= 2.5) ? 100 : 40;
+      const objective = cutScore * 0.6 + early * 0.4;
+      const ai = Math.max(0, Math.min(100, Number(x.virality) || 50));
+      x.virality = data.cuts.length ? Math.round((objective * 0.7 + ai * 0.3) / 5) * 5 : Math.round(ai / 5) * 5;
+      x.hook.score = Math.round((Number(x.hook.score) || 50) / 5) * 5;
+      return { ok: true as const, xray: x };
     } catch (e) {
       return { ok: false as const, error: (e as Error).message };
     }
