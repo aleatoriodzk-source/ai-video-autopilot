@@ -38,7 +38,7 @@ def slice_from_reference(runner, job, ctx, ref: dict) -> bool:
     log("modo fatiador: usando as cenas do vídeo base")
     base = fetch_video(urls[0], cache / f"{ref['id']}.mp4", resolve=lambda p: runner.api.call("download_url", path=p)["url"])
     dur = media.duration(base)
-    shots = _shots(dur, scene_cuts(base, 0.27))
+    shots = _shots(dur, scene_cuts(base))
     log(f"{len(shots)} tomadas encontradas em {dur:.0f}s de vídeo base")
     frames = []
     fdir = work / "shots"
