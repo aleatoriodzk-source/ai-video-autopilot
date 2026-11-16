@@ -50,9 +50,16 @@ def aspect_label(w: int, h: int) -> str:
     return f"{w}:{h}"
 
 
-def scene_cuts(video: Path, threshold: float = 0.3) -> list[float]:
+# Limiar único de corte (forense + slicer). 0.30 perdia fronteiras reais entre
+# cenas de textura parecida (score ~0.285); 0.25 não gerou falsos cortes em
+# zoom, fade de luz ou movimento contínuo (ver test_cut_threshold.py).
+CUT_THRESHOLD = 0.25
+MIN_CUT_T = 0.1  # o 1º quadro não é corte (artefato do filtro scene)
+
+
+def scene_cuts(video: Path, threshold: float = CUT_THRESHOLD) -> list[float]:
     err = _ff(["-i", str(video), "-vf", f"select='gt(scene,{threshold})',showinfo", "-an", "-f", "null", "-"])
-    return sorted({round(float(m), 2) for m in re.findall(r"pts_time:([\d.]+)", err)})
+    return sorted({round(float(m), 2) for m in re.findall(r"pts_time:([\d.]+)", err) if float(m) >= MIN_CUT_T})
 
 
 def active_area(video: Path, w: int, h: int) -> dict:
