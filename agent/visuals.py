@@ -12,6 +12,25 @@ import requests
 import media
 
 
+MASTER_SHORT_CAP = 180  # vídeo-mestre de produções curtas: no máximo 3 min (+tolerância de arredondamento)
+MASTER_CAP_TOLERANCE = 2.0
+
+
+def master_max_seconds(target_seconds: float, landscape: bool) -> float:
+    """Teto de duração do vídeo-mestre BUSCADO. 3 min só vale para produções curtas (alvo <= 3 min);
+    vídeos longos 16:9 aceitam mestres maiores (até 20 min) para não travar o YouTube longo."""
+    t = float(target_seconds or 0)
+    if t <= MASTER_SHORT_CAP and not (landscape and t == 0):
+        return MASTER_SHORT_CAP + MASTER_CAP_TOLERANCE
+    return min(1200.0, max(600.0, t * 1.5))
+
+
+def gold_score(lum: float, yrange: float, ydif: float) -> float:
+    """Nota objetiva Cena Ouro (0-10): brilho 40%, contraste 30%, movimento 30%; escura (<35) perde 5."""
+    score = min(lum, 140) / 14 * 0.4 + min(yrange, 200) / 20 * 0.3 + min(ydif, 20) / 2 * 0.3
+    return score - 5 if lum < 35 else score
+
+
 def _gold_rank(src, shots):
     """Cena Ouro: nota por brilho, contraste, nitidez e movimento; descarta escuras/paradas."""
     scored = []
@@ -24,9 +43,7 @@ def _gold_rank(src, shots):
             ydif = [float(x) for x in re.findall(r"YDIF=([\d.]+)", r.stderr)] or [0]
             yr = [float(h) - float(l) for l, h in re.findall(r"YLOW=([\d.]+).*?YHIGH=([\d.]+)", r.stderr, re.S)] or [100]
             lum = sum(yavg) / len(yavg)
-            score = min(lum, 140) / 14 * 0.4 + min(max(yr), 200) / 20 * 0.3 + min(max(ydif), 20) / 2 * 0.3
-            if lum < 35:
-                score -= 5
+            score = gold_score(lum, max(yr), max(ydif))
         except Exception:
             score = 5
         scored.append((score, sh))
@@ -843,7 +860,7 @@ def _shot_score(m, shot, terms) -> float:
     return float(sum((3 if t in names else 1) for t in terms if t.lstrip("!") in txt))
 
 
-def _master_pack(runner, job, topic: str, work: Path, links: list | None = None) -> dict | None:
+def _master_pack(runner, job, topic: str, work: Path, links: list | None = None, max_dur: float = MASTER_SHORT_CAP + MASTER_CAP_TOLERANCE) -> dict | None:
     """Baixa vídeo(s)-mestre (links do usuário ou busca do tema) e detecta os cortes reais com FFmpeg."""
     import re as _re, subprocess
     from analyzer import _ytdlp
@@ -895,7 +912,7 @@ def _master_pack(runner, job, topic: str, work: Path, links: list | None = None)
         out = work / f"master_{len(pages)}.mp4"
         for e in entries:
             vid, dur = e.get("id"), e.get("duration") or 0
-            if not vid or vid in got or (dur and (dur < 45 or dur > 180)):
+            if not vid or vid in got or (dur and (dur < 45 or dur > max_dur)):
                 continue
             try:
                 out.unlink(missing_ok=True)
@@ -1065,7 +1082,7 @@ def pick_visuals(runner, job, ctx) -> None:
             _pop = is_pop(topic, topic) or is_pop(_scene_txt, _hero)
             _single = len(set(proper_names(topic))) <= 1 and len(_cnt) <= 3
             if _pop and _single:
-                master = _master_pack(runner, job, _hero or topic, work) or False
+                master = _master_pack(runner, job, _hero or topic, work, max_dur=master_max_seconds((prod.get("settings") or {}).get("target_seconds") or 0, w > h)) or False
                 if master:
                     master["hero"] = _hero
             else:
